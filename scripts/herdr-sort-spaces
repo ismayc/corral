@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""Sort herdr spaces (workspaces) alphabetically, or put them back.
+
+  herdr-sort-spaces            show the current and sorted order (changes nothing)
+  herdr-sort-spaces --apply    save the current order, then sort
+  herdr-sort-spaces --restore  put the spaces back in the last saved order
+
+Talks to the running server's socket with the same method the sidebar uses
+(workspace.move_block, undocumented in herdr 0.9.3). Case-insensitive; the
+home space "~" and other non-alphanumeric labels sort first.
+"""
+import json
+import os
+import socket
+import sys
+import time
+
+SOCK = os.environ.get("HERDR_SOCKET_PATH") or os.path.expanduser("~/.config/herdr/herdr.sock")
+SAVE = os.path.expanduser("~/.local/share/herdr-sort-spaces/last-order.json")
+
+
+def call(method, params=None):
+    s = socket.socket(socket.AF_UNIX)
+    s.settimeout(10)
+    s.connect(SOCK)
+    s.sendall((json.dumps({"id": f"sort:{method}", "method": method, "params": params or {}}) + "\n").encode())
+    buf = b""
+    while not buf.endswith(b"\n"):
+        chunk = s.recv(65536)
+        if not chunk:
+            break
+        buf += chunk
+    s.close()
+    reply = json.loads(buf)
+    if "error" in reply:
+        sys.exit(f"{method} failed: {reply['error']}")
+    return reply["result"]
+
+
+def spaces():
+    return call("workspace.list")["workspaces"]
+
+
+def sort_key(w):
+    label = w["label"] or ""
+    return (label[:1].isalnum(), label.casefold(), w["workspace_id"])
+
+
+def show(title, ws):
+    print(title)
+    for i, w in enumerate(ws, 1):
+        print(f"  {i:>3}  {w['workspace_id']:<6} {w['label']}")
+
+
+def move_all(ids):
+    call("workspace.move_block", {"workspace_ids": ids, "before_workspace_id": None})
+
+
+def main():
+    mode = sys.argv[1] if len(sys.argv) > 1 else ""
+    current = spaces()
+    if mode == "--restore":
+        saved = json.load(open(SAVE))
+        live = {w["workspace_id"] for w in current}
+        ids = [i for i in saved["ids"] if i in live]
+        if not ids:
+            sys.exit("Nothing in the saved order is still open.")
+        move_all(ids)
+        print(f"Restored {len(ids)} spaces to the order saved {saved['saved_at']}.")
+        return
+    target = sorted(current, key=sort_key)
+    if mode != "--apply":
+        show("Current order:", current)
+        show("Sorted order:", target)
+        print("\nNothing changed. Run with --apply to sort; --restore undoes it.")
+        return
+    if any(w.get("worktree") for w in current):
+        sys.exit("Some spaces are linked worktrees; moving them apart may break their groups. Not sorting.")
+    os.makedirs(os.path.dirname(SAVE), exist_ok=True)
+    json.dump({"saved_at": time.strftime("%Y-%m-%d %H:%M:%S"), "ids": [w["workspace_id"] for w in current]}, open(SAVE, "w"))
+    move_all([w["workspace_id"] for w in target])
+    after = [w["workspace_id"] for w in spaces()]
+    want = [w["workspace_id"] for w in target]
+    print("Sorted." if after == want else "Server accepted the move but the live order differs from the sorted order; check herdr.")
+
+
+main()

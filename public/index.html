@@ -1,0 +1,858 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corral</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/vendor/xterm.css">
+<style>
+  /* Corral: "dusk over the paddock". The dark is tinted toward the fence violet, never neutral black.
+     Violet marks brand and focus; lavender is the fence rail; green, amber, and red mean agent status only. */
+  @font-face { font-family:'Bricolage Grotesque'; font-style:normal; font-weight:400 800; font-display:swap;
+               src:url(/fonts/bricolage-grotesque-latin.woff2) format('woff2'); }
+  :root {
+    --ground:#1b1823; --panel:#24202d; --raise:#2d2838; --rail:#3a3446; --text:#eee9f6; --muted:#9d94ad;
+    --fence:#8b7cf6; --lavender:#c9c1ff; --term:#100e15;
+    --working:#e5a93d; --idle:#4cc38a; --blocked:#e5584d; --unknown:#5d566b;
+    --brand:'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  html, body { height:100%; margin:0; background:var(--ground); color:var(--text);
+               font:13px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  :focus-visible { outline:2px solid var(--lavender); outline-offset:1px; }
+  button, input, select { font:inherit; color:var(--text); background:var(--ground); border:1px solid var(--rail);
+                          border-radius:6px; padding:4px 9px; }
+  button { cursor:pointer; } button:hover { border-color:var(--fence); }
+  input { flex:1; min-width:0; } input::placeholder { color:var(--muted); }
+  input[type=checkbox] { flex:none; accent-color:var(--fence); }
+
+  #app { display:grid; grid-template-columns:304px 1fr; height:100%; }
+
+  /* Sidebar */
+  #side { background:var(--panel); border-right:1px solid var(--rail); display:flex; flex-direction:column; min-height:0; }
+  .brandmark { padding:16px 16px 0; }
+  .brandmark h1 { font:800 30px/1 var(--brand); letter-spacing:-.02em; margin:0; font-variation-settings:'opsz' 96; }
+  .brandmark p { margin:4px 0 0; color:var(--muted); font-size:12px; }
+  .brandmark svg { display:block; width:272px; height:26px; margin:12px 0 14px; }
+  #side .row { padding:0 16px 8px; display:flex; gap:6px; }
+  #side .tools button { font-size:11.5px; padding:2px 9px; background:transparent; color:var(--muted); }
+  #side .tools button:hover { color:var(--text); }
+  #bulk select { flex:1; min-width:0; }
+  .opt { padding:0 16px 10px; color:var(--muted); display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; }
+  .note { color:var(--muted); padding:8px 16px; }
+
+  /* Group headers: plain section names, sentence case */
+  .sec { padding:12px 16px 4px; font:600 12px var(--brand); color:var(--muted); border-top:1px solid var(--rail); cursor:default; }
+  .sec.tog { cursor:pointer; } .sec.tog:hover { color:var(--text); }
+  .sec.cat { display:flex; align-items:baseline; gap:7px; cursor:pointer; padding:9px 16px 7px; color:var(--text);
+             font:700 14.5px var(--brand); letter-spacing:-.005em; }
+  .sec.cat:hover { background:var(--raise); }
+  .sec.cat.over { background:#342b55; box-shadow:inset 3px 0 var(--fence); }
+  .sec.cat .cc { width:12px; color:var(--muted); flex:none; font-size:11px; }
+  .sec.cat .cn { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sec.cat .ct { color:var(--muted); font:500 12px var(--brand); flex:1; }
+  .sec.cat .acts { display:none; gap:2px; align-self:center; }
+  .sec.cat:hover .acts { display:flex; }
+  .sec.cat .acts button { padding:0 6px; line-height:17px; font:11px -apple-system, sans-serif; }
+  .sec.cat input.catname { flex:1; min-width:0; padding:1px 6px; font:inherit; }
+
+  /* Space rows */
+  #spaces { overflow:auto; flex:1; }
+  .space { padding:5px 16px 5px 12px; cursor:pointer; display:flex; align-items:center; gap:8px; }
+  .space:hover { background:var(--raise); }
+  .space .name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .space.has-win .name { color:var(--lavender); font-weight:600; }
+  .space .more { opacity:0; padding:0 6px; color:var(--muted); cursor:pointer; flex:none; }
+  .space:hover .more, .space .more:focus-visible { opacity:1; } .space .more:hover { color:var(--text); }
+  .dot { width:8px; height:8px; border-radius:50%; flex:none; background:var(--unknown); }
+  .dot.working { background:var(--working); } .dot.idle { background:var(--idle); } .dot.blocked { background:var(--blocked); }
+  .chev { width:14px; flex:none; color:var(--muted); text-align:center; cursor:pointer; user-select:none; }
+  .chev:hover { color:var(--text); }
+  .tree { padding:0 0 4px 34px; font:12px Menlo, Monaco, monospace; min-width:max-content; }
+  .node { display:flex; align-items:center; gap:4px; padding:1px 16px 1px 0; white-space:nowrap; }
+  .node.dir { cursor:pointer; } .node.dir:hover { background:var(--raise); }
+  .node.file { color:var(--muted); } .node .ic { width:12px; flex:none; text-align:center; color:var(--muted); }
+  .node .lk { color:var(--fence); }
+  .tree .note { padding:2px 16px; font-size:11px; }
+
+  /* Inactive projects */
+  #inactive { flex:none; max-height:35%; overflow:auto; }
+  .proj { display:flex; align-items:center; gap:6px; padding:4px 16px; }
+  .proj .name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); }
+  .proj .ago { color:var(--muted); font-size:11px; flex:none; }
+  .proj button { padding:0 8px; line-height:18px; font-size:11px; flex:none; }
+  .proj.gone .name { text-decoration:line-through; }
+
+  /* Category menu */
+  .catmenu { position:fixed; z-index:30; width:220px; max-height:60vh; overflow:auto; display:flex; flex-direction:column; gap:1px;
+             padding:6px; background:var(--panel); border:1px solid var(--rail); border-radius:10px; box-shadow:0 12px 32px rgba(8,6,14,.6); }
+  .catmenu button { text-align:left; border-color:transparent; background:transparent; }
+  .catmenu button:hover { background:var(--raise); }
+  .catmenu input { margin-top:6px; }
+
+  /* Top bar */
+  #main { display:flex; flex-direction:column; min-width:0; min-height:0; }
+  #bar { display:flex; gap:10px; align-items:center; padding:9px 12px; border-bottom:1px solid var(--rail); background:var(--panel); }
+  #bar label { color:var(--muted); display:flex; align-items:center; gap:6px; }
+  #bar .sp { flex:1; }
+  #newshell { background:var(--fence); border-color:var(--fence); color:#14101f; font-weight:600; }
+  #newshell:hover { background:var(--lavender); border-color:var(--lavender); }
+  #count { color:var(--muted); }
+  #laywrap { position:relative; }
+  #laymenu { position:absolute; top:calc(100% + 6px); left:0; z-index:20; width:380px; padding:10px; display:grid;
+             grid-template-columns:repeat(4, 1fr); gap:8px; background:var(--panel); border:1px solid var(--rail);
+             border-radius:10px; box-shadow:0 12px 32px rgba(8,6,14,.6); }
+  .lay { display:flex; flex-direction:column; align-items:center; gap:5px; padding:7px 2px; background:transparent;
+         border-color:transparent; font-size:11px; color:var(--muted); }
+  .lay.on { border-color:var(--fence); color:var(--text); }
+  .thumb { position:relative; width:64px; height:40px; }
+  .thumb i { position:absolute; background:var(--rail); border-radius:2px; }
+  .lay.on .thumb i, .lay:hover .thumb i { background:var(--fence); }
+
+  /* The pen: zones and windows. A layout is a set of zones (fractions of #grid); each window sits in a .slot over its zone. */
+  #grid { flex:1; position:relative; min-height:0; margin:4px; }
+  .slot, .zone-empty { position:absolute; padding:4px; min-width:0; min-height:0; }
+  .win { position:relative; height:100%; display:flex; flex-direction:column; min-width:0; background:var(--term); border:1px solid var(--rail);
+         border-radius:8px; overflow:hidden; }
+  /* The focused window has its gate closed: a lavender rail across the top. */
+  .win.focus { border-color:#4d4366; }
+  .win.focus::after { content:''; position:absolute; left:0; right:0; top:0; height:3px; background:var(--lavender); pointer-events:none; }
+  .title { display:flex; align-items:center; gap:8px; padding:5px 6px 4px 10px; background:var(--panel);
+           border-bottom:1px solid var(--rail); cursor:grab; }
+  .title .t { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+  .title .cwd { color:var(--muted); font-size:11px; }
+  .title button { padding:0 7px; line-height:18px; background:transparent; border-color:transparent; color:var(--muted); }
+  .title button:hover { color:var(--text); border-color:var(--rail); }
+  .term { flex:1; min-height:0; padding:5px 0 0 8px; }
+  .zone-empty > div { height:100%; border:1px dashed var(--rail); border-radius:8px; display:flex; align-items:center;
+                      justify-content:center; text-align:center; padding:12px; color:var(--muted); font-size:12.5px; }
+  .zone-empty.over > div, .slot.over .win { border-color:var(--fence); border-style:solid; }
+
+  /* Bottom bar */
+  #tray { display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding:7px 12px; border-top:1px solid var(--rail); background:var(--panel); }
+  #tray .lbl { color:var(--muted); font-size:12px; margin-right:2px; }
+  #tray .lbl + .chip { margin-left:0; }
+  #tray .chip + .lbl { margin-left:10px; }
+  .chip { padding:2px 11px; border:1px solid var(--rail); border-radius:13px; cursor:pointer; background:var(--ground); }
+  .chip:hover { border-color:var(--fence); }
+  .chip.min::before { content:'\25B4\00a0\00a0'; color:var(--muted); }
+
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior:auto !important; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <div class="brandmark">
+      <h1>Corral</h1>
+      <p>Round up your herdr spaces</p>
+      <svg viewBox="0 0 272 26" aria-hidden="true">
+        <g fill="#8b7cf6"><path d="M4 26V8l6-7 6 7v18z"/><path d="M40 26V8l6-7 6 7v18z"/><path d="M76 26V8l6-7 6 7v18z"/><path d="M112 26V8l6-7 6 7v18z"/><path d="M148 26V8l6-7 6 7v18z"/><path d="M184 26V8l6-7 6 7v18z"/><path d="M220 26V8l6-7 6 7v18z"/><path d="M256 26V8l6-7 6 7v18z"/></g>
+        <g fill="#c9c1ff"><rect x="0" y="11" width="272" height="3.5" rx="1.75"/><rect x="0" y="19" width="272" height="3.5" rx="1.75"/></g>
+      </svg>
+    </div>
+    <div class="row"><input id="filter" placeholder="Find a space" autocomplete="off"><button id="refresh" title="Reload from herdr">&#8635;</button></div>
+    <div class="row tools">
+      <button id="newcat" title="Create a category">+ Category</button>
+      <button id="expall" title="Expand every category">Expand all</button>
+      <button id="colall" title="Collapse every category">Collapse all</button>
+    </div>
+    <div id="newcatrow" class="row" hidden><input id="newcatname" placeholder="Category name, then Enter" maxlength="40" autocomplete="off"></div>
+    <div id="bulk" class="row" hidden></div>
+    <label class="opt"><input type="checkbox" id="hidden"> Show hidden files</label>
+    <div id="inactive"></div>
+    <div id="spaces"></div>
+  </aside>
+  <section id="main">
+    <div id="bar">
+      <button id="newshell" title="Open a plain shell in your home folder">New shell</button>
+      <label>A space opens <select id="agent">
+        <option value="claude">Claude Code</option>
+        <option value="claude-continue">Claude Code, last session</option>
+        <option value="">A plain shell</option>
+      </select></label>
+      <div id="laywrap"><button id="laybtn" title="Choose how windows are arranged"></button><div id="laymenu" hidden></div></div>
+      <label id="colslab" hidden>Columns <select id="cols"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
+      <label id="rowslab" hidden>Rows <select id="rows"><option value="auto">Auto</option><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
+      <span class="sp"></span>
+      <span id="count" class="note"></span>
+    </div>
+    <div id="grid"></div>
+    <div id="tray" hidden></div>
+  </section>
+</div>
+
+<script src="/vendor/xterm.js"></script>
+<script src="/vendor/addon-fit.js"></script>
+<script src="/vendor/addon-web-links.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const open = new Map(); // session id -> {term, fit, ws, el, info}
+let focusedId = null;
+
+const api = (url, opts = {}) => fetch(url, {
+  ...opts, headers: { 'Content-Type': 'application/json' },
+  body: opts.body ? JSON.stringify(opts.body) : undefined,
+}).then((r) => r.json());
+
+function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+// Reads the earlier 'webterm.' key when the 'corral.' one is not set yet, so settings survive the rename.
+function load(k, d) {
+  try {
+    const v = localStorage.getItem(k) ?? localStorage.getItem(k.replace(/^corral\./, 'webterm.'));
+    return v === null ? d : JSON.parse(v) ?? d;
+  } catch { return d; }
+}
+
+// ---- Layouts. Like Sash, a layout is a list of zones, each [x, y, w, h] as fractions of the area. ----
+// rowsOf([2,1]) = two zones on top, one across the bottom.
+const rowsOf = (counts) => {
+  const z = [], h = 1 / counts.length;
+  counts.forEach((c, r) => { for (let i = 0; i < c; i++) z.push([i / c, r * h, 1 / c, h]); });
+  return z;
+};
+const LAYOUTS = {
+  full:      { name: 'Maximize',    zones: rowsOf([1]) },
+  halves:    { name: 'Halves',      zones: rowsOf([2]) },
+  stacked:   { name: 'Stacked',     zones: [[0, 0, 1, .5], [0, .5, 1, .5]] },
+  thirds:    { name: 'Thirds',      zones: rowsOf([3]) },
+  quarters:  { name: 'Quarters',    zones: rowsOf([2, 2]) },
+  mainright: { name: 'Main + 2',    zones: [[0, 0, 2/3, 1], [2/3, 0, 1/3, .5], [2/3, .5, 1/3, .5]] },
+  mainleft:  { name: '2 + Main',    zones: [[0, 0, 1/3, .5], [0, .5, 1/3, .5], [1/3, 0, 2/3, 1]] },
+  maintop:   { name: 'Main over 2', zones: [[0, 0, 1, .6], [0, .6, .5, .4], [.5, .6, .5, .4]] },
+  twoover1:  { name: '2 over 1',    zones: rowsOf([2, 1]) },
+  oneover2:  { name: '1 over 2',    zones: rowsOf([1, 2]) },
+  main3:     { name: 'Main + 3',    zones: [[0, 0, .6, 1], [.6, 0, .4, 1/3], [.6, 1/3, .4, 1/3], [.6, 2/3, .4, 1/3]] },
+  six:       { name: '3 x 2',       zones: rowsOf([3, 3]) },
+  nine:      { name: '3 x 3',       zones: rowsOf([3, 3, 3]) },
+};
+// Auto follows Sash's auto-arrange: shape comes from the window count and the area's aspect ratio.
+const AUTO_ROWS = { 2: [2], 3: [2, 1], 4: [2, 2], 5: [3, 2], 6: [3, 3], 7: [4, 3], 8: [4, 4], 9: [3, 3, 3] };
+function autoZones(n, aspect) {
+  if (n <= 1) return rowsOf([1]);
+  if (n === 2) return aspect < 0.9 ? rowsOf([1, 1]) : rowsOf([2]);
+  if (n === 3 && aspect >= 2.2) return rowsOf([3]);
+  if (n === 4 && aspect >= 3) return rowsOf([4]);
+  if (AUTO_ROWS[n]) return rowsOf(AUTO_ROWS[n]);
+  const cols = Math.ceil(Math.sqrt(n)), counts = [];
+  for (let left = n; left > 0; left -= cols) counts.push(Math.min(cols, left));
+  return rowsOf(counts);
+}
+
+let layoutKind = load('corral.layout', 'auto'); // 'auto', 'grid', or a LAYOUTS key
+if (layoutKind !== 'auto' && layoutKind !== 'grid' && !LAYOUTS[layoutKind]) layoutKind = 'auto';
+let slots = [];   // slots[i] = id of the window in zone i, or null
+let tray = [];    // windows that do not fit the layout; shown as chips under the grid
+let suspend = false;
+let ready = false; // layout() saves the arrangement only after startup has restored it
+const savedArrangement = load('corral.slots', { slots: [], tray: [] }); // read before any layout() can overwrite it
+// Minimized windows wait in the bottom bar, still running, until restored. They never take a zone.
+const minimized = new Set(load('corral.minimized', []));
+const visibleCount = () => [...open.keys()].filter((id) => !minimized.has(id)).length;
+
+function currentZones() {
+  const g = $('#grid');
+  const n = visibleCount();
+  if (layoutKind === 'auto') return autoZones(n, g.clientWidth / Math.max(1, g.clientHeight));
+  if (layoutKind === 'grid') {
+    const cols = Number($('#cols').value);
+    const rows = $('#rows').value === 'auto' ? Math.max(1, Math.ceil(Math.max(n, 1) / cols)) : Number($('#rows').value);
+    return rowsOf(Array(rows).fill(cols));
+  }
+  return LAYOUTS[layoutKind].zones;
+}
+
+// Keeps existing windows in slot order and refills the zones; used when the zone count changes.
+// Minimized windows stay in the tray.
+function repack(z) {
+  const ids = [...slots.filter(Boolean), ...tray.filter((id) => !minimized.has(id))];
+  slots = Array(z).fill(null);
+  tray = tray.filter((id) => minimized.has(id));
+  ids.forEach((id, i) => (i < z ? (slots[i] = id) : tray.push(id)));
+}
+
+function moveTo(id, to) {
+  const from = slots.indexOf(id);
+  if (from >= 0) [slots[from], slots[to]] = [slots[to], slots[from]];
+  else {
+    const t = tray.indexOf(id);
+    if (t < 0) return;
+    minimized.delete(id);
+    const displaced = slots[to];
+    slots[to] = id;
+    if (displaced) tray[t] = displaced; else tray.splice(t, 1);
+  }
+  layout();
+}
+
+function minimize(id) {
+  const i = slots.indexOf(id);
+  if (i >= 0) slots[i] = null;
+  if (!tray.includes(id)) tray.unshift(id);
+  minimized.add(id);
+  if (focusedId === id) focusedId = null;
+  layout();
+}
+
+// Back into a free zone if there is one (Auto and Grid make room); otherwise swap with the focused window.
+function restore(id) {
+  minimized.delete(id);
+  layout();
+  if (tray.includes(id)) { const at = slots.indexOf(focusedId); moveTo(id, at >= 0 ? at : 0); }
+  setFocus(id);
+}
+
+const dragOk = (e) => [...(e.dataTransfer?.types || [])].includes('text/x-corral');
+function wireDrop(el, zoneOf) {
+  el.addEventListener('dragover', (e) => { if (dragOk(e)) { e.preventDefault(); el.classList.add('over'); } });
+  el.addEventListener('dragleave', () => el.classList.remove('over'));
+  el.addEventListener('drop', (e) => {
+    el.classList.remove('over');
+    if (!dragOk(e)) return;
+    e.preventDefault();
+    moveTo(e.dataTransfer.getData('text/x-corral'), zoneOf());
+  });
+}
+
+function layout() {
+  if (suspend) return;
+  const zones = currentZones();
+  // Drop windows that closed, then place new ones in the first free zone (or the tray).
+  if (ready) for (const id of [...minimized]) if (!open.has(id)) minimized.delete(id);
+  slots = slots.map((id) => (id && open.has(id) && !minimized.has(id) ? id : null));
+  tray = tray.filter((id) => open.has(id));
+  for (const id of minimized) if (open.has(id) && !tray.includes(id)) tray.unshift(id);
+  if (slots.length !== zones.length) repack(zones.length);
+  for (const id of open.keys()) {
+    if (slots.includes(id) || tray.includes(id)) continue;
+    const free = slots.indexOf(null);
+    if (free >= 0) slots[free] = id; else tray.push(id);
+  }
+  // Fill empty zones from the waiting (not minimized) windows.
+  for (let i = 0; i < slots.length; i++) {
+    if (slots[i]) continue;
+    const k = tray.findIndex((id) => !minimized.has(id));
+    if (k < 0) break;
+    slots[i] = tray.splice(k, 1)[0];
+  }
+
+  const grid = $('#grid');
+  grid.querySelectorAll('.zone-empty').forEach((n) => n.remove());
+  const place = (el, z) => {
+    el.style.left = `${z[0] * 100}%`; el.style.top = `${z[1] * 100}%`;
+    el.style.width = `${z[2] * 100}%`; el.style.height = `${z[3] * 100}%`;
+  };
+  let hinted = false;
+  zones.forEach((z, i) => {
+    const id = slots[i];
+    if (id) {
+      const w = open.get(id);
+      place(w.slot, z);
+      w.slot.hidden = false;
+      w.slot.dataset.zone = i;
+    } else {
+      const e = document.createElement('div');
+      e.className = 'zone-empty';
+      const inner = document.createElement('div');
+      inner.textContent = !hinted && !open.size ? 'Pick a space on the left to open it here.' : 'Empty zone';
+      hinted = true;
+      e.append(inner);
+      place(e, z);
+      wireDrop(e, () => i);
+      grid.append(e);
+    }
+  });
+  open.forEach((w, id) => { if (tray.includes(id)) w.slot.hidden = true; });
+
+  // Bottom bar: minimized windows, then any that are waiting for a free zone. Click to restore,
+  // or drag a chip onto a zone.
+  const bar = $('#tray');
+  bar.hidden = !tray.length;
+  bar.textContent = '';
+  const group = (label, ids, tip) => {
+    if (!ids.length) return;
+    const l = document.createElement('span');
+    l.className = 'lbl';
+    l.textContent = label;
+    bar.append(l);
+    for (const id of ids) {
+      const c = document.createElement('button');
+      c.className = `chip${minimized.has(id) ? ' min' : ''}`;
+      c.textContent = open.get(id).info.label;
+      c.title = tip;
+      c.draggable = true;
+      c.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/x-corral', id); e.dataTransfer.effectAllowed = 'move'; });
+      c.onclick = () => restore(id);
+      bar.append(c);
+    }
+  };
+  group('Minimized:', tray.filter((id) => minimized.has(id)), 'Restore this window');
+  group('No free zone:', tray.filter((id) => !minimized.has(id)), 'Swap this window into the focused zone');
+  if (ready) { store('corral.slots', { slots, tray }); store('corral.minimized', [...minimized]); }
+  $('#laybtn').textContent = `Layout: ${layoutKind === 'auto' ? 'Auto' : layoutKind === 'grid' ? 'Grid' : LAYOUTS[layoutKind].name} ▾`;
+  $('#colslab').hidden = $('#rowslab').hidden = layoutKind !== 'grid';
+  const nMin = [...minimized].filter((id) => open.has(id)).length;
+  $('#count').textContent = `${open.size} window${open.size === 1 ? '' : 's'}${nMin ? ` (${nMin} minimized)` : ''}`;
+  requestAnimationFrame(() => open.forEach((w) => { if (!w.slot.hidden) w.fit.fit(); }));
+}
+
+function thumb(zones) {
+  const t = document.createElement('div');
+  t.className = 'thumb';
+  for (const z of zones) {
+    const i = document.createElement('i');
+    i.style.cssText = `left:${z[0] * 100 + 2}%;top:${z[1] * 100 + 3}%;width:${z[2] * 100 - 4}%;height:${z[3] * 100 - 6}%`;
+    t.append(i);
+  }
+  return t;
+}
+
+function buildLayoutMenu() {
+  const menu = $('#laymenu');
+  menu.textContent = '';
+  const entries = [['auto', 'Auto', autoZones(3, 1.5)], ['grid', 'Grid', rowsOf([2, 2, 2])],
+    ...Object.entries(LAYOUTS).map(([k, v]) => [k, v.name, v.zones])];
+  for (const [key, name, zones] of entries) {
+    const b = document.createElement('button');
+    b.className = `lay${key === layoutKind ? ' on' : ''}`;
+    b.title = key === 'auto' ? 'Picks a tiling from the window count and screen shape' : key === 'grid' ? 'Columns by rows, set in the bar' : name;
+    b.append(thumb(zones), document.createTextNode(name));
+    b.onclick = () => { layoutKind = key; store('corral.layout', key); menu.hidden = true; buildLayoutMenu(); layout(); };
+    menu.append(b);
+  }
+}
+
+function setFocus(id) {
+  focusedId = id;
+  open.forEach((w, k) => w.el.classList.toggle('focus', k === id));
+  open.get(id)?.term.focus();
+}
+
+function attach(info) {
+  if (open.has(info.id)) return setFocus(info.id);
+  const el = document.createElement('div');
+  el.className = 'win';
+  el.innerHTML = `<div class="title"><span class="t"></span><span class="cwd"></span><button class="min" title="Minimize to the bottom bar (keeps running)">&#8211;</button><button class="close" title="Close and kill shell">&times;</button></div><div class="term"></div>`;
+  el.querySelector('.t').textContent = info.label;
+  el.querySelector('.cwd').textContent = info.cwd.replace(/^\/Users\/[^/]+/, '~');
+  const slot = document.createElement('div');
+  slot.className = 'slot';
+  slot.append(el);
+  $('#grid').appendChild(slot);
+  // Drag the title bar onto another zone to move this window there (or swap with its occupant).
+  const title = el.querySelector('.title');
+  title.draggable = true;
+  title.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/x-corral', info.id); e.dataTransfer.effectAllowed = 'move'; });
+  wireDrop(slot, () => Number(slot.dataset.zone));
+
+  const term = new Terminal({ fontFamily: 'Menlo, Monaco, monospace', fontSize: 13, cursorBlink: true,
+    scrollback: 5000, theme: { background: '#100e15', cursor: '#c9c1ff', selectionBackground: '#4d4366' } });
+  const fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.loadAddon(new WebLinksAddon.WebLinksAddon());
+  term.open(el.querySelector('.term'));
+
+  const w = { term, fit, el, slot, info, ws: null, muted: false };
+  open.set(info.id, w);
+  const connect = () => {
+    const ws = new WebSocket(`ws://${location.host}/ws?id=${info.id}`);
+    w.ws = ws;
+    let first = true;
+    ws.onopen = () => { term.reset(); fit.fit(); ws.send(JSON.stringify({ t: 'resize', cols: term.cols, rows: term.rows })); };
+    // The first message replays saved output, which can hold old terminal queries (device attributes and
+    // the like). xterm answers those as it draws them; the answers must not reach the shell as typed text.
+    ws.onmessage = (e) => {
+      if (!first) return term.write(e.data);
+      first = false;
+      w.muted = true;
+      term.write(e.data, () => { w.muted = false; });
+    };
+    ws.onclose = () => { if (open.has(info.id)) setTimeout(connect, 1500); };
+  };
+  connect();
+  term.onData((d) => !w.muted && w.ws?.readyState === 1 && w.ws.send(JSON.stringify({ t: 'in', d })));
+  term.onResize(({ cols, rows }) => w.ws?.readyState === 1 && w.ws.send(JSON.stringify({ t: 'resize', cols, rows })));
+  new ResizeObserver(() => fit.fit()).observe(el.querySelector('.term'));
+  el.addEventListener('mousedown', () => setFocus(info.id));
+  el.querySelector('.min').onclick = (e) => { e.stopPropagation(); minimize(info.id); };
+  el.querySelector('.close').onclick = async () => {
+    open.delete(info.id);
+    w.ws?.close(); term.dispose(); slot.remove();
+    await api(`/api/sessions/${info.id}`, { method: 'DELETE' });
+    persist(); layout(); arrange();
+  };
+  persist(); layout(); arrange(); setFocus(info.id);
+}
+
+const persist = () => store('corral.open', [...open.keys()]);
+
+async function spawn(cwd, label, space, agent) {
+  attach(await api('/api/sessions', { method: 'POST', body: { cwd, label, space, agent: agent || null } }));
+}
+
+let spaces = [];
+const rows = new Map(); // space id -> wrapper element, built once per load and only reordered after
+
+// A space counts as open when a terminal window in this page belongs to it. Windows made from
+// a space row carry its id; older adopted shells fall back to a matching folder.
+function hasWindow(s) {
+  for (const w of open.values()) {
+    const i = w.info;
+    if (i.space === s.id || (!i.space && i.cwd && (i.cwd === s.cwd || i.cwd === s.root))) return true;
+  }
+  return false;
+}
+
+function renderSpaces() { buildRows(); arrange(); }
+
+// Puts spaces with an open window first, then the rest, each group alphabetical (herdr's own
+// order). Moves the existing elements, so expanded file trees survive.
+// ---- Categories: the user's own groups. Saved on the server, keyed by project folder. ----
+let cats = { categories: [], uncatCollapsed: false, assign: {} };
+let saveTimer = null;
+function saveCats() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => api('/api/categories', { method: 'POST', body: cats }).catch(() => {}), 250);
+}
+async function loadCats() {
+  try { const c = await api('/api/categories'); if (c.categories) cats = c; } catch {}
+  arrange();
+}
+const catOf = (s) => (s.root && Object.hasOwn(cats.assign, s.root) ? cats.assign[s.root] : null);
+function assignTo(list, name) {
+  for (const s of list) {
+    if (!s.root) continue;
+    if (name) cats.assign[s.root] = name; else delete cats.assign[s.root];
+  }
+  saveCats(); arrange();
+}
+function addCategory(name) {
+  name = name.trim().slice(0, 40);
+  if (!name) return null;
+  if (!cats.categories.some((c) => c.name === name)) { cats.categories.push({ name, collapsed: false }); saveCats(); }
+  return name;
+}
+
+// Small popup for filing one or more spaces: pick a category, none, or type a new name.
+let openMenu = null;
+function closeMenu() { openMenu?.remove(); openMenu = null; }
+function catMenu(list, anchor) {
+  closeMenu();
+  const m = document.createElement('div');
+  m.className = 'catmenu';
+  const cur = list.length === 1 ? catOf(list[0]) : null;
+  const item = (text, name, on) => {
+    const b = document.createElement('button');
+    b.textContent = `${on ? '✓ ' : ''}${text}`;
+    b.onclick = () => { closeMenu(); assignTo(list, name); };
+    m.append(b);
+  };
+  for (const c of cats.categories) item(c.name, c.name, c.name === cur);
+  item('Uncategorized', null, list.length === 1 && !cur);
+  const inp = document.createElement('input');
+  inp.placeholder = 'New category, then Enter';
+  inp.onkeydown = (e) => {
+    if (e.key === 'Enter') { const n = addCategory(inp.value); if (n) { closeMenu(); assignTo(list, n); } }
+    if (e.key === 'Escape') closeMenu();
+  };
+  m.append(inp);
+  document.body.append(m);
+  const r = anchor.getBoundingClientRect();
+  m.style.left = `${Math.min(r.left, innerWidth - 220)}px`;
+  m.style.top = `${Math.min(r.bottom + 4, innerHeight - m.offsetHeight - 8)}px`;
+  openMenu = m;
+  inp.focus();
+}
+document.addEventListener('click', (e) => { if (openMenu && !openMenu.contains(e.target)) closeMenu(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+
+function renameCategory(c, h) {
+  const inp = document.createElement('input');
+  inp.value = c.name;
+  inp.className = 'catname';
+  const nm = h.querySelector('.cn');
+  nm.replaceWith(inp);
+  inp.focus(); inp.select();
+  const done = (commit) => {
+    const n = inp.value.trim().slice(0, 40);
+    if (commit && n && n !== c.name && !cats.categories.some((x) => x.name === n)) {
+      for (const k of Object.keys(cats.assign)) if (cats.assign[k] === c.name) cats.assign[k] = n;
+      c.name = n; saveCats();
+    }
+    arrange();
+  };
+  inp.onkeydown = (e) => { if (e.key === 'Enter') done(true); if (e.key === 'Escape') done(false); };
+  inp.onblur = () => done(true);
+  inp.onclick = (e) => e.stopPropagation();
+}
+
+// One collapsible group header. c is a category, or null for Uncategorized.
+function groupHeader(c, count, forceOpen) {
+  const h = document.createElement('div');
+  h.className = 'sec cat';
+  const collapsed = c ? c.collapsed : cats.uncatCollapsed;
+  const chev = document.createElement('span'); chev.className = 'cc'; chev.textContent = forceOpen || !collapsed ? '▾' : '▸';
+  const nm = document.createElement('span'); nm.className = 'cn'; nm.textContent = c ? c.name : 'Uncategorized';
+  const ct = document.createElement('span'); ct.className = 'ct'; ct.textContent = count;
+  h.append(chev, nm, ct);
+  h.onclick = () => { if (c) c.collapsed = !c.collapsed; else cats.uncatCollapsed = !cats.uncatCollapsed; saveCats(); arrange(); };
+  if (c) {
+    const acts = document.createElement('span'); acts.className = 'acts';
+    const btn = (t, tip, fn) => { const b = document.createElement('button'); b.textContent = t; b.title = tip; b.onclick = (e) => { e.stopPropagation(); fn(b); }; acts.append(b); return b; };
+    const i = cats.categories.indexOf(c);
+    if (i > 0) btn('↑', 'Move up', () => { cats.categories.splice(i, 1); cats.categories.splice(i - 1, 0, c); saveCats(); arrange(); });
+    if (i < cats.categories.length - 1) btn('↓', 'Move down', () => { cats.categories.splice(i, 1); cats.categories.splice(i + 1, 0, c); saveCats(); arrange(); });
+    btn('✎', 'Rename', () => renameCategory(c, h));
+    btn('×', 'Delete this category (its spaces become Uncategorized)', (b) => {
+      if (b.dataset.sure) { cats.categories.splice(i, 1); saveCats(); arrange(); return; }
+      b.dataset.sure = '1'; b.textContent = 'Delete?';
+      setTimeout(() => { if (b.isConnected) { delete b.dataset.sure; b.textContent = '×'; } }, 3000);
+    });
+    h.append(acts);
+  }
+  // Drop a dragged space here to file it in this group.
+  const ok = (e) => [...(e.dataTransfer?.types || [])].includes('text/x-corral-space');
+  h.addEventListener('dragover', (e) => { if (ok(e)) { e.preventDefault(); h.classList.add('over'); } });
+  h.addEventListener('dragleave', () => h.classList.remove('over'));
+  h.addEventListener('drop', (e) => {
+    h.classList.remove('over');
+    if (!ok(e)) return;
+    e.preventDefault();
+    const s = spaces.find((x) => x.id === e.dataTransfer.getData('text/x-corral-space'));
+    if (s) assignTo([s], c ? c.name : null);
+  });
+  return h;
+}
+
+function arrange() {
+  const box = $('#spaces');
+  const q = $('#filter').value.trim().toLowerCase();
+  const shown = spaces.filter((s) => s.label.toLowerCase().includes(q));
+  const openSpaces = shown.filter(hasWindow);
+  const rest = shown.filter((s) => !openSpaces.includes(s));
+  rows.forEach((wrap) => wrap.remove());
+  box.querySelectorAll('.sec, .note').forEach((n) => n.remove());
+  const sec = (t) => { const h = document.createElement('div'); h.className = 'sec'; h.textContent = t; box.append(h); };
+  const put = (list) => { for (const s of list) box.append(rows.get(s.id)); };
+
+  if (openSpaces.length) { sec(`Open windows (${openSpaces.length})`); put(openSpaces); }
+  if (!cats.categories.length) {
+    if (openSpaces.length && rest.length) sec(`All spaces (${rest.length})`);
+    put(rest);
+  } else {
+    // A search opens every group that has a match, so a name is easy to find.
+    const buckets = new Map(cats.categories.map((c) => [c.name, []]));
+    const none = [];
+    for (const s of rest) (buckets.get(catOf(s)) || none).push(s);
+    for (const c of cats.categories) {
+      const list = buckets.get(c.name);
+      if (q && !list.length) continue;
+      box.append(groupHeader(c, list.length, Boolean(q)));
+      if (q || !c.collapsed) put(list);
+    }
+    if (none.length || !q) {
+      box.append(groupHeader(null, none.length, Boolean(q)));
+      if (q || !cats.uncatCollapsed) put(none);
+    }
+  }
+  rows.forEach((wrap, id) => wrap.querySelector('.space').classList.toggle('has-win', openSpaces.some((s) => s.id === id)));
+  if (!shown.length) { const n = document.createElement('div'); n.className = 'note'; n.textContent = 'No spaces.'; box.append(n); }
+
+  // With a filter typed, offer to file every match at once.
+  const bulk = $('#bulk');
+  bulk.hidden = !(q && shown.length && cats.categories.length);
+  if (!bulk.hidden) {
+    bulk.textContent = '';
+    const sel = document.createElement('select');
+    sel.append(new Option(`Move ${shown.length} match${shown.length === 1 ? '' : 'es'} to...`, ''));
+    for (const c of cats.categories) sel.append(new Option(c.name, `c:${c.name}`));
+    sel.append(new Option('Uncategorized', 'none'));
+    sel.onchange = () => { if (sel.value) assignTo(shown, sel.value === 'none' ? null : sel.value.slice(2)); };
+    bulk.append(sel);
+  }
+}
+
+function buildRows() {
+  rows.clear();
+  $('#spaces').textContent = '';
+  for (const s of spaces) {
+    const wrap = document.createElement('div');
+    rows.set(s.id, wrap);
+    const d = document.createElement('div');
+    d.className = 'space';
+    d.title = s.root || s.cwd || '';
+    d.innerHTML = `<span class="chev" title="Show files"></span><span class="dot ${s.status}"></span><span class="name"></span><span class="more" title="Move to a category">⋯</span>`;
+    d.querySelector('.name').textContent = s.label;
+    d.onclick = () => spawn(s.cwd, s.label, s.id, $('#agent').value);
+    d.draggable = true; // drag onto a category header to file it there
+    d.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/x-corral-space', s.id); e.dataTransfer.effectAllowed = 'move'; });
+    d.querySelector('.more').onclick = (e) => { e.stopPropagation(); catMenu([s], e.currentTarget); };
+    const tree = document.createElement('div');
+    tree.className = 'tree';
+    const chev = d.querySelector('.chev');
+    const sync = () => {
+      const open = expanded.has(s.id);
+      chev.textContent = open ? '▾' : '▸';
+      tree.hidden = !open;
+      if (open) fillTree(tree, s.id, '');
+    };
+    chev.onclick = (e) => {
+      e.stopPropagation();
+      expanded.has(s.id) ? expanded.delete(s.id) : expanded.add(s.id);
+      store('corral.expanded', [...expanded]);
+      sync();
+    };
+    sync();
+    wrap.append(d, tree);
+  }
+}
+
+const expanded = new Set(load('corral.expanded', []));
+
+// Lists one folder of a space's project. Names go in with textContent, never innerHTML,
+// because file names are untrusted text.
+async function fillTree(box, spaceId, rel) {
+  box.textContent = '';
+  const note = (t) => { const n = document.createElement('div'); n.className = 'note'; n.textContent = t; box.append(n); };
+  note('Loading...');
+  let r;
+  try {
+    const q = `space=${encodeURIComponent(spaceId)}&path=${encodeURIComponent(rel)}&hidden=${$('#hidden').checked ? 1 : 0}`;
+    r = await (await fetch(`/api/files?${q}`)).json();
+  } catch { box.textContent = ''; return note('Could not load files.'); }
+  box.textContent = '';
+  if (r.error) return note(r.error);
+  if (!r.entries.length) return note('(empty)');
+  for (const e of r.entries) {
+    const row = document.createElement('div');
+    row.className = `node ${e.type}`;
+    const ic = document.createElement('span');
+    ic.className = 'ic';
+    ic.textContent = e.type === 'dir' ? '▸' : '';
+    const nm = document.createElement('span');
+    nm.textContent = e.name;
+    row.append(ic, nm);
+    if (e.link) { const l = document.createElement('span'); l.className = 'lk'; l.textContent = '↪'; row.append(l); }
+    box.append(row);
+    if (e.type === 'dir') {
+      const kids = document.createElement('div');
+      kids.style.paddingLeft = '14px';
+      box.append(kids);
+      const childRel = rel ? `${rel}/${e.name}` : e.name;
+      row.onclick = () => {
+        const open = kids.childNodes.length > 0;
+        kids.textContent = '';
+        ic.textContent = open ? '▸' : '▾';
+        if (!open) fillTree(kids, spaceId, childRel);
+      };
+    }
+  }
+  if (r.truncated) note('List cut off at 1000 entries.');
+}
+async function loadSpaces() {
+  const r = await api('/api/herdr');
+  spaces = r.spaces;
+  if (!r.available) $('#spaces').textContent = `herdr not reachable: ${r.error}`;
+  else renderSpaces();
+  loadProjects();
+}
+
+// Ledger of every project herdr has shown the server. "Inactive" means no space is open for it.
+let projects = [];
+let inactiveOpen = load('corral.inactiveOpen', true);
+async function loadProjects() {
+  try { projects = (await api('/api/projects')).projects; } catch { projects = []; }
+  renderInactive();
+}
+
+function ago(ms) {
+  const m = Math.round((Date.now() - ms) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 48) return `${h} hr ago`;
+  return `${Math.round(h / 24)} days ago`;
+}
+
+function renderInactive() {
+  const box = $('#inactive');
+  box.textContent = '';
+  const q = $('#filter').value.toLowerCase();
+  const list = projects.filter((p) => !p.open && (p.label.toLowerCase().includes(q) || p.root.toLowerCase().includes(q)));
+  const all = projects.filter((p) => !p.open).length;
+  if (!all) return;
+  const h = document.createElement('div');
+  h.className = 'sec tog';
+  h.textContent = `${inactiveOpen ? '▾' : '▸'} Inactive projects (${all})`;
+  h.onclick = () => { inactiveOpen = !inactiveOpen; store('corral.inactiveOpen', inactiveOpen); renderInactive(); };
+  box.append(h);
+  if (!inactiveOpen) return;
+  for (const p of list) {
+    const r = document.createElement('div');
+    r.className = `proj${p.exists ? '' : ' gone'}`;
+    r.title = p.exists ? p.root : `${p.root} (folder no longer exists)`;
+    const nm = document.createElement('span'); nm.className = 'name'; nm.textContent = p.label;
+    const when = document.createElement('span'); when.className = 'ago'; when.textContent = ago(p.lastSeen);
+    const re = document.createElement('button'); re.textContent = 'Reopen'; re.disabled = !p.exists;
+    re.title = 'Create a herdr space for this folder';
+    re.onclick = async () => {
+      re.disabled = true; re.textContent = '...';
+      const res = await api('/api/projects/reopen', { method: 'POST', body: { root: p.root } });
+      if (res.error) { re.textContent = 'Failed'; re.title = res.error; nm.title = res.error; return; }
+      loadSpaces();
+    };
+    const fg = document.createElement('button'); fg.textContent = '×'; fg.title = 'Forget this project (removes it from the ledger only)';
+    fg.onclick = async () => { await api('/api/projects/forget', { method: 'POST', body: { root: p.root } }); loadProjects(); };
+    r.append(nm, when, re, fg);
+    box.append(r);
+  }
+  if (!list.length) { const n = document.createElement('div'); n.className = 'note'; n.textContent = 'No match.'; box.append(n); }
+}
+
+$('#filter').oninput = () => { arrange(); renderInactive(); };
+$('#newcat').onclick = () => { $('#newcatrow').hidden = !$('#newcatrow').hidden; if (!$('#newcatrow').hidden) $('#newcatname').focus(); };
+$('#newcatname').onkeydown = (e) => {
+  if (e.key === 'Enter') { addCategory(e.target.value); e.target.value = ''; $('#newcatrow').hidden = true; arrange(); }
+  if (e.key === 'Escape') { e.target.value = ''; $('#newcatrow').hidden = true; }
+};
+const setAll = (collapsed) => { cats.categories.forEach((c) => { c.collapsed = collapsed; }); cats.uncatCollapsed = collapsed; saveCats(); arrange(); };
+$('#expall').onclick = () => setAll(false);
+$('#colall').onclick = () => setAll(true);
+$('#hidden').checked = load('corral.hidden', false);
+$('#hidden').onchange = () => { store('corral.hidden', $('#hidden').checked); renderSpaces(); };
+$('#refresh').onclick = loadSpaces;
+$('#newshell').onclick = () => spawn(null, 'shell');
+$('#agent').value = load('corral.agent', 'claude');
+$('#agent').onchange = () => store('corral.agent', $('#agent').value);
+$('#cols').value = load('corral.cols', 2);
+$('#cols').onchange = () => { store('corral.cols', $('#cols').value); layout(); };
+$('#rows').value = load('corral.rows', 'auto');
+$('#rows').onchange = () => { store('corral.rows', $('#rows').value); layout(); };
+new ResizeObserver(() => layout()).observe($('#grid'));
+$('#laybtn').onclick = (e) => { e.stopPropagation(); buildLayoutMenu(); $('#laymenu').hidden = !$('#laymenu').hidden; };
+document.addEventListener('click', (e) => { if (!e.target.closest('#laywrap')) $('#laymenu').hidden = true; });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#laymenu').hidden = true; });
+
+(async () => {
+  layout();
+  loadCats();
+  loadSpaces();
+  const { sessions } = await api('/api/sessions');
+  const live = new Map(sessions.map((s) => [s.id, s]));
+  const wanted = load('corral.open', []);
+  suspend = true; // attach every window first, then restore where each one sat
+  for (const id of wanted) if (live.has(id)) attach(live.get(id));
+  slots = (savedArrangement.slots || []).map((id) => (id && open.has(id) ? id : null));
+  tray = (savedArrangement.tray || []).filter((id) => open.has(id));
+  for (const id of [...minimized]) if (!open.has(id)) minimized.delete(id);
+  suspend = false;
+  ready = true;
+  layout();
+})();
+</script>
+</body>
+</html>
