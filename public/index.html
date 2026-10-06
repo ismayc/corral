@@ -106,6 +106,9 @@
   #main { display:flex; flex-direction:column; min-width:0; min-height:0; }
   #bar { display:flex; gap:10px; align-items:center; padding:9px 12px; border-bottom:1px solid var(--rail); background:var(--panel); }
   #bar label { color:var(--muted); display:flex; align-items:center; gap:6px; }
+  #restorewrap { display:flex; }
+  #restore { border-color:var(--fence); color:var(--lavender); border-radius:6px 0 0 6px; }
+  #restorex { border-left:0; border-radius:0 6px 6px 0; color:var(--muted); padding:4px 8px; }
   #bar .sp { flex:1; }
   #newshell { background:var(--fence); border-color:var(--fence); color:#14101f; font-weight:600; }
   #newshell:hover { background:var(--lavender); border-color:var(--lavender); }
@@ -141,10 +144,17 @@
   .zone-empty.over > div, .slot.over .win { border-color:var(--fence); border-style:solid; }
 
   /* Bottom bar */
-  #tray { display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding:7px 12px; border-top:1px solid var(--rail); background:var(--panel); }
-  #tray .lbl { color:var(--muted); font-size:12px; margin-right:2px; }
+  /* --th is the bar's height; drag its top edge to change it. Chip text and padding scale with it. */
+  #tray { --th:44px; position:relative; display:flex; gap:calc(var(--th) * .16); flex-wrap:wrap; align-items:center;
+          min-height:var(--th); padding:calc(var(--th) * .14) 12px; border-top:1px solid var(--rail); background:var(--panel); }
+  #tray .lbl { color:var(--muted); font-size:calc(var(--th) * .29); margin-right:2px; }
   #tray .lbl + .chip { margin-left:0; }
   #tray .chip + .lbl { margin-left:10px; }
+  #tray .chip { font-size:calc(var(--th) * .32); padding:calc(var(--th) * .1) calc(var(--th) * .3); border-radius:var(--th); }
+  #traygrip { position:absolute; left:0; right:0; top:-5px; height:9px; cursor:ns-resize; z-index:2; }
+  #traygrip::after { content:''; position:absolute; left:50%; top:3px; width:36px; height:3px; margin-left:-18px;
+                     border-radius:2px; background:var(--rail); opacity:0; transition:opacity .15s; }
+  #traygrip:hover::after, #traygrip.drag::after { opacity:1; background:var(--fence); }
   .chip { padding:2px 11px; border:1px solid var(--rail); border-radius:13px; cursor:pointer; background:var(--ground); }
   .chip:hover { border-color:var(--fence); }
   .chip.min::before { content:'\25B4\00a0\00a0'; color:var(--muted); }
@@ -178,6 +188,7 @@
   <section id="main">
     <div id="bar">
       <button id="newshell" title="Open a plain shell in your home folder">New shell</button>
+      <span id="restorewrap" hidden><button id="restore"></button><button id="restorex" title="Forget these windows">&times;</button></span>
       <label>A space opens <select id="agent">
         <option value="claude">Claude Code</option>
         <option value="claude-continue">Claude Code, last session</option>
@@ -262,6 +273,33 @@ const savedArrangement = load('corral.slots', { slots: [], tray: [] }); // read 
 // Minimized windows wait in the bottom bar, still running, until restored. They never take a zone.
 const minimized = new Set(load('corral.minimized', []));
 const visibleCount = () => [...open.keys()].filter((id) => !minimized.has(id)).length;
+
+// Bottom bar height: drag the bar's top edge to change it, double-click the edge to reset. Saved per browser.
+const TRAY_H = { def: 44, min: 30, max: 96 };
+const trayGrip = document.createElement('div');
+trayGrip.id = 'traygrip';
+trayGrip.title = 'Drag to resize the bar. Double-click to reset.';
+function setTrayH(h) {
+  h = Math.round(Math.min(TRAY_H.max, Math.max(TRAY_H.min, Number(h) || TRAY_H.def)));
+  $('#tray').style.setProperty('--th', `${h}px`);
+  return h;
+}
+setTrayH(load('corral.trayH', TRAY_H.def));
+trayGrip.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  trayGrip.setPointerCapture(e.pointerId);
+  trayGrip.classList.add('drag');
+  const y0 = e.clientY, h0 = parseFloat($('#tray').style.getPropertyValue('--th'));
+  const move = (ev) => setTrayH(h0 + y0 - ev.clientY); // dragging up makes the bar taller
+  trayGrip.addEventListener('pointermove', move);
+  trayGrip.addEventListener('pointerup', (ev) => {
+    trayGrip.removeEventListener('pointermove', move);
+    trayGrip.classList.remove('drag');
+    store('corral.trayH', setTrayH(h0 + y0 - ev.clientY));
+  }, { once: true });
+});
+trayGrip.addEventListener('dblclick', () => store('corral.trayH', setTrayH(TRAY_H.def)));
 
 function currentZones() {
   const g = $('#grid');
@@ -381,7 +419,9 @@ function layout() {
   // or drag a chip onto a zone.
   const bar = $('#tray');
   bar.hidden = !tray.length;
-  bar.textContent = '';
+  // Keep the resize grip in place: layout() runs while it is being dragged, and detaching it would end the drag.
+  for (const n of [...bar.childNodes]) if (n !== trayGrip) n.remove();
+  if (!trayGrip.parentNode) bar.prepend(trayGrip);
   const group = (label, ids, tip) => {
     if (!ids.length) return;
     const l = document.createElement('span');
@@ -458,14 +498,28 @@ function attach(info) {
   title.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/x-corral', info.id); e.dataTransfer.effectAllowed = 'move'; });
   wireDrop(slot, () => Number(slot.dataset.zone));
 
+  // Option-drag makes a browser selection even while tmux has the mouse (Cmd-C then copies it).
   const term = new Terminal({ fontFamily: 'Menlo, Monaco, monospace', fontSize: 13, cursorBlink: true,
-    scrollback: 5000, theme: { background: '#100e15', cursor: '#c9c1ff', selectionBackground: '#4d4366' } });
+    scrollback: 5000, macOptionClickForcesSelection: true,
+    theme: { background: '#100e15', cursor: '#c9c1ff', selectionBackground: '#4d4366' } });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
   term.loadAddon(new WebLinksAddon.WebLinksAddon());
   term.open(el.querySelector('.term'));
 
   const w = { term, fit, el, slot, info, ws: null, muted: false };
+  // With tmux's mouse on, a plain drag selects inside tmux, and on release tmux sends the text as an
+  // OSC 52 escape. Put it on the clipboard. Writes only: a request to read the clipboard is ignored,
+  // and so is any copy replayed from saved output while reconnecting.
+  term.parser.registerOscHandler(52, (data) => {
+    const b64 = data.slice(data.indexOf(';') + 1);
+    if (w.muted || !b64 || b64 === '?') return true;
+    try {
+      const text = new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
+      navigator.clipboard.writeText(text).catch(() => {});
+    } catch {}
+    return true;
+  });
   open.set(info.id, w);
   const connect = () => {
     const ws = new WebSocket(`ws://${location.host}/ws?id=${info.id}`);
@@ -498,6 +552,30 @@ function attach(info) {
 }
 
 const persist = () => store('corral.open', [...open.keys()]);
+
+// Restore: after the tmux server or the Mac restarts, Corral offers the windows that were open before,
+// each resuming its Claude Code conversation. The server keeps the list; this page only asks for it.
+async function checkRestore() {
+  const r = await api('/api/restore').catch(() => null);
+  const n = r?.windows?.length || 0;
+  $('#restorewrap').hidden = !n;
+  if (!n) return;
+  const when = r.savedAt ? new Date(r.savedAt).toLocaleString() : 'before the restart';
+  $('#restore').textContent = `Restore ${n} window${n === 1 ? '' : 's'}`;
+  $('#restore').title = `Open again, as of ${when}:\n${r.windows.map((w) => `${w.label}${w.claude ? ' (resumes its Claude conversation)' : ''}`).join('\n')}`;
+}
+$('#restore').onclick = async () => {
+  $('#restorewrap').hidden = true;
+  const r = await api('/api/restore', { method: 'POST' });
+  for (const s of r.sessions || []) attach(s);
+  const miss = r.notResumed?.length ? ` (${r.notResumed.join(', ')}: conversation not found, opened as a shell)` : '';
+  toast(`Restored ${r.sessions?.length || 0} window${r.sessions?.length === 1 ? '' : 's'}${miss}`);
+};
+$('#restorex').onclick = async () => {
+  $('#restorewrap').hidden = true;
+  await api('/api/restore/dismiss', { method: 'POST' });
+  toast('Forgot the windows from before the restart');
+};
 
 async function spawn(cwd, label, space, agent) {
   attach(await api('/api/sessions', { method: 'POST', body: { cwd, label, space, agent: agent || null } }));
@@ -930,13 +1008,18 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#laymen
   const live = new Map(sessions.map((s) => [s.id, s]));
   const wanted = load('corral.open', []);
   suspend = true; // attach every window first, then restore where each one sat
-  for (const id of wanted) if (live.has(id)) attach(live.get(id));
+  // Every running terminal gets a window, in the remembered order first. Closing a window ends its
+  // shell, so a live one that this browser does not remember (its storage was cleared, or this is
+  // another browser) would otherwise keep running with no way to reach it.
+  for (const id of wanted) if (live.has(id) && !live.get(id).exited) attach(live.get(id));
+  for (const s of sessions) if (!open.has(s.id) && !s.exited) attach(s);
   slots = (savedArrangement.slots || []).map((id) => (id && open.has(id) ? id : null));
   tray = (savedArrangement.tray || []).filter((id) => open.has(id));
   for (const id of [...minimized]) if (!open.has(id)) minimized.delete(id);
   suspend = false;
   ready = true;
   layout();
+  checkRestore();
 })();
 </script>
 </body>

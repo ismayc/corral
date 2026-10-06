@@ -68,9 +68,11 @@ function cleanEnv(extra = {}) {
   return { ...env, ...extra };
 }
 
-// Runs tmux on the dedicated socket, so the user's own tmux server is never touched.
+// Runs tmux on the dedicated socket, so the user's own tmux server is never touched. The first call
+// starts the tmux server, which keeps that call's working folder for its whole life; home is used so
+// it never holds a folder that may later be moved or deleted (such as this repo).
 function tmux(...args) {
-  return execFileSync(TMUX, ['-L', TMUX_SOCKET, ...args], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'pipe'], env: cleanEnv() });
+  return execFileSync(TMUX, ['-L', TMUX_SOCKET, ...args], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'pipe'], env: cleanEnv(), cwd: os.homedir() });
 }
 
 // A tmux server started by an earlier run keeps the polluted variables in its global environment
@@ -84,29 +86,34 @@ function scrubTmuxEnv() {
 // never supply a command. The shell stays open after the program exits.
 const AGENTS = { claude: 'claude', 'claude-continue': 'claude --continue' };
 const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
-function startCommand(agent) {
+// `resume` comes only from Corral's own restore file, after resumableId() has checked it.
+function programFor(agent, resume) {
+  return resume ? `claude --resume ${resume}` : AGENTS[agent] || null;
+}
+function startCommand(agent, resume) {
   const shell = process.env.SHELL || '/bin/zsh';
-  if (!AGENTS[agent]) return { shell, command: null };
-  return { shell, command: `${shell} -lc ${shq(`${AGENTS[agent]}; exec ${shell} -l`)}` };
+  const program = programFor(agent, resume);
+  if (!program) return { shell, command: null };
+  return { shell, command: `${shell} -lc ${shq(`${program}; exec ${shell} -l`)}` };
 }
 
 // Starts the process that feeds the browser: a plain login shell, or a tmux attach client.
-function attachPty(id, dir, useTmux, agent) {
+function attachPty(id, dir, useTmux, agent, resume) {
   const env = cleanEnv({ TERM: 'xterm-256color', COLORTERM: 'truecolor', CORRAL_SESSION: id });
+  const shell = process.env.SHELL || '/bin/zsh';
+  const program = programFor(agent, resume);
   const [file, args] = useTmux
     ? [TMUX, ['-L', TMUX_SOCKET, 'attach-session', '-t', SESSION_PREFIX + id]]
-    : agent && AGENTS[agent]
-      ? [startCommand(agent).shell, ['-lc', `${AGENTS[agent]}; exec ${startCommand(agent).shell} -l`]]
-      : [process.env.SHELL || '/bin/zsh', ['-l']];
+    : program ? [shell, ['-lc', `${program}; exec ${shell} -l`]] : [shell, ['-l']];
   return pty.spawn(file, args, { name: 'xterm-256color', cols: 100, rows: 30, cwd: dir, env });
 }
 
-function register(id, dir, label, created, useTmux, space, agent) {
+function register(id, dir, label, created, useTmux, space, agent, resume) {
   const s = {
     id, pty: null, buf: '', clients: new Set(), cwd: dir, space: space || null,
     label: label || path.basename(dir) || dir, exited: false, created, tmux: useTmux,
   };
-  s.pty = attachPty(id, dir, useTmux, agent);
+  s.pty = attachPty(id, dir, useTmux, agent, resume);
   s.pty.onData((d) => {
     s.buf += d;
     if (s.buf.length > SCROLLBACK_BYTES) s.buf = s.buf.slice(-SCROLLBACK_BYTES);
@@ -117,23 +124,34 @@ function register(id, dir, label, created, useTmux, space, agent) {
     const msg = `\r\n\x1b[2m[${useTmux ? 'tmux session ended' : 'process exited'}, code ${exitCode}]\x1b[0m\r\n`;
     s.buf += msg;
     for (const ws of s.clients) if (ws.readyState === 1) ws.send(msg);
+    saveBackupSoon();
   });
   sessions.set(id, s);
   return s;
 }
 
-function createSession(cwd, label, space, agent) {
+function createSession(cwd, label, space, agent, resume) {
   const dir = cwd && fs.existsSync(cwd) && fs.statSync(cwd).isDirectory() ? cwd : os.homedir();
   const id = `s${Date.now().toString(36)}${(counter++).toString(36)}`;
   const name = label || path.basename(dir) || dir;
   if (TMUX) {
-    const { shell, command } = startCommand(agent);
-    tmux('new-session', '-d', '-s', SESSION_PREFIX + id, '-c', dir, '-x', '100', '-y', '30', ...(command ? [command] : [shell, '-l']));
+    const { shell, command } = startCommand(agent, resume);
+    // tmux 3.7c ignores -c when its server's own working folder has been deleted: the pane starts in the
+    // deleted folder and every command there fails. So the pane also changes into the folder itself,
+    // falling back to home, before starting the shell. zsh -f (no startup files) is used where it exists
+    // because sh prints a "shell-init: getcwd" warning when it starts in a deleted folder.
+    const wrap = fs.existsSync('/bin/zsh') ? ['/bin/zsh', '-fc'] : ['/bin/sh', '-c'];
+    const inDir = [...wrap, 'cd -- "$1" 2>/dev/null || cd; shift; exec "$@"', 'corral', dir];
+    tmux('new-session', '-d', '-s', SESSION_PREFIX + id, '-c', dir, '-x', '100', '-y', '30',
+      ...inDir, ...(command ? ['/bin/sh', '-c', command] : [shell, '-l']));
     tmux('source-file', TMUX_CONF);
     tmux('set-option', '-t', SESSION_PREFIX + id, '@corral_label', name);
     if (space) tmux('set-option', '-t', SESSION_PREFIX + id, '@corral_space', String(space));
   }
-  return register(id, dir, name, Date.now(), Boolean(TMUX), space, agent);
+  const s = register(id, dir, name, Date.now(), Boolean(TMUX), space, agent, resume);
+  saveBackupSoon();
+  setTimeout(saveBackupSoon, 8000).unref(); // by then Claude Code has written its session file
+  return s;
 }
 
 // After a server restart, tmux sessions from the previous run are still alive. Reattach to them.
@@ -287,6 +305,112 @@ function saveCategories() {
     fs.renameSync(tmp, CATEGORIES_FILE);
     return true;
   } catch (e) { console.error('categories save failed:', e.message); return false; }
+}
+
+// Backup of the open windows, so they can be brought back after the tmux server or the Mac restarts.
+// open-sessions.json always mirrors what is open now, with the Claude Code conversation running in each
+// window. At startup, windows in it that are no longer running move to restore.json, where they wait for
+// the Restore button; opening new windows first cannot overwrite them.
+const BACKUP_FILE = path.join(DATA_DIR, 'open-sessions.json');
+const RESTORE_FILE = path.join(DATA_DIR, 'restore.json');
+const CLAUDE_DIR = path.join(os.homedir(), '.claude');
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+function writeJson(file, data) {
+  fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 1), { mode: 0o600 });
+  fs.renameSync(tmp, file);
+}
+function readJsonFile(file) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
+}
+
+// Claude Code writes ~/.claude/sessions/<pid>.json for each running instance, naming its conversation.
+// The window's Claude is somewhere under the pane's shell, so walk the process tree down from it.
+function claudeUnder(rootPid, children) {
+  const queue = [rootPid];
+  for (let i = 0; i < queue.length && i < 200; i++) {
+    const d = readJsonFile(path.join(CLAUDE_DIR, 'sessions', `${queue[i]}.json`));
+    if (d && UUID.test(d.sessionId || '') && typeof d.cwd === 'string') return { sessionId: d.sessionId, cwd: d.cwd };
+    queue.push(...(children.get(queue[i]) || []));
+  }
+  return null;
+}
+
+function openWindows() {
+  const children = new Map();
+  try {
+    for (const line of execFileSync('ps', ['-axo', 'pid=,ppid='], { encoding: 'utf8', timeout: 5000 }).split('\n')) {
+      const [pid, ppid] = line.trim().split(/\s+/).map(Number);
+      if (pid && ppid) children.set(ppid, [...(children.get(ppid) || []), pid]);
+    }
+  } catch {}
+  return [...sessions.values()].filter((s) => !s.exited).sort((a, b) => a.created - b.created).map((s) => {
+    let root = s.pty.pid;
+    if (s.tmux) { try { root = Number(tmux('display-message', '-p', '-t', SESSION_PREFIX + s.id, '#{pane_pid}').trim()); } catch {} }
+    const claude = claudeUnder(root, children);
+    const w = { id: s.id, label: s.label, cwd: s.cwd, space: s.space };
+    if (claude) {
+      w.claudeSession = claude.sessionId;
+      w.claudeCwd = claude.cwd;
+      w.resumeCommand = `cd ${shq(claude.cwd)} && claude --resume ${claude.sessionId}`;
+    }
+    return w;
+  });
+}
+
+let backupTimer = null;
+function saveBackup() {
+  clearTimeout(backupTimer);
+  try { writeJson(BACKUP_FILE, { version: 1, savedAt: new Date().toISOString(), windows: openWindows() }); }
+  catch (e) { console.error('backup save failed:', e.message); }
+}
+function saveBackupSoon() {
+  clearTimeout(backupTimer);
+  backupTimer = setTimeout(saveBackup, 1000);
+  backupTimer.unref();
+}
+
+// Runs once at startup, after adoptSessions(): whatever the backup lists that is not running now can be restored.
+function prepareRestore() {
+  const prev = readJsonFile(BACKUP_FILE);
+  const gone = (prev?.windows || []).filter((w) => w && typeof w.id === 'string' && !sessions.has(w.id));
+  if (gone.length) {
+    try { writeJson(RESTORE_FILE, { version: 1, savedAt: prev.savedAt, windows: gone }); }
+    catch (e) { console.error('restore list save failed:', e.message); }
+    console.log(`${gone.length} window(s) from ${prev.savedAt} can be restored`);
+  }
+}
+
+// A conversation ID is used only if it is well formed and Claude Code has that conversation on disk.
+function resumableId(id) {
+  if (typeof id !== 'string' || !UUID.test(id)) return null;
+  const projects = path.join(CLAUDE_DIR, 'projects');
+  try {
+    return fs.readdirSync(projects).some((d) => fs.existsSync(path.join(projects, d, `${id}.jsonl`))) ? id : null;
+  } catch { return null; }
+}
+
+function restoreList() {
+  const r = readJsonFile(RESTORE_FILE);
+  return r && Array.isArray(r.windows) ? r : { savedAt: null, windows: [] };
+}
+
+// Reopens every window in restore.json. The page sends no paths or IDs; everything comes from that file.
+function restoreWindows() {
+  const restored = [];
+  const plain = [];
+  for (const w of restoreList().windows) {
+    if (!w || typeof w.label !== 'string') continue;
+    const space = typeof w.space === 'string' && /^[\w-]+$/.test(w.space) ? w.space : null;
+    const resume = resumableId(w.claudeSession);
+    if (w.claudeSession && !resume) plain.push(w.label);
+    const cwd = resume && typeof w.claudeCwd === 'string' ? w.claudeCwd : typeof w.cwd === 'string' ? w.cwd : null;
+    try { restored.push(publicSession(createSession(cwd, w.label, space, null, resume))); } catch {}
+  }
+  try { fs.unlinkSync(RESTORE_FILE); } catch {}
+  return { sessions: restored, notResumed: plain };
 }
 
 // Creates a herdr space for a ledger project, then re-sorts the spaces alphabetically with the
@@ -468,6 +592,16 @@ const server = http.createServer(async (req, res) => {
     try { s.pty.kill(); } catch {}
     for (const ws of s.clients) ws.close();
     sessions.delete(s.id);
+    saveBackupSoon();
+    return send(res, 200, { ok: true });
+  }
+  if (url.pathname === '/api/restore' && req.method === 'GET') {
+    const r = restoreList();
+    return send(res, 200, { savedAt: r.savedAt, windows: r.windows.map((w) => ({ label: w.label, claude: Boolean(w.claudeSession) })) });
+  }
+  if (url.pathname === '/api/restore' && req.method === 'POST') return send(res, 200, restoreWindows());
+  if (url.pathname === '/api/restore/dismiss' && req.method === 'POST') {
+    try { fs.unlinkSync(RESTORE_FILE); } catch {}
     return send(res, 200, { ok: true });
   }
 
@@ -508,6 +642,9 @@ server.on('upgrade', (req, socket, head) => {
 
 scrubTmuxEnv();
 adoptSessions();
+prepareRestore(); // must read the previous backup before saveBackup() replaces it
+saveBackup();
+setInterval(saveBackup, 30000).unref(); // also catches a window switching to another Claude conversation
 loadCategories();
 if (!loadLedger()) seedFromSnapshots();
 herdrSnapshot(); // records the current spaces right away

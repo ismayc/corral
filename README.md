@@ -31,6 +31,17 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   brings it back.
 - **Terminals that survive.** Each shell lives in its own tmux session, so
   closing the tab, reloading, or restarting Corral leaves your work running.
+  Every running terminal gets a window when the page loads, even in a new
+  browser or after the browser's storage is cleared.
+- **Restore after a restart.** Corral keeps a backup of the open windows,
+  including the Claude Code conversation in each. If the windows are gone
+  (after a Mac restart, say), a **Restore** button reopens them, each in its
+  folder and resuming its conversation with `claude --resume`. The page never
+  sends the IDs: the server reads them from its own backup, and resumes only a
+  well-formed ID that Claude Code has on disk.
+- **A resizable bottom bar.** Minimized windows wait in the bar at the
+  bottom. Drag its top edge to make it bigger or smaller; double-click the
+  edge to reset it.
 - **Categories** you define, with collapsible groups. To move a space,
   right-click it (or use its ⋯ button) and pick a group, or drag it onto any
   group's header or rows. Cmd-click or Shift-click to select several spaces
@@ -97,6 +108,14 @@ about who can reach it:
   when (owner-only permissions).
 - `~/.local/share/corral/categories.json`: your categories and which project is
   in each (owner-only permissions).
+- `~/.local/share/corral/open-sessions.json`: the open windows, rewritten when
+  one opens or closes and every 30 seconds. Each entry has the window's name,
+  folder, and, when Claude Code is running in it, the conversation ID and a
+  `cd ... && claude --resume ...` command you can run by hand (owner-only
+  permissions).
+- `~/.local/share/corral/restore.json`: written at startup when windows in that
+  backup are no longer running; the Restore button reads it and then deletes
+  it.
 - Your browser's local storage: window layout, which windows are open or
   minimized, and display preferences.
 - A private tmux server named `corral`, separate from your own tmux and
