@@ -29,8 +29,11 @@ reads herdr's list of spaces and opens its own terminals for them.
   brings it back.
 - **Terminals that survive.** Each shell lives in its own tmux session, so
   closing the tab, reloading, or restarting Corral leaves your work running.
-- **Categories** you define, with collapsible groups. File a space with its
-  menu, by dragging it onto a group, or file every search match at once.
+- **Categories** you define, with collapsible groups. To move a space,
+  right-click it (or use its ⋯ button) and pick a group, or drag it onto any
+  group's header or rows. Cmd-click or Shift-click to select several spaces
+  and move them together, or search and move every match at once. Each move
+  can be undone from the notice that follows it.
 - **A file tree for each project**, read-only and limited to that project's
   folder.
 - **Inactive projects.** Corral remembers every project folder it has seen. If

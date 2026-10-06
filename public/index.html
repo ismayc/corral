@@ -66,8 +66,16 @@
   .space:hover { background:var(--raise); }
   .space .name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .space.has-win .name { color:var(--lavender); font-weight:600; }
-  .space .more { opacity:0; padding:0 6px; color:var(--muted); cursor:pointer; flex:none; }
+  .space .more { opacity:.35; padding:0 6px; color:var(--muted); cursor:pointer; flex:none; }
   .space:hover .more, .space .more:focus-visible { opacity:1; } .space .more:hover { color:var(--text); }
+  .space.sel { background:#342b55; box-shadow:inset 3px 0 var(--fence); }
+  .space.over { box-shadow:inset 0 2px 0 var(--fence); }
+  .catmenu .mhead { color:var(--muted); font-size:12px; padding:4px 9px 6px; }
+  #bulk button { flex:none; }
+  #toast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); z-index:40; display:flex; align-items:center; gap:12px;
+           padding:9px 10px 9px 16px; background:var(--raise); border:1px solid var(--rail); border-radius:10px;
+           box-shadow:0 12px 32px rgba(8,6,14,.6); }
+  #toast button { padding:2px 10px; border-color:var(--fence); color:var(--lavender); background:transparent; }
   .dot { width:8px; height:8px; border-radius:50%; flex:none; background:var(--unknown); }
   .dot.working { background:var(--working); } .dot.idle { background:var(--idle); } .dot.blocked { background:var(--blocked); }
   .chev { width:14px; flex:none; color:var(--muted); text-align:center; cursor:pointer; user-select:none; }
@@ -186,6 +194,7 @@
   </section>
 </div>
 
+<div id="toast" role="status" aria-live="polite" hidden></div>
 <script src="/vendor/xterm.js"></script>
 <script src="/vendor/addon-fit.js"></script>
 <script src="/vendor/addon-web-links.js"></script>
@@ -523,12 +532,58 @@ async function loadCats() {
   arrange();
 }
 const catOf = (s) => (s.root && Object.hasOwn(cats.assign, s.root) ? cats.assign[s.root] : null);
+// Files spaces in a category (null = Uncategorized), then offers an undo for a few seconds.
 function assignTo(list, name) {
-  for (const s of list) {
-    if (!s.root) continue;
-    if (name) cats.assign[s.root] = name; else delete cats.assign[s.root];
-  }
+  const moved = list.filter((s) => s.root);
+  const before = moved.map((s) => [s.root, catOf(s)]);
+  for (const s of moved) { if (name) cats.assign[s.root] = name; else delete cats.assign[s.root]; }
+  selected.clear();
   saveCats(); arrange();
+  if (!moved.length) return;
+  const what = moved.length === 1 ? moved[0].label : `${moved.length} spaces`;
+  toast(`Moved ${what} to ${name || 'Uncategorized'}`, () => {
+    for (const [root, c] of before) { if (c) cats.assign[root] = c; else delete cats.assign[root]; }
+    saveCats(); arrange();
+  });
+}
+
+// Selection: Cmd/Ctrl-click toggles a space, Shift-click selects a run; moves then apply to all of them.
+const selected = new Set();
+let lastPick = null;
+const pickList = (s) => (selected.has(s.id) ? spaces.filter((x) => selected.has(x.id)) : [s]);
+function syncSel() {
+  rows.forEach((wrap, id) => wrap.querySelector('.space').classList.toggle('sel', selected.has(id)));
+  renderBulk();
+}
+
+let toastTimer = null;
+function toast(msg, undo) {
+  const t = $('#toast');
+  t.textContent = '';
+  const m = document.createElement('span'); m.textContent = msg; t.append(m);
+  if (undo) {
+    const b = document.createElement('button'); b.textContent = 'Undo';
+    b.onclick = () => { t.hidden = true; undo(); };
+    t.append(b);
+  }
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 6000);
+}
+
+// Any space row or group header accepts dragged spaces; getName gives the category they land in.
+const spaceDrag = (e) => [...(e.dataTransfer?.types || [])].includes('text/x-corral-space');
+function wireCatDrop(el, getName) {
+  el.addEventListener('dragover', (e) => { if (spaceDrag(e)) { e.preventDefault(); el.classList.add('over'); } });
+  el.addEventListener('dragleave', () => el.classList.remove('over'));
+  el.addEventListener('drop', (e) => {
+    el.classList.remove('over');
+    if (!spaceDrag(e)) return;
+    e.preventDefault();
+    const ids = e.dataTransfer.getData('text/x-corral-space').split('\n');
+    const list = spaces.filter((x) => ids.includes(x.id));
+    if (list.length) assignTo(list, getName());
+  });
 }
 function addCategory(name) {
   name = name.trim().slice(0, 40);
@@ -545,6 +600,7 @@ function catMenu(list, anchor) {
   const m = document.createElement('div');
   m.className = 'catmenu';
   const cur = list.length === 1 ? catOf(list[0]) : null;
+  if (list.length > 1) { const h = document.createElement('div'); h.className = 'mhead'; h.textContent = `Move ${list.length} spaces to`; m.append(h); }
   const item = (text, name, on) => {
     const b = document.createElement('button');
     b.textContent = `${on ? '✓ ' : ''}${text}`;
@@ -561,14 +617,18 @@ function catMenu(list, anchor) {
   };
   m.append(inp);
   document.body.append(m);
-  const r = anchor.getBoundingClientRect();
+  const r = anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : { left: anchor.x, bottom: anchor.y };
   m.style.left = `${Math.min(r.left, innerWidth - 220)}px`;
   m.style.top = `${Math.min(r.bottom + 4, innerHeight - m.offsetHeight - 8)}px`;
   openMenu = m;
   inp.focus();
 }
 document.addEventListener('click', (e) => { if (openMenu && !openMenu.contains(e.target)) closeMenu(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  closeMenu();
+  if (selected.size) { selected.clear(); syncSel(); }
+});
 
 function renameCategory(c, h) {
   const inp = document.createElement('input');
@@ -614,17 +674,7 @@ function groupHeader(c, count, forceOpen) {
     });
     h.append(acts);
   }
-  // Drop a dragged space here to file it in this group.
-  const ok = (e) => [...(e.dataTransfer?.types || [])].includes('text/x-corral-space');
-  h.addEventListener('dragover', (e) => { if (ok(e)) { e.preventDefault(); h.classList.add('over'); } });
-  h.addEventListener('dragleave', () => h.classList.remove('over'));
-  h.addEventListener('drop', (e) => {
-    h.classList.remove('over');
-    if (!ok(e)) return;
-    e.preventDefault();
-    const s = spaces.find((x) => x.id === e.dataTransfer.getData('text/x-corral-space'));
-    if (s) assignTo([s], c ? c.name : null);
-  });
+  wireCatDrop(h, () => (c ? c.name : null)); // drop dragged spaces here to file them in this group
   return h;
 }
 
@@ -662,17 +712,31 @@ function arrange() {
   rows.forEach((wrap, id) => wrap.querySelector('.space').classList.toggle('has-win', openSpaces.some((s) => s.id === id)));
   if (!shown.length) { const n = document.createElement('div'); n.className = 'note'; n.textContent = 'No spaces.'; box.append(n); }
 
-  // With a filter typed, offer to file every match at once.
+  lastShown = q ? shown : [];
+  syncSel();
+}
+
+// The bar under the search box: moves the selected spaces, or else every search match.
+let lastShown = [];
+function renderBulk() {
   const bulk = $('#bulk');
-  bulk.hidden = !(q && shown.length && cats.categories.length);
-  if (!bulk.hidden) {
-    bulk.textContent = '';
-    const sel = document.createElement('select');
-    sel.append(new Option(`Move ${shown.length} match${shown.length === 1 ? '' : 'es'} to...`, ''));
-    for (const c of cats.categories) sel.append(new Option(c.name, `c:${c.name}`));
-    sel.append(new Option('Uncategorized', 'none'));
-    sel.onchange = () => { if (sel.value) assignTo(shown, sel.value === 'none' ? null : sel.value.slice(2)); };
-    bulk.append(sel);
+  const list = selected.size ? spaces.filter((s) => selected.has(s.id)) : lastShown;
+  bulk.hidden = !(list.length && cats.categories.length);
+  if (bulk.hidden) return;
+  bulk.textContent = '';
+  const sel = document.createElement('select');
+  const noun = selected.size ? `${list.length} selected` : `${list.length} match${list.length === 1 ? '' : 'es'}`;
+  sel.append(new Option(`Move ${noun} to...`, ''));
+  for (const c of cats.categories) sel.append(new Option(c.name, `c:${c.name}`));
+  sel.append(new Option('Uncategorized', 'none'));
+  sel.onchange = () => { if (sel.value) assignTo(list, sel.value === 'none' ? null : sel.value.slice(2)); };
+  bulk.append(sel);
+  if (selected.size) {
+    const clr = document.createElement('button');
+    clr.textContent = 'Clear';
+    clr.title = 'Clear the selection (Esc)';
+    clr.onclick = () => { selected.clear(); syncSel(); };
+    bulk.append(clr);
   }
 }
 
@@ -684,13 +748,34 @@ function buildRows() {
     rows.set(s.id, wrap);
     const d = document.createElement('div');
     d.className = 'space';
-    d.title = s.root || s.cwd || '';
+    d.dataset.id = s.id;
+    d.title = `${s.root || s.cwd || ''}\nClick to open. Cmd-click or Shift-click to select several.\nRight-click, or drag onto a group, to move.`;
     d.innerHTML = `<span class="chev" title="Show files"></span><span class="dot ${s.status}"></span><span class="name"></span><span class="more" title="Move to a category">⋯</span>`;
     d.querySelector('.name').textContent = s.label;
-    d.onclick = () => spawn(s.cwd, s.label, s.id, $('#agent').value);
-    d.draggable = true; // drag onto a category header to file it there
-    d.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/x-corral-space', s.id); e.dataTransfer.effectAllowed = 'move'; });
-    d.querySelector('.more').onclick = (e) => { e.stopPropagation(); catMenu([s], e.currentTarget); };
+    d.onclick = (e) => {
+      if (e.metaKey || e.ctrlKey) {
+        selected.has(s.id) ? selected.delete(s.id) : selected.add(s.id);
+        lastPick = s.id;
+        return syncSel();
+      }
+      if (e.shiftKey) {
+        const ids = [...document.querySelectorAll('#spaces .space')].map((x) => x.dataset.id);
+        const a = ids.indexOf(lastPick ?? s.id), b = ids.indexOf(s.id);
+        for (const id of ids.slice(Math.max(0, Math.min(a, b)), Math.max(a, b) + 1)) selected.add(id);
+        lastPick = s.id;
+        return syncSel();
+      }
+      if (selected.size) { selected.clear(); return syncSel(); } // a plain click first ends a selection
+      spawn(s.cwd, s.label, s.id, $('#agent').value);
+    };
+    d.addEventListener('contextmenu', (e) => { e.preventDefault(); catMenu(pickList(s), { x: e.clientX, y: e.clientY }); });
+    d.draggable = true; // drag onto a group header or any row in a group to file it there
+    d.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/x-corral-space', pickList(s).map((x) => x.id).join('\n'));
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    wireCatDrop(d, () => catOf(s));
+    d.querySelector('.more').onclick = (e) => { e.stopPropagation(); catMenu(pickList(s), e.currentTarget); };
     const tree = document.createElement('div');
     tree.className = 'tree';
     const chev = d.querySelector('.chev');
