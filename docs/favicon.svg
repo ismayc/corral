@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Corral: three terminal windows behind a fence">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#252a35"/>
+      <stop offset="1" stop-color="#14161a"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- the herd: three terminal windows -->
+  <g fill="#0b0c0f" stroke-width="10" stroke-linejoin="round">
+    <rect x="70"  y="88" width="104" height="92" rx="16" stroke="#4cc38a"/>
+    <rect x="204" y="68" width="104" height="112" rx="16" stroke="#e5a93d"/>
+    <rect x="338" y="88" width="104" height="92" rx="16" stroke="#8b7cf6"/>
+  </g>
+  <g fill="none" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M92 116l18 14-18 14M122 148h22" stroke="#4cc38a"/>
+    <path d="M226 100l18 14-18 14M256 132h22" stroke="#e5a93d"/>
+    <path d="M360 116l18 14-18 14M390 148h22" stroke="#8b7cf6"/>
+  </g>
+  <!-- the fence -->
+  <g fill="#8b7cf6" stroke="#8b7cf6" stroke-width="10" stroke-linejoin="round">
+    <path d="M60 232l26-34 26 34v200H60z"/>
+    <path d="M142 232l26-34 26 34v200h-52z"/>
+    <path d="M224 232l32-40 32 40v200h-64z"/>
+    <path d="M318 232l26-34 26 34v200h-52z"/>
+    <path d="M400 232l26-34 26 34v200h-52z"/>
+  </g>
+  <g fill="#c9c1ff">
+    <rect x="44" y="282" width="424" height="30" rx="10"/>
+    <rect x="44" y="360" width="424" height="30" rx="10"/>
+  </g>
+</svg>

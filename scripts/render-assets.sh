@@ -39,4 +39,7 @@ sips -z 180 180 "$TMP/icon-square-1024.png" --out public/apple-touch-icon.png >/
 
 # Link preview.
 shot "$PWD/assets/og-image.html" "$PWD/assets/og-image.png" 1200 630 default
-echo "rendered: public/favicon.svg favicon-32.png apple-touch-icon.png, assets/og-image.png"
+
+# The project site (docs/, served by GitHub Pages) uses the same icons and preview image.
+cp public/favicon.svg public/favicon-32.png public/apple-touch-icon.png assets/og-image.png docs/
+echo "rendered: public/favicon.svg favicon-32.png apple-touch-icon.png, assets/og-image.png (copied to docs/)"

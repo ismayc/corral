@@ -12,6 +12,8 @@ opens in its folder, arranged in the layout you pick.
 It does not replace herdr. herdr keeps managing your spaces and agents; Corral
 reads herdr's list of spaces and opens its own terminals for them.
 
+Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
+
 ## What you get
 
 - **Every herdr space in a sidebar**, with herdr's agent status (working,
@@ -132,6 +134,11 @@ The icon is `assets/icon.svg`; the link-preview image is
 `assets/og-image.html` rendered to `assets/og-image.png` (1200 x 630).
 `scripts/render-assets.sh` re-renders both, plus `public/favicon-32.png` and
 `public/apple-touch-icon.png`, with headless Google Chrome and macOS `sips`.
+
+The project site is `docs/index.html`, served by GitHub Pages from the `docs/`
+folder on `main`. `render-assets.sh` copies the icons and preview image into
+`docs/`. The screenshots in `docs/img/` come from Corral itself, run against a
+demo herdr snapshot with made-up projects.
 
 ## Credits and licenses
 
