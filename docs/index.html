@@ -8,6 +8,7 @@
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="author" content="Chester Ismay">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Corral: a pen for your herdr spaces">
 <meta property="og:description" content="Real terminals, Claude Code, and a file tree for every herdr project, in one browser tab.">
@@ -70,6 +71,7 @@
   .btn:hover { border-color:var(--fence); color:#fff; }
   .btn.primary { background:var(--fence); border-color:var(--fence); color:#fff; }
   .btn.primary:hover { background:#9a8cf8; }
+  .byline { margin:18px 0 0; font-size:15px; color:var(--muted); }
   .shot { margin:56px 0 0; border-radius:14px 14px 0 0; border:1px solid var(--rail); border-bottom:0; overflow:hidden;
           box-shadow:0 -10px 80px rgba(139,124,246,.18), 0 30px 80px rgba(0,0,0,.5); }
   .fence { display:block; width:100%; height:44px; margin-top:-1px; }
@@ -179,6 +181,7 @@
       <a class="btn primary" href="#install">Install and run</a>
       <a class="btn" href="https://github.com/ismayc/corral">View on GitHub</a>
     </div>
+    <p class="byline">By <a href="https://chester.rbind.io">Chester Ismay</a></p>
 
     <div class="shot">
       <img src="img/workspace.jpg" width="2000" height="1194"
@@ -406,6 +409,8 @@
 
 <footer>
   <div class="wrap">
+    <p>Made by <a href="https://chester.rbind.io">Chester Ismay</a>
+      (<a href="https://github.com/ismayc">@ismayc on GitHub</a>).</p>
     <p><b style="color:var(--text)">Corral</b> is released under the <a href="https://github.com/ismayc/corral/blob/main/LICENSE">MIT License</a>.
       Source, issues, and the full README are on <a href="https://github.com/ismayc/corral">GitHub</a>.</p>
     <p>Corral is an independent project. It is not affiliated with or endorsed by the herdr project, Anthropic (makers
