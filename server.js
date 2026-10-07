@@ -210,20 +210,20 @@ function adoptSessions() {
   if (!TMUX) return;
   let out = '';
   try {
-    out = tmux('list-sessions', '-F', '#{session_name}\t#{session_created}\t#{session_path}\t#{?#{@corral_label},#{@corral_label},#{@webterm_label}}\t#{?#{@corral_space},#{@corral_space},#{@webterm_space}}');
+    out = tmux('list-sessions', '-F', '#{session_name}\t#{session_created}\t#{session_path}\t#{?#{@corral_label},#{@corral_label},#{@webterm_label}}\t#{?#{@corral_space},#{@corral_space},#{@webterm_space}}\t#{@corral_remote}');
   } catch { return; } // no tmux server running means nothing to adopt
   for (const line of out.split('\n')) {
-    const [name, created, dir, label, space] = line.split('\t');
+    const [name, created, dir, label, space, remote] = line.split('\t');
     if (!name || !name.startsWith(SESSION_PREFIX)) continue;
     const id = name.slice(SESSION_PREFIX.length);
     if (!/^[\w-]+$/.test(id) || sessions.has(id)) continue;
-    try { register(id, dir && fs.existsSync(dir) ? dir : os.homedir(), label, Number(created) * 1000, true, space); } catch {}
+    try { register(id, dir && fs.existsSync(dir) ? dir : os.homedir(), label, Number(created) * 1000, true, space).remote = remote === '1'; } catch {}
   }
   if (sessions.size) console.log(`adopted ${sessions.size} tmux session(s)`);
 }
 
 function publicSession(s) {
-  return { id: s.id, cwd: s.cwd, label: s.label, space: s.space, exited: s.exited, created: s.created, persistent: s.tmux };
+  return { id: s.id, cwd: s.cwd, label: s.label, space: s.space, exited: s.exited, created: s.created, persistent: s.tmux, remote: Boolean(s.remote) };
 }
 
 // Project ledger: every project folder herdr has ever shown this server, so a closed space
@@ -772,7 +772,13 @@ const server = http.createServer(async (req, res) => {
     const body = await readJson(req);
     if (!body) return send(res, 400, { error: 'bad json' });
     try {
-      return send(res, 201, publicSession(createSession(body.cwd, body.label, typeof body.space === 'string' && /^[\w-]+$/.test(body.space) ? body.space : null, typeof body.agent === 'string' ? body.agent : null)));
+      const s = createSession(body.cwd, body.label, typeof body.space === 'string' && /^[\w-]+$/.test(body.space) ? body.space : null, typeof body.agent === 'string' ? body.agent : null);
+      // Started from another device: the Mac's page puts it in the bottom bar rather than in a zone.
+      if (access.remote) {
+        s.remote = true;
+        if (s.tmux) { try { tmux('set-option', '-t', SESSION_PREFIX + s.id, '@corral_remote', '1'); } catch {} }
+      }
+      return send(res, 201, publicSession(s));
     } catch (e) {
       return send(res, 500, { error: `could not start shell: ${e.message}` });
     }

@@ -490,8 +490,9 @@ function setFocus(id) {
   open.get(id)?.term.focus();
 }
 
-function attach(info) {
-  if (open.has(info.id)) return setFocus(info.id);
+// quiet: a window started elsewhere goes straight to the bottom bar and does not take the keyboard.
+function attach(info, quiet) {
+  if (open.has(info.id)) return quiet ? undefined : setFocus(info.id);
   const el = document.createElement('div');
   el.className = 'win';
   el.innerHTML = `<div class="title"><span class="t"></span><span class="cwd"></span><button class="min" title="Minimize to the bottom bar (keeps running)">&#8211;</button><button class="close" title="Close and kill shell">&times;</button></div><div class="term"></div>`;
@@ -557,6 +558,7 @@ function attach(info) {
     await api(`/api/sessions/${info.id}`, { method: 'DELETE' });
     persist(); layout(); arrange();
   };
+  if (quiet) { persist(); minimize(info.id); arrange(); return; }
   persist(); layout(); arrange(); setFocus(info.id);
 }
 
@@ -1096,9 +1098,28 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#laymen
   suspend = false;
   ready = true;
   layout();
+  // Started on another device while this page was closed: into the bottom bar, like the ones that start while it is open.
+  for (const s of sessions) if (s.remote && !s.exited && !wanted.includes(s.id) && open.has(s.id)) minimize(s.id);
   checkRestore();
   showPhoneLink();
+  setInterval(pickUpNewWindows, 3000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) pickUpNewWindows(); });
 })();
+
+// Windows started somewhere else (the phone page, another browser) show up here in the bottom bar.
+// A window counts only once it has been seen twice without this page attaching it, so one this page
+// is in the middle of creating is never picked up a second time.
+let unclaimed = new Set();
+async function pickUpNewWindows() {
+  const r = await api('/api/sessions').catch(() => null);
+  if (!r?.sessions) return;
+  const fresh = r.sessions.filter((s) => !s.exited && !open.has(s.id));
+  const added = fresh.filter((s) => unclaimed.has(s.id));
+  for (const s of added) attach(s, true);
+  if (added.length === 1) toast(`${added[0].label} was started ${added[0].remote ? 'on another device' : 'elsewhere'}. It is in the bottom bar.`);
+  else if (added.length > 1) toast(`${added.length} windows were started elsewhere. They are in the bottom bar.`);
+  unclaimed = new Set(fresh.filter((s) => !open.has(s.id)).map((s) => s.id));
+}
 
 // When Tailscale serves Corral, offer the link that opens it on a phone or another of your devices.
 async function showPhoneLink() {
