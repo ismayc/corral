@@ -55,7 +55,7 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   sends Claude Code's suggested next prompt (Tab, then Enter), a message box
   that works with dictation, a photo button that hands Claude a picture, a
   Changes view of the project's uncommitted git diff, and a History view of
-  the scrollback as text you can select. When Claude Code asks for
+  the conversation (your prompts and Claude's replies) or the scrollback. When Claude Code asks for
   permission, its request and answers (Yes, don't ask again, Deny) appear on
   the window's card, and the phone can get a push notification for it, or
   when a turn ends, even with the page closed. Cards also offer Stop, the
@@ -123,7 +123,7 @@ To use Corral from your phone or another computer, see the next section.
   <img src="docs/img/phone-list.jpg" width="200" alt="Corral's phone page listing four windows: notes and dashboard under Waiting for you, api-server under Working, and a blog shell, each with its folder.">
   <img src="docs/img/phone-terminal.jpg" width="200" alt="The notes window on a phone, with Changes and History buttons at the top: Claude Code's reply, its input box with a dimmed suggested prompt, and a row of keys starting with Use suggestion, Type, Esc, Shift-Tab, and Tab, above a row of quick replies, a camera button, a message box, and a Send button.">
   <img src="docs/img/phone-start.jpg" width="200" alt="The Start in a project sheet: a choice of Claude Code, Last session, or Shell, a search box, and the list of herdr spaces with their status dots.">
-  <img src="docs/img/phone-history.jpg" width="200" alt="The History view of the notes window: its scrollback as plain text with a Copy all button.">
+  <img src="docs/img/phone-history.jpg" width="200" alt="The History view of the notes window, on Conversation: your prompts as purple bubbles on the right with their times, and Claude's replies on the left, with a Screen tab beside it and a Copy all button.">
   <img src="docs/img/phone-permission.jpg" width="200" alt="The phone list with data-lab at the top, marked Needs permission in red. Its card shows the command Claude wants to run, then buttons for Yes, Yes and don't ask again, and Deny.">
   <img src="docs/img/phone-changes.jpg" width="200" alt="The Changes view for the dashboard project: the changed files, api.js and a new empty.test.js, then the diff with removed lines in red and added lines in green.">
 </p>
@@ -197,8 +197,13 @@ network between your own devices.
   in the bottom bar of Corral on the Mac, so it is there when you sit down. A
   space that already has a window is marked **Open**, and tapping it says so
   instead of starting a second one.
-- **Read back.** History shows the window's scrollback as plain text you can
-  select, or copy in one tap.
+- **Read back.** The terminal itself does not scroll back on a phone, so
+  History does it. **Conversation** lists every prompt you typed (including
+  ones sent from the Mac, slash commands, and messages sent while Claude was
+  working) and every reply, read from Claude Code's transcript without the
+  tool calls in between, newest at the bottom; scroll up for older ones.
+  **Screen** shows the window's scrollback as plain text. Either one can be
+  selected, or copied in one tap.
 - **Restore** the windows from before a Mac restart.
 
 On the Mac's desktop page, a window with a permission prompt gets the same

@@ -192,6 +192,16 @@
               font:12px/1.4 var(--mono); white-space:pre-wrap; word-break:break-word; color:#ddd6ea;
               -webkit-user-select:text; user-select:text; }
 
+  #histseg { margin:8px 12px; flex:none; }
+  /* Conversation: your prompts and Claude's replies from the transcript, without the tool calls */
+  #chat { flex:1; overflow:auto; padding:4px 12px calc(16px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:10px;
+          -webkit-user-select:text; user-select:text; }
+  #chat .msg { white-space:pre-wrap; word-break:break-word; font-size:15px; line-height:1.45; padding:9px 12px; border-radius:14px; max-width:88%; }
+  #chat .you { align-self:flex-end; background:#3b3160; border-bottom-right-radius:4px; }
+  #chat .claude { align-self:flex-start; background:var(--panel); border:1px solid var(--rail); border-bottom-left-radius:4px; }
+  #chat .note, #chat .when { align-self:center; color:var(--muted); font-size:12px; text-align:center; }
+  #chat .when { margin-top:6px; }
+
   #toast { position:fixed; left:12px; right:12px; top:calc(10px + env(safe-area-inset-top)); z-index:30; background:var(--raise);
            border:1px solid var(--fence); border-radius:12px; padding:12px 14px; box-shadow:0 8px 24px #0009; }
 </style>
@@ -232,9 +242,11 @@
 <section id="histview" class="view" hidden>
   <header>
     <button class="iconbtn" id="histback" aria-label="Back to the terminal">&lsaquo;</button>
-    <div class="grow"><div class="title" id="htitle"></div><div class="sub">Scrollback, as text you can select</div></div>
+    <div class="grow"><div class="title" id="htitle"></div><div class="sub" id="hsub"></div></div>
     <button class="iconbtn" id="histcopy">Copy all</button>
   </header>
+  <div class="seg" id="histseg"><button data-h="chat">Conversation</button><button data-h="screen">Screen</button></div>
+  <div id="chat" hidden></div>
   <pre id="histtext"></pre>
 </section>
 
@@ -837,24 +849,70 @@ msg.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMsg(); }
 });
 
-// ---- History: the window's scrollback as plain text ----
+// ---- History: the conversation from Claude Code's transcript, or the window's scrollback as plain text ----
+// The terminal cannot be scrolled back on a phone (tmux holds the scrollback, not the page), so this is where
+// earlier prompts and replies are read.
+let histMode = load('corral.m.hist', 'chat');
 async function showHistory() {
   if (!current) return;
   $('#htitle').textContent = current.info.label;
-  $('#histtext').textContent = 'Loading…';
   $('#termview').hidden = true; $('#histview').hidden = false;
   history.pushState({ hist: true }, '');
-  try {
-    const r = await fetch(`/api/sessions/${encodeURIComponent(current.info.id)}/history`);
-    $('#histtext').textContent = r.ok ? await r.text() : 'This window has no saved scrollback.';
-  } catch { $('#histtext').textContent = 'Could not load the scrollback.'; }
+  const w = windows.find((x) => x.id === current.info.id);
+  // Without Claude running there is no transcript; the scrollback is all there is.
+  $('#histseg').hidden = !w?.claude;
+  loadHistory(w?.claude ? histMode : 'screen');
+}
+
+async function loadHistory(mode) {
+  const id = current?.info.id;
+  if (!id) return;
+  for (const b of $('#histseg').children) b.classList.toggle('on', b.dataset.h === mode);
+  $('#chat').hidden = mode !== 'chat'; $('#histtext').hidden = mode === 'chat';
+  $('#hsub').textContent = mode === 'chat' ? 'Your prompts and Claude\'s replies' : 'Scrollback, as text you can select';
+  if (mode === 'chat') {
+    const chat = $('#chat');
+    chat.replaceChildren(h('div', { class: 'note' }, 'Loading…'));
+    let r;
+    try { r = await api(`/api/sessions/${encodeURIComponent(id)}/conversation`); }
+    catch { return chat.replaceChildren(h('div', { class: 'note' }, 'Could not read the conversation. Try Screen.')); }
+    if (current?.info.id !== id) return;
+    const items = r.items || [];
+    if (!items.length) return chat.replaceChildren(h('div', { class: 'note' }, 'Nothing typed in this conversation yet.'));
+    const els = r.cut ? [h('div', { class: 'note' }, 'Older messages are not shown.')] : [];
+    let lastDay = '';
+    for (const it of items) {
+      const at = it.at ? new Date(it.at) : null;
+      if (at && it.who === 'you') {
+        const day = at.toDateString();
+        const time = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        els.push(h('div', { class: 'when' }, day === lastDay ? time : `${at.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}, ${time}`));
+        lastDay = day;
+      }
+      els.push(h('div', { class: `msg ${it.who}` }, it.text));
+    }
+    chat.replaceChildren(...els);
+    chat.scrollTop = chat.scrollHeight;
+    return;
+  }
   const pre = $('#histtext');
+  pre.textContent = 'Loading…';
+  try {
+    const r = await fetch(`/api/sessions/${encodeURIComponent(id)}/history`);
+    pre.textContent = r.ok ? await r.text() : 'This window has no saved scrollback.';
+  } catch { pre.textContent = 'Could not load the scrollback.'; }
   pre.scrollTop = pre.scrollHeight;
 }
+for (const b of $('#histseg').children) b.onclick = () => { histMode = b.dataset.h; store('corral.m.hist', histMode); loadHistory(histMode); };
 $('#histbtn').onclick = showHistory;
 $('#histback').onclick = () => history.back();
-$('#histcopy').onclick = () => navigator.clipboard.writeText($('#histtext').textContent)
-  .then(() => toast('Copied the scrollback.')).catch(() => toast('Could not copy. Select the text instead.'));
+$('#histcopy').onclick = () => {
+  const chat = !$('#chat').hidden;
+  const text = chat ? [...$('#chat').querySelectorAll('.msg')].map((m) => `${m.classList.contains('you') ? 'You' : 'Claude'}: ${m.textContent}`).join('\n\n')
+    : $('#histtext').textContent;
+  navigator.clipboard.writeText(text)
+    .then(() => toast(chat ? 'Copied the conversation.' : 'Copied the scrollback.')).catch(() => toast('Could not copy. Select the text instead.'));
+};
 
 // ---- Photos: upload to the Mac, then paste the file's path, which Claude Code attaches as [Image #n] ----
 // A photo is scaled to at most 2048 pixels on its long side and sent as JPEG, so a 12-megapixel shot

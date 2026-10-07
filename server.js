@@ -489,27 +489,39 @@ function renameWindow(s, label) {
   return { status: 200, ok: true, label: name };
 }
 
-// Claude's last reply in a window: every text block it wrote after the last message you typed, read from
-// the end of Claude Code's own transcript (~/.claude/projects/<project>/<conversation>.jsonl).
-function lastReply(s) {
-  const c = windowClaude(s);
-  if (!c) return { status: 409, error: 'Claude Code is not running in this window' };
-  let file = null;
+// Claude Code's own transcript for the conversation running in a window
+// (~/.claude/projects/<project>/<conversation>.jsonl), or null.
+function transcriptFile(c) {
   try {
     const projects = path.join(CLAUDE_DIR, 'projects');
     for (const d of fs.readdirSync(projects)) {
       const f = path.join(projects, d, `${c.sessionId}.jsonl`);
-      if (fs.existsSync(f)) { file = f; break; }
+      if (fs.existsSync(f)) return f;
     }
   } catch {}
-  if (!file) return { status: 404, error: 'no transcript yet' };
+  return null;
+}
+
+// The last `max` bytes of a file as whole lines.
+function tailLines(file, max) {
   const size = fs.statSync(file).size;
   const fd = fs.openSync(file, 'r');
-  const buf = Buffer.alloc(Math.min(size, 1024 * 1024));
+  const buf = Buffer.alloc(Math.min(size, max));
   fs.readSync(fd, buf, 0, buf.length, size - buf.length);
   fs.closeSync(fd);
   const lines = buf.toString('utf8').split('\n');
   if (buf.length < size) lines.shift(); // the first line may be cut
+  return lines;
+}
+
+// Claude's last reply in a window: every text block it wrote after the last message you typed, read from
+// the end of the window's transcript.
+function lastReply(s) {
+  const c = windowClaude(s);
+  if (!c) return { status: 409, error: 'Claude Code is not running in this window' };
+  const file = transcriptFile(c);
+  if (!file) return { status: 404, error: 'no transcript yet' };
+  const lines = tailLines(file, 1024 * 1024);
   const texts = [];
   for (let i = lines.length - 1; i >= 0; i--) {
     let d;
@@ -527,6 +539,65 @@ function lastReply(s) {
   let text = texts.join('\n\n');
   if (text.length > 6000) text = `…${text.slice(-6000)}`;
   return { status: 200, text, at: fs.statSync(file).mtimeMs };
+}
+
+// What you typed, as it should read in the conversation: a slash command as "/name args", and nothing
+// for Claude Code's own bookkeeping (command output, caveats, reminders).
+function typedText(content) {
+  const parts = typeof content === 'string' ? [{ type: 'text', text: content }] : Array.isArray(content) ? content : [];
+  const out = [];
+  let images = 0;
+  for (const x of parts) {
+    if (x?.type === 'image') { images++; continue; }
+    if (x?.type !== 'text' || !x.text.trim()) continue;
+    const t = x.text.trim();
+    const cmd = t.match(/<command-name>([^<]*)<\/command-name>/);
+    if (cmd) {
+      const args = t.match(/<command-args>([^<]*)<\/command-args>/)?.[1].trim();
+      out.push(args ? `${cmd[1]} ${args}` : cmd[1]);
+    } else if (!t.startsWith('<') && !t.startsWith('[Image')) out.push(t);
+  }
+  if (images) out.push(images === 1 ? '[a photo]' : `[${images} photos]`);
+  return out.join('\n\n');
+}
+
+// The conversation in a window, oldest first: what you typed and what Claude wrote back, without the tool
+// calls in between. Read from the last 64 MB of the transcript (a long session with screenshots runs past
+// 40 MB). Lines that cannot hold a prompt or a reply are skipped before parsing: tool results, which are
+// most of the file, carry a tool_use_id. A message sent while Claude was working shows up as a queued
+// command rather than as a user message.
+function conversation(s) {
+  const c = windowClaude(s);
+  if (!c) return { status: 409, error: 'Claude Code is not running in this window' };
+  const file = transcriptFile(c);
+  if (!file) return { status: 404, error: 'no transcript yet' };
+  const MAX = 64 * 1024 * 1024;
+  const lines = tailLines(file, MAX);
+  const items = [];
+  const add = (who, text, at) => {
+    const last = items[items.length - 1];
+    if (who === 'claude' && last?.who === 'claude') { last.text += `\n\n${text}`; return; }
+    items.push({ who, text, at });
+  };
+  for (const line of lines) {
+    const user = /"type":\s*"user"/.test(line) && !line.includes('"tool_use_id"');
+    if (!user && !line.includes('"queued_command"') && !(/"type":\s*"assistant"/.test(line) && /"type":\s*"text"/.test(line))) continue;
+    let d;
+    try { d = JSON.parse(line); } catch { continue; }
+    if (d.isSidechain) continue;
+    const content = d.message?.content;
+    if (d.type === 'user' && !d.isMeta) {
+      if (d.isCompactSummary) { items.push({ who: 'note', text: 'Earlier messages were summarized to save space.', at: d.timestamp }); continue; }
+      const t = typedText(content);
+      if (t) add('you', t, d.timestamp);
+    } else if (d.type === 'attachment' && d.attachment?.type === 'queued_command' && d.attachment.origin?.kind === 'human') {
+      const t = typedText(d.attachment.prompt);
+      if (t) add('you', t, d.timestamp);
+    } else if (d.type === 'assistant' && Array.isArray(content)) {
+      for (const x of content) if (x?.type === 'text' && x.text.trim()) add('claude', x.text.trim(), d.timestamp);
+    }
+  }
+  return { status: 200, items: items.slice(-300), cut: items.length > 300 || fs.statSync(file).size > MAX };
 }
 
 // The window's scrollback as plain text, for reading and copying on a phone.
@@ -1160,7 +1231,7 @@ const server = http.createServer(async (req, res) => {
     if (!s || !s.tmux || s.exited) return send(res, 404, { error: 'no such window' });
     try { return send(res, 200, windowHistory(s.id), 'text/plain; charset=utf-8'); } catch { return send(res, 500, { error: 'could not read the window' }); }
   }
-  const act = url.pathname.match(/^\/api\/sessions\/([\w-]+)\/(prompt|answer|changes|upload|key|rename|mute|last)$/);
+  const act = url.pathname.match(/^\/api\/sessions\/([\w-]+)\/(prompt|answer|changes|upload|key|rename|mute|last|conversation)$/);
   if (act) {
     const s = sessions.get(act[1]);
     if (!s || s.exited) return send(res, 404, { error: 'no such window' });
@@ -1194,6 +1265,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (act[2] === 'last' && req.method === 'GET') {
       try { const { status, ...r } = lastReply(s); return send(res, status, r); } catch { return send(res, 500, { error: 'could not read the transcript' }); }
+    }
+    if (act[2] === 'conversation' && req.method === 'GET') {
+      try { const { status, ...r } = conversation(s); return send(res, status, r); } catch { return send(res, 500, { error: 'could not read the transcript' }); }
     }
     if (act[2] === 'changes' && req.method === 'GET') {
       const { status, ...r } = await windowChanges(s);
