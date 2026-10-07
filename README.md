@@ -47,7 +47,9 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   the Mac, sorted by whose turn it is (Claude waiting for you, Claude working,
   plain shells), with the last few lines of each. Tap one for a full terminal
   with the keys a phone lacks (Esc, Shift-Tab, Ctrl, arrows, and the numbers
-  for Claude Code's menus), a message box that works with dictation, and a
+  for Claude Code's menus), a **Use suggestion** key that sends Claude
+  Code's suggested next prompt (Tab, then Enter), a message box that works
+  with dictation, and a
   History view of the scrollback as text you can select. You can also start
   Claude Code in any project (it also appears, minimized, in the bottom bar of
   the Mac's Corral page), or restore windows after a restart. Add it to

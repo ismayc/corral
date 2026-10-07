@@ -103,6 +103,7 @@
   #keys::-webkit-scrollbar { display:none; }
   #keys button { flex:none; padding:7px 11px; font:600 14px var(--mono); border-radius:8px; min-width:42px; }
   #keys button.on { background:var(--fence); border-color:var(--fence); }
+  #keys button[data-k="suggest"] { font-family:inherit; border-color:var(--fence); color:var(--lavender); }
   #compose { display:flex; gap:8px; align-items:flex-end; padding:8px 8px calc(8px + env(safe-area-inset-bottom));
              background:var(--panel); flex:none; }
   #msg { flex:1; min-width:0; resize:none; max-height:30vh; padding:10px 12px; border-radius:18px; border:1px solid var(--rail);
@@ -439,14 +440,15 @@ new ResizeObserver(() => current?.fit.fit()).observe($('#termwrap'));
 
 // The keys a phone keyboard lacks. Claude Code uses Esc to interrupt, Shift-Tab to change mode,
 // and numbers to answer its menus.
+// "Use suggestion" takes Claude Code's dimmed suggested prompt (Tab, in an empty input box) and sends it (Enter).
 const KEYS = [
-  ['Type', 'kbd'], ['Esc', '\x1b'], ['⇧Tab', '\x1b[Z'], ['Tab', '\t'], ['Ctrl', 'ctrl'], ['^C', '\x03'],
+  ['Use suggestion', 'suggest'], ['Type', 'kbd'], ['Esc', '\x1b'], ['⇧Tab', '\x1b[Z'], ['Tab', '\t'], ['Ctrl', 'ctrl'], ['^C', '\x03'],
   ['↑', '\x1b[A'], ['↓', '\x1b[B'], ['←', '\x1b[D'], ['→', '\x1b[C'], ['⏎', '\r'],
   ['1', '1'], ['2', '2'], ['3', '3'], ['y', 'y'], ['n', 'n'], ['/', '/'], ['PgUp', '\x1b[5~'], ['PgDn', '\x1b[6~'],
 ];
 function setCtrl(on) { ctrlArmed = on; $('#keys [data-k="ctrl"]')?.classList.toggle('on', on); }
 $('#keys').replaceChildren(...KEYS.map(([label, k]) => h('button', {
-  'data-k': k === 'kbd' || k === 'ctrl' ? k : null,
+  'data-k': k === 'kbd' || k === 'ctrl' || k === 'suggest' ? k : null,
   'aria-label': { Type: 'Type straight into the terminal', '⏎': 'Enter', '⇧Tab': 'Shift Tab' }[label] || null,
   // Keep focus where it is, so the keyboard does not close on every key.
   onpointerdown: (e) => e.preventDefault(),
@@ -461,6 +463,7 @@ $('#keys').replaceChildren(...KEYS.map(([label, k]) => h('button', {
       return;
     }
     if (k === 'ctrl') return setCtrl(!ctrlArmed);
+    if (k === 'suggest') { sendRaw('\t'); setTimeout(() => sendRaw('\r'), 150); return; }
     sendRaw(k);
   },
 }, label)));
