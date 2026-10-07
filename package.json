@@ -1,7 +1,7 @@
 {
   "name": "corral",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.4.0",
   "description": "A local browser workspace for herdr spaces: real terminals, Claude Code, layouts, and a file tree for every project",
   "license": "MIT",
   "repository": {

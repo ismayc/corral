@@ -174,7 +174,14 @@ network between your own devices.
   Corral stops the Mac from going to sleep on its own (`caffeinate -i`), so
   the phone can still reach it. Closing the lid still sleeps. Turn it off
   under Alerts.
-- **Answer in a real terminal.** Tap a window to open it. A row of keys covers
+- **Chat or Terminal.** A window running Claude Code opens on its
+  conversation: your prompts and Claude's replies as chat bubbles, with
+  Claude Code's status lines (such as your status line command's output and
+  the mode) under them. **Terminal** in the window's header switches to the
+  full terminal, and **Chat** switches back; the phone remembers which you
+  used last. The keys, the message box, and the photo button work in both.
+  A plain shell opens in the terminal.
+- **Keys a phone lacks.** In either view, a row of keys covers
   what a phone keyboard lacks: **Use suggestion** (sends Claude Code's dimmed
   suggested prompt in one tap), Esc, Shift-Tab (Claude Code's modes), Tab,
   Ctrl, ^C, the arrows, Enter, 1, 2, and 3 for Claude Code's menus, and text
@@ -422,6 +429,10 @@ The project site is `docs/index.html`, served by GitHub Pages from the `docs/`
 folder on `main`. `render-assets.sh` copies the icons and preview image into
 `docs/`. The screenshots in `docs/img/` come from Corral itself, run against a
 demo herdr snapshot with made-up projects.
+
+## News
+
+[NEWS.md](NEWS.md) lists what changed in each version.
 
 ## Credits and licenses
 
