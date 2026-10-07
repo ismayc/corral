@@ -57,8 +57,13 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   group's header or rows. Cmd-click or Shift-click to select several spaces
   and move them together, or search and move every match at once. Each move
   can be undone from the notice that follows it.
-- **A file tree for each project**, read-only and limited to that project's
-  folder.
+- **A file tree for each space**, limited to that project's folder. Click a
+  file to open it in a Mac app. Until you set a default for that type of file,
+  Corral asks which app, from the list macOS itself offers (the same as
+  Finder's Open With), with the macOS default marked. Tick "Always open .md
+  files this way" to skip the question next time; right-click a file to pick
+  another app or forget the default. Files of a type macOS does not know get
+  the apps that open plain text.
 - **Inactive projects.** Corral remembers every project folder it has seen. If
   a herdr space disappears (for example, closing a space's only pane closes
   the space), the project shows under "Inactive projects" with a Reopen button.
@@ -139,6 +144,9 @@ about who can reach it:
   Code, Claude Code with `--continue`, or a shell). It never sends a command.
 - The file tree lists names only, never file contents, and refuses any path
   whose real location (after resolving symlinks) is outside the project.
+- Opening a file hands it to macOS `open`, either to show it in Finder or with
+  an app that macOS lists for that file, checked again on every open. The
+  page cannot name any other program.
 - If you start Corral from inside a Claude Code session or a herdr pane, it
   removes that session's environment variables (`CLAUDE_CODE_*`, `CLAUDECODE`,
   `HERDR_*`, `TMUX*`) from every shell it starts, so they do not inherit
@@ -150,6 +158,8 @@ about who can reach it:
   when (owner-only permissions).
 - `~/.local/share/corral/categories.json`: your categories and which project is
   in each (owner-only permissions).
+- `~/.local/share/corral/open-with.json`: the app you chose for each type of
+  file (owner-only permissions).
 - `~/.local/share/corral/open-sessions.json`: the open windows, rewritten when
   one opens or closes and every 30 seconds. Each entry has the window's name,
   folder, and, when Claude Code is running in it, the conversation ID and a

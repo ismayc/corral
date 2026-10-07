@@ -609,6 +609,71 @@ function listDir(root, rel, showHidden) {
   return { status: 200, root: realRoot, path: path.relative(realRoot, target), entries: entries.slice(0, TREE_MAX), truncated: entries.length > TREE_MAX };
 }
 
+// Open with: a click on a file in a space's tree opens it in a Mac app. The apps offered are the ones
+// macOS itself lists for that file; the user's choice per file type is kept in open-with.json.
+// The page names a file (space plus relative path) and an app; the server checks both.
+const OPEN_WITH_FILE = path.join(DATA_DIR, 'open-with.json');
+const APPS_SCRIPT = path.join(__dirname, 'scripts', 'apps-for-file.js');
+const openWith = new Map(); // file type -> app path, 'system', or nothing
+function loadOpenWith() {
+  const d = readJsonFile(OPEN_WITH_FILE);
+  if (d && d.defaults && typeof d.defaults === 'object') for (const [k, v] of Object.entries(d.defaults)) if (typeof v === 'string') openWith.set(k, v);
+}
+function saveOpenWith() {
+  try { writeJson(OPEN_WITH_FILE, { version: 1, defaults: Object.fromEntries(openWith) }); return true; } catch (e) { console.error('open-with save failed:', e.message); return false; }
+}
+
+// The type a default applies to: the extension (".md"), or the whole name for files without one ("Makefile").
+const fileKind = (file) => path.extname(file).toLowerCase() || path.basename(file);
+
+// The real path of a file inside a space's project folder, or null.
+async function spaceFile(spaceId, rel) {
+  const root = await rootFor(spaceId || '');
+  if (!root || typeof rel !== 'string' || !rel || rel.includes('\0') || path.isAbsolute(rel)) return null;
+  try {
+    const realRoot = fs.realpathSync(root);
+    const file = fs.realpathSync(path.join(realRoot, rel));
+    if (!file.startsWith(realRoot + path.sep) || !fs.statSync(file).isFile()) return null;
+    return file;
+  } catch { return null; }
+}
+
+function appsFor(file) {
+  return new Promise((resolve) => {
+    execFile('osascript', ['-l', 'JavaScript', APPS_SCRIPT, file], { timeout: 10000 }, (err, out) => {
+      try { resolve(err ? { def: null, apps: [] } : JSON.parse(out)); } catch { resolve({ def: null, apps: [] }); }
+    });
+  });
+}
+
+// The apps for a file. A type macOS knows nothing about gets the apps that open plain text.
+async function openChoices(file) {
+  const r = await appsFor(file);
+  if (r.apps.length) return { ...r, asText: false };
+  const sample = path.join(DATA_DIR, 'plain-text-sample.txt');
+  try { if (!fs.existsSync(sample)) { fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 }); fs.writeFileSync(sample, '', { mode: 0o600 }); } } catch {}
+  const t = await appsFor(sample);
+  return { def: null, apps: t.apps, asText: true };
+}
+
+// app is 'system' (the macOS default), 'finder' (show it in Finder), or the path of one of the offered apps.
+async function openFile(file, app) {
+  let args;
+  if (app === 'finder') args = ['-R', file];
+  else if (app === 'system') {
+    if (!(await appsFor(file)).def) return { status: 409, error: 'macOS has no default app for this file' };
+    args = [file];
+  } else {
+    const { apps } = await openChoices(file);
+    if (!apps.some((a) => a.path === app)) return { status: 400, error: 'that app does not open this file' };
+    args = ['-a', app, file];
+  }
+  const ok = await new Promise((resolve) => execFile('open', args, { timeout: 10000 }, (err) => resolve(!err)));
+  return ok ? { status: 200, ok: true } : { status: 502, error: 'macOS could not open it' };
+}
+
+const appName = (p) => (p === 'system' ? 'its macOS default app' : p === 'finder' ? 'Finder' : path.basename(p, '.app'));
+
 function send(res, code, body, type = 'application/json; charset=utf-8') {
   res.writeHead(code, { 'Content-Type': type, 'Cache-Control': 'no-store' });
   res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
@@ -671,6 +736,34 @@ const server = http.createServer(async (req, res) => {
     if (!root) return send(res, 404, { error: 'unknown space' });
     const r = listDir(root, url.searchParams.get('path') || '', url.searchParams.get('hidden') === '1');
     return send(res, r.status, r);
+  }
+  if (url.pathname === '/api/open-with' && req.method === 'GET') {
+    const file = await spaceFile(url.searchParams.get('space'), url.searchParams.get('path'));
+    if (!file) return send(res, 404, { error: 'no such file in this space' });
+    const kind = fileKind(file);
+    const c = await openChoices(file);
+    return send(res, 200, { name: path.basename(file), kind, saved: openWith.get(kind) || null, ...c });
+  }
+  // Opens a file. With no app, uses the saved default for its type, or answers needsChoice.
+  if (url.pathname === '/api/open' && req.method === 'POST') {
+    const body = await readJson(req);
+    if (!body) return send(res, 400, { error: 'bad json' });
+    const file = await spaceFile(body.space, body.path);
+    if (!file) return send(res, 404, { error: 'no such file in this space' });
+    const kind = fileKind(file);
+    const app = typeof body.app === 'string' && body.app ? body.app : openWith.get(kind);
+    if (!app) return send(res, 200, { needsChoice: true });
+    const r = await openFile(file, app);
+    if (r.ok && body.remember && app !== 'finder') { openWith.set(kind, app); saveOpenWith(); }
+    if (!r.ok && !body.app && openWith.has(kind)) return send(res, 200, { needsChoice: true, error: r.error }); // a saved app that is gone
+    const { status, ...result } = r;
+    return send(res, status, { ...result, kind, app: appName(app), remembered: openWith.get(kind) === app });
+  }
+  if (url.pathname === '/api/open-with/forget' && req.method === 'POST') {
+    const body = await readJson(req);
+    if (!body || typeof body.kind !== 'string') return send(res, 400, { error: 'bad json' });
+    openWith.delete(body.kind);
+    return saveOpenWith() ? send(res, 200, { ok: true }) : send(res, 500, { error: 'could not save' });
   }
   if (url.pathname === '/api/sessions' && req.method === 'GET') {
     return send(res, 200, { sessions: [...sessions.values()].map(publicSession) });
@@ -779,6 +872,7 @@ prepareRestore(); // must read the previous backup before saveBackup() replaces 
 saveBackup();
 setInterval(saveBackup, 30000).unref(); // also catches a window switching to another Claude conversation
 loadCategories();
+loadOpenWith();
 if (!loadLedger()) seedFromSnapshots();
 herdrSnapshot(); // records the current spaces right away
 setInterval(herdrSnapshot, 30000).unref(); // notices closed spaces even with no page open

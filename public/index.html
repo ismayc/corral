@@ -83,7 +83,7 @@
   .tree { padding:0 0 4px 34px; font:12px Menlo, Monaco, monospace; min-width:max-content; }
   .node { display:flex; align-items:center; gap:4px; padding:1px 16px 1px 0; white-space:nowrap; }
   .node.dir { cursor:pointer; } .node.dir:hover { background:var(--raise); }
-  .node.file { color:var(--muted); } .node .ic { width:12px; flex:none; text-align:center; color:var(--muted); }
+  .node.file { color:var(--muted); cursor:pointer; } .node.file:hover { background:var(--raise); color:var(--text); } .node .ic { width:12px; flex:none; text-align:center; color:var(--muted); }
   .node .lk { color:var(--fence); }
   .tree .note { padding:2px 16px; font-size:11px; }
 
@@ -101,6 +101,12 @@
   .catmenu button { text-align:left; border-color:transparent; background:transparent; }
   .catmenu button:hover { background:var(--raise); }
   .catmenu input { margin-top:6px; }
+  .catmenu.openwith { width:280px; }
+  .catmenu .msep { border-top:1px solid var(--rail); margin:5px 2px; }
+  .catmenu .mnote { color:var(--muted); font-size:11px; padding:2px 9px 4px; }
+  .catmenu label.always { display:flex; align-items:center; gap:7px; padding:5px 9px; font-size:12px; cursor:pointer; }
+  .catmenu label.always input { margin:0; flex:none; }
+  .catmenu .forget { color:var(--lavender); font-size:12px; }
 
   /* Top bar */
   #main { display:flex; flex-direction:column; min-width:0; min-height:0; }
@@ -711,6 +717,68 @@ document.addEventListener('keydown', (e) => {
   if (selected.size) { selected.clear(); syncSel(); }
 });
 
+// Opening files from the tree. A click uses the app saved for that file type; until there is one, it asks.
+// Right-click always asks. The apps listed are the ones macOS offers for the file.
+async function openTreeFile(space, rel, anchor) {
+  const r = await api('/api/open', { method: 'POST', body: { space, path: rel } }).catch(() => null);
+  if (!r) return toast('Could not reach Corral.');
+  if (r.needsChoice) return openWithMenu(space, rel, anchor, r.error);
+  toast(r.ok ? `Opened ${rel.split('/').pop()} in ${r.app}.` : r.error || 'Could not open it.');
+}
+
+async function openWithMenu(space, rel, anchor, problem) {
+  closeMenu();
+  const q = `space=${encodeURIComponent(space)}&path=${encodeURIComponent(rel)}`;
+  const info = await api(`/api/open-with?${q}`).catch(() => null);
+  if (!info || info.error) return toast(info?.error || 'Could not reach Corral.');
+  const m = document.createElement('div');
+  m.className = 'catmenu openwith';
+  const add = (cls, text) => { const d = document.createElement('div'); d.className = cls; d.textContent = text; m.append(d); return d; };
+  add('mhead', `Open ${info.name} with`);
+  if (problem) add('mnote', `The saved app could not open it (${problem}).`);
+  if (info.asText) add('mnote', 'macOS has no app for this type of file. These open plain text.');
+  const always = document.createElement('input');
+  always.type = 'checkbox';
+  const choose = async (app) => {
+    closeMenu();
+    const r = await api('/api/open', { method: 'POST', body: { space, path: rel, app, remember: always.checked } }).catch(() => null);
+    if (!r?.ok) return toast(r?.error || 'Could not open it.');
+    toast(`Opened ${info.name} in ${r.app}.${r.remembered && always.checked ? ` ${info.kind} files will open there from now on.` : ''}`);
+  };
+  const item = (label, app) => {
+    const b = document.createElement('button');
+    b.textContent = `${info.saved === app ? '✓ ' : ''}${label}`;
+    b.onclick = () => choose(app);
+    m.append(b);
+  };
+  // The checkbox goes above the list, which can be long, so it is seen before an app is picked.
+  const lab = document.createElement('label');
+  lab.className = 'always';
+  lab.append(always, document.createTextNode(`Always open ${info.kind} files this way`));
+  m.append(lab, Object.assign(document.createElement('div'), { className: 'msep' }));
+  const label = (a) => `${a.name}${a.path === info.def ? ' (macOS default)' : ''}`;
+  const first = [info.saved, info.def].filter((p, i, l) => p && l.indexOf(p) === i);
+  for (const p of first) { const a = info.apps.find((x) => x.path === p); if (a) item(label(a), a.path); }
+  for (const a of info.apps) if (!first.includes(a.path)) item(label(a), a.path);
+  if (!info.apps.length) add('mnote', 'No app on this Mac offers to open it.');
+  m.append(Object.assign(document.createElement('div'), { className: 'msep' }));
+  item('Show in Finder', 'finder');
+  if (info.saved) {
+    const saved = info.saved === 'system' ? 'the macOS default' : info.apps.find((a) => a.path === info.saved)?.name || info.saved.split('/').pop();
+    const f = document.createElement('button');
+    f.className = 'forget';
+    f.textContent = `Forget ${saved} for ${info.kind} files`;
+    f.onclick = async () => { closeMenu(); await api('/api/open-with/forget', { method: 'POST', body: { kind: info.kind } }); toast(`Corral will ask again for ${info.kind} files.`); };
+    m.append(f);
+  }
+  document.body.append(m);
+  const r = anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : { left: anchor.x, bottom: anchor.y };
+  m.style.left = `${Math.max(8, Math.min(r.left, innerWidth - 288))}px`;
+  m.style.top = `${Math.max(8, Math.min(r.bottom + 4, innerHeight - m.offsetHeight - 8))}px`;
+  openMenu = m;
+  m.querySelector('button')?.focus();
+}
+
 function renameCategory(c, h) {
   const inp = document.createElement('input');
   inp.value = c.name;
@@ -904,6 +972,12 @@ async function fillTree(box, spaceId, rel) {
     row.append(ic, nm);
     if (e.link) { const l = document.createElement('span'); l.className = 'lk'; l.textContent = '↪'; row.append(l); }
     box.append(row);
+    if (e.type === 'file') {
+      const fileRel = rel ? `${rel}/${e.name}` : e.name;
+      row.title = 'Click to open. Right-click to choose the app.';
+      row.onclick = () => openTreeFile(spaceId, fileRel, row);
+      row.oncontextmenu = (ev) => { ev.preventDefault(); openWithMenu(spaceId, fileRel, { x: ev.clientX, y: ev.clientY }); };
+    }
     if (e.type === 'dir') {
       const kids = document.createElement('div');
       kids.style.paddingLeft = '14px';

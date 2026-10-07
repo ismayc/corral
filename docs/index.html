@@ -251,8 +251,8 @@
         <div class="case">
           <p class="q">"What's in this repo again?"</p>
           <h3>Peek at the files</h3>
-          <p>Expand any space for a read-only file tree, limited to that project's folder. It is enough to get your
-            bearings without opening an editor.</p>
+          <p>Expand any space for a file tree, limited to that project's folder. Click a file to open it in a Mac app:
+            Corral asks which one until you set a default for that type of file.</p>
         </div>
       </div>
     </div>
@@ -280,7 +280,8 @@
             <li>Click a space to start Claude Code, Claude Code's last session, or a plain shell in its folder.</li>
             <li>Right-click a space, or use its ⋯ button, to file it under a category, or make a new one on the spot.</li>
             <li>Cmd-click or Shift-click to select several spaces and move them together.</li>
-            <li>Expand a space to browse its files, read-only.</li>
+            <li>Expand a space to browse its files. Click one to open it in a Mac app, chosen from the apps macOS
+              offers for it; tick "Always" to make that the default for the file type. Right-click to choose again.</li>
           </ul>
         </div>
         <div class="frame narrow">
@@ -443,6 +444,9 @@
           which blocks DNS rebinding, and every change and terminal connection needs a loopback <code>Origin</code>.</p></div>
         <div class="card"><h3>A fixed menu of programs</h3><p>The page can choose Claude Code, Claude Code with
           <code>--continue</code>, or a shell. It never sends a command.</p></div>
+        <div class="card"><h3>Only apps macOS offers</h3><p>Opening a file hands it to macOS <code>open</code> with an app
+          that macOS lists for that file, checked again each time, or shows it in Finder. The page cannot name any
+          other program.</p></div>
         <div class="card"><h3>Names, never contents</h3><p>The file tree lists names only and refuses any path whose real
           location, after resolving symlinks, is outside the project.</p></div>
         <div class="card"><h3>No borrowed identity</h3><p>Started from inside Claude Code or a herdr pane, Corral strips
