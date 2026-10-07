@@ -50,9 +50,22 @@
   .iconbtn { padding:6px 10px; min-width:40px; }
 
   /* Home: the windows running on the Mac */
-  #list { flex:1; overflow-y:auto; padding:12px 12px calc(96px + env(safe-area-inset-bottom)); }
+  #list { flex:1; overflow-y:auto; padding:0 12px calc(96px + env(safe-area-inset-bottom)); }
   .section { color:var(--muted); font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.06em;
-             margin:14px 4px 8px; }
+             margin:0 -12px 8px; padding:12px 16px 8px; }
+  /* In the list, each group's header stays at the top while its windows scroll under it. */
+  #list .section { position:sticky; top:0; z-index:2; background:var(--ground); display:flex; gap:8px; align-items:baseline; }
+  #list .section .n { color:var(--text); }
+  /* The summary under the title: one chip per group, which jumps to it. */
+  #jump { display:flex; gap:8px; padding:8px 12px; overflow-x:auto; background:var(--panel); border-bottom:1px solid var(--rail);
+          flex:none; scrollbar-width:none; }
+  #jump::-webkit-scrollbar { display:none; }
+  #jump button { flex:none; display:inline-flex; align-items:center; gap:7px; padding:6px 12px; border-radius:99px;
+                 font-size:14px; background:var(--ground); }
+  #jump button::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--unknown); }
+  #jump button.idle::before { background:var(--idle); } #jump button.busy::before { background:var(--working); }
+  #jump button b { font-weight:700; }
+  #jump button.on { border-color:var(--fence); background:var(--raise); }
   .card { display:block; width:100%; text-align:left; background:var(--panel); border:1px solid var(--rail);
           border-radius:14px; padding:12px 14px; margin-bottom:10px; }
   .card:active { background:var(--raise); }
@@ -129,6 +142,7 @@
     <div class="grow"><h1>Corral</h1><div class="sub" id="machine"></div></div>
     <button class="iconbtn" id="todesk" title="Open the full desktop page">Desktop</button>
   </header>
+  <nav id="jump" aria-label="Jump to a group" hidden></nav>
   <div id="list"></div>
   <button id="fab" class="primary">+ Start something</button>
 </section>
@@ -264,19 +278,63 @@ function renderList() {
   }
   if (!windows.length) kids.push(h('div', { class: 'empty' }, 'Nothing is running on the Mac. Start something below.'));
   const sorted = [...windows].sort((a, b) => statusOf(a).rank - statusOf(b).rank || (b.activity || 0) - (a.activity || 0));
+  const count = [0, 0, 0];
+  for (const w of sorted) count[statusOf(w).rank]++;
   let lastRank = -1;
   for (const w of sorted) {
     const st = statusOf(w);
     if (st.rank !== lastRank) {
-      kids.push(h('div', { class: 'section' }, ['Waiting for you', 'Working', 'Shells'][st.rank]));
+      kids.push(h('div', { class: 'section', id: `group-${st.rank}` }, GROUPS[st.rank].title, h('span', { class: 'n' }, String(count[st.rank]))));
       lastRank = st.rank;
     }
     kids.push(h('button', { class: 'card', onclick: () => openTerm(w) },
       h('div', { class: 'top' }, h('span', { class: 'name' }, w.label), h('span', { class: `pill ${st.cls}` }, st.text)),
       h('div', { class: 'where' }, `${home(w.cwd)}${w.activity ? ` · ${ago(w.activity)}` : ''}`)));
   }
-  list.replaceChildren(...kids);
+  const spacer = h('div', { 'aria-hidden': 'true' });
+  const keep = list.scrollTop; // the list redraws every few seconds; stay where the reader is
+  list.replaceChildren(...kids, spacer);
+  // Room after the last group, so jumping to any group can bring its header to the top.
+  const lastHead = [...list.querySelectorAll('.section[id^="group-"]')].pop();
+  if (lastHead?.nextElementSibling) {
+    const tail = list.scrollHeight - (groupTop(lastHead.nextElementSibling) - lastHead.offsetHeight - 8);
+    spacer.style.height = `${Math.max(0, list.clientHeight - tail)}px`;
+  }
+  list.scrollTop = keep;
+  const jump = $('#jump');
+  jump.replaceChildren(...GROUPS.map((g, rank) => (count[rank] ? h('button', {
+    class: g.cls, 'data-rank': rank, onclick: () => jumpTo(rank),
+  }, g.chip, ' ', h('b', {}, String(count[rank]))) : null)).filter(Boolean));
+  jump.hidden = !windows.length;
+  markGroup();
 }
+
+// The three groups, in list order.
+const GROUPS = [
+  { title: 'Waiting for you', chip: 'Your turn', cls: 'idle' },
+  { title: 'Working', chip: 'Working', cls: 'busy' },
+  { title: 'Shells', chip: 'Shells', cls: '' },
+];
+// Where an element sits in the list's own scroll position. A stuck header reports where it is stuck,
+// so jumping measures the first window under the header, which never sticks.
+function groupTop(el) {
+  const list = $('#list');
+  return list.scrollTop + el.getBoundingClientRect().top - list.getBoundingClientRect().top;
+}
+function jumpTo(rank) {
+  const el = document.getElementById(`group-${rank}`);
+  const first = el?.nextElementSibling;
+  if (first) $('#list').scrollTo({ top: Math.max(0, groupTop(first) - el.offsetHeight - 8), behavior: 'smooth' });
+}
+// Lights the chip of the group at the top of the list.
+function markGroup() {
+  const list = $('#list');
+  let current = null;
+  for (const el of list.querySelectorAll('.section[id^="group-"]')) if (groupTop(el) <= list.scrollTop + 4) current = el.id.slice(6);
+  if (current === null) current = list.querySelector('.section[id^="group-"]')?.id.slice(6) ?? null;
+  for (const b of $('#jump').children) b.classList.toggle('on', b.dataset.rank === current);
+}
+$('#list').addEventListener('scroll', markGroup, { passive: true });
 
 async function checkRestore() {
   restore = await api('/api/restore').catch(() => null);

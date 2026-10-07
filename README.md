@@ -128,8 +128,10 @@ network between your own devices.
 
 - **See whose turn it is.** Every window on the Mac is listed, Claude Code
   sessions waiting for you first, then the ones still working, then plain
-  shells, each with its folder and when it last printed. When a session finishes
-  while the page is open, a notice says so.
+  shells, each with its folder and when it last printed. A bar under the
+  title counts each group (Your turn, Working, Shells) and jumps to it, and
+  each group's header stays at the top while you scroll through it. When a
+  session finishes while the page is open, a notice says so.
 - **Answer in a real terminal.** Tap a window to open it. A row of keys covers
   what a phone keyboard lacks: **Use suggestion** (sends Claude Code's dimmed
   suggested prompt in one tap), Esc, Shift-Tab (Claude Code's modes), Tab,
