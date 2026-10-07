@@ -47,12 +47,12 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   [Remote control from your phone](#remote-control-from-your-phone-with-tailscale)).
   Open `/m` from any device signed in to your tailnet to see every window on
   the Mac, sorted by whose turn it is (Claude waiting for you, Claude working,
-  plain shells), with the last few lines of each. Tap one for a full terminal
-  with the keys a phone lacks (Esc, Shift-Tab, Ctrl, arrows, and the numbers
-  for Claude Code's menus), a **Use suggestion** key that sends Claude
-  Code's suggested next prompt (Tab, then Enter), a message box that works
-  with dictation, and a
-  History view of the scrollback as text you can select. You can also start
+  plain shells), with each one's folder and when it last printed. Tap one for
+  a full terminal with the keys a phone lacks (Esc, Shift-Tab, Ctrl, arrows,
+  and the numbers for Claude Code's menus), a **Use suggestion** key that
+  sends Claude Code's suggested next prompt (Tab, then Enter), a message box
+  that works with dictation, and a History view of the scrollback as text you
+  can select. You can also start
   Claude Code in any project (it also appears, minimized, in the bottom bar of
   the Mac's Corral page), or restore windows after a restart. Add it to
   your Home Screen and it opens like an app. Another computer on your tailnet
@@ -111,7 +111,7 @@ To use Corral from your phone or another computer, see the next section.
 ## Remote control from your phone, with Tailscale
 
 <p align="center">
-  <img src="docs/img/phone-list.jpg" width="200" alt="Corral's phone page listing four windows: notes and dashboard under Waiting for you, api-server under Working, and a blog shell, each with its last lines of output.">
+  <img src="docs/img/phone-list.jpg" width="200" alt="Corral's phone page listing four windows: notes and dashboard under Waiting for you, api-server under Working, and a blog shell, each with its folder.">
   <img src="docs/img/phone-terminal.jpg" width="200" alt="The notes window on a phone: Claude Code's reply, its input box with a dimmed suggested prompt, and a row of keys starting with Use suggestion, Type, Esc, Shift-Tab, and Tab, above a message box and a Send button.">
   <img src="docs/img/phone-start.jpg" width="200" alt="The Start in a project sheet: a choice of Claude Code, Last session, or Shell, a search box, and the list of herdr spaces with their status dots.">
   <img src="docs/img/phone-history.jpg" width="200" alt="The History view of the notes window: its scrollback as plain text with a Copy all button.">
@@ -128,7 +128,7 @@ network between your own devices.
 
 - **See whose turn it is.** Every window on the Mac is listed, Claude Code
   sessions waiting for you first, then the ones still working, then plain
-  shells, each with its last few lines of output. When a session finishes
+  shells, each with its folder and when it last printed. When a session finishes
   while the page is open, a notice says so.
 - **Answer in a real terminal.** Tap a window to open it. A row of keys covers
   what a phone keyboard lacks: **Use suggestion** (sends Claude Code's dimmed

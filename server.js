@@ -418,19 +418,8 @@ function openWindows() {
   });
 }
 
-// The last few lines of a window's screen. In Claude Code the input box (between two horizontal
-// rules) and the status lines under it are dropped, so the preview shows the latest reply.
-const RULE = /^\s*[─━]{8,}\s*$/;
-function screenPreview(id) {
-  let lines;
-  try { lines = tmux('capture-pane', '-p', '-J', '-t', SESSION_PREFIX + id).split('\n'); } catch { return []; }
-  const rules = lines.map((l, i) => (RULE.test(l) ? i : -1)).filter((i) => i >= 0);
-  if (rules.length >= 2) lines = lines.slice(0, rules[rules.length - 2]);
-  return lines.map((l) => l.trimEnd()).filter((l) => l.trim()).slice(-5).map((l) => l.slice(0, 240));
-}
-
-// What the phone page lists: each open window with its last output time, Claude Code's own status
-// (busy, idle, or shell, from its session file), and a short preview of the screen.
+// What the phone page lists: each open window with its last output time and Claude Code's own status
+// (busy, idle, or shell, from its session file).
 function overview() {
   const children = processChildren();
   const panes = new Map();
@@ -449,7 +438,6 @@ function overview() {
       ...publicSession(s),
       activity: p ? p.activity : null,
       claude: claude ? { status: claude.status } : null,
-      preview: s.tmux && !s.exited ? screenPreview(s.id) : [],
     };
   });
 }

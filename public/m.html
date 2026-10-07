@@ -60,8 +60,6 @@
   .card .name { font:600 17px/1.2 var(--brand); flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .card .when { color:var(--muted); font-size:13px; flex:none; }
   .card .where { color:var(--muted); font-size:13px; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .card pre { margin:8px 0 0; padding:8px 10px; background:var(--term); border-radius:8px; color:#cfc8dc;
-              font:12px/1.35 var(--mono); white-space:pre-wrap; word-break:break-word; max-height:7.2em; overflow:hidden; }
   .pill { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:2px 9px;
           border-radius:99px; background:var(--raise); color:var(--muted); flex:none; }
   .pill::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--unknown); }
@@ -275,8 +273,7 @@ function renderList() {
     }
     kids.push(h('button', { class: 'card', onclick: () => openTerm(w) },
       h('div', { class: 'top' }, h('span', { class: 'name' }, w.label), h('span', { class: `pill ${st.cls}` }, st.text)),
-      h('div', { class: 'where' }, `${home(w.cwd)}${w.activity ? ` · ${ago(w.activity)}` : ''}`),
-      w.preview?.length ? h('pre', {}, w.preview.join('\n')) : null));
+      h('div', { class: 'where' }, `${home(w.cwd)}${w.activity ? ` · ${ago(w.activity)}` : ''}`)));
   }
   list.replaceChildren(...kids);
 }
