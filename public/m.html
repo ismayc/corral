@@ -67,8 +67,19 @@
   #jump button b { font-weight:700; }
   #jump button.on { border-color:var(--fence); background:var(--raise); }
   .card { display:block; width:100%; text-align:left; background:var(--panel); border:1px solid var(--rail);
-          border-radius:14px; padding:12px 14px; margin-bottom:10px; }
-  .card:active { background:var(--raise); }
+          border-radius:14px; padding:12px 14px; margin-bottom:10px; cursor:pointer; }
+  .card:active:not(:has(.ask:active)) { background:var(--raise); }
+  .card.need { border-color:var(--blocked); }
+  /* A permission prompt: what Claude asks to do, and its answers. */
+  .ask { margin-top:10px; cursor:default; }
+  .ask pre { margin:0 0 8px; padding:8px 10px; max-height:11em; overflow:auto; background:var(--term); border-radius:8px;
+             font:12px/1.4 var(--mono); white-space:pre-wrap; word-break:break-word; color:#ddd6ea; }
+  .ask .answers { display:flex; flex-direction:column; gap:6px; }
+  .ask .answers button { text-align:left; font-size:15px; padding:9px 12px; }
+  .ask .answers button.deny { border-color:var(--blocked); color:#ffb4ad; }
+  .ask .answers button:disabled { opacity:.5; }
+  #askbar { flex:none; max-height:45%; overflow-y:auto; padding:10px 10px 6px; background:var(--panel); border-top:2px solid var(--blocked); }
+  #askbar .head { font:600 15px var(--brand); color:#ffb4ad; margin-bottom:6px; }
   .card .top { display:flex; align-items:center; gap:8px; }
   .card .name { font:600 17px/1.2 var(--brand); flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .card .when { color:var(--muted); font-size:13px; flex:none; }
@@ -78,6 +89,8 @@
   .pill::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--unknown); }
   .pill.idle { color:var(--idle); } .pill.idle::before { background:var(--idle); }
   .pill.busy { color:var(--working); } .pill.busy::before { background:var(--working); animation:pulse 1.4s ease-in-out infinite; }
+  .pill.need { color:#ffb4ad; } .pill.need::before { background:var(--blocked); }
+  #jump button.need::before { background:var(--blocked); }
   @keyframes pulse { 50% { opacity:.35; } }
   .empty { color:var(--muted); text-align:center; padding:40px 20px; }
   .banner { background:var(--raise); border:1px solid var(--fence); border-radius:14px; padding:12px 14px; margin-bottom:12px;
@@ -86,12 +99,37 @@
   #fab { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(18px + env(safe-area-inset-bottom));
          padding:14px 26px; border-radius:99px; font-size:17px; box-shadow:0 8px 24px #0008; white-space:nowrap; }
 
-  /* Sheet: start something new */
-  #sheet { position:fixed; inset:0; background:#0009; display:flex; align-items:flex-end; z-index:20; }
-  #sheet .panel { width:100%; max-height:88%; background:var(--panel); border-radius:18px 18px 0 0; display:flex; flex-direction:column;
+  /* Sheets: start something new, and notifications */
+  .sheet { position:fixed; inset:0; background:#0009; display:flex; align-items:flex-end; z-index:20; }
+  .sheet .panel { width:100%; max-height:88%; background:var(--panel); border-radius:18px 18px 0 0; display:flex; flex-direction:column;
                   padding-bottom:env(safe-area-inset-bottom); }
-  #sheet .head { padding:14px 16px 10px; display:flex; gap:10px; align-items:center; }
-  #sheet .head h2 { font:700 18px var(--brand); margin:0; flex:1; }
+  .sheet .head { padding:14px 16px 10px; display:flex; gap:10px; align-items:center; }
+  .sheet .head h2 { font:700 18px var(--brand); margin:0; flex:1; }
+  #notifybody { overflow-y:auto; padding:0 16px 18px; }
+  #notifybody p { margin:0 0 12px; color:var(--muted); font-size:15px; }
+  #notifybody p.state { color:var(--text); }
+  #notifybody ol { margin:0 0 12px; padding-left:22px; color:var(--text); font-size:15px; }
+  #notifybody .row { display:flex; align-items:center; gap:12px; padding:11px 0; border-bottom:1px solid var(--rail); font-size:15px; }
+  #notifybody .row span { flex:1; }
+  #notifybody .row small { display:block; color:var(--muted); font-size:13px; }
+  #notifybody input[type=checkbox] { width:22px; height:22px; accent-color:var(--fence); }
+  #notifybody .btns { display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 16px; }
+
+  /* Changes: git status and diff of the window's project */
+  #difflist { flex:1; overflow:auto; background:var(--term); padding:0 0 calc(16px + env(safe-area-inset-bottom)); }
+  #difflist .files { padding:10px 12px; border-bottom:1px solid var(--rail); background:var(--panel); }
+  #difflist .files button { display:flex; width:100%; gap:10px; text-align:left; border:0; background:none; padding:5px 2px;
+                            font:13px var(--mono); border-radius:6px; }
+  #difflist .files button b { width:22px; flex:none; color:var(--lavender); }
+  #difflist .files button span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #difflist .d { font:12px/1.45 var(--mono); padding:0 10px; white-space:pre-wrap; word-break:break-all; color:#ddd6ea; }
+  #difflist .d.add { background:#1d3a2a; color:#b9f0cf; } #difflist .d.del { background:#45201f; color:#ffc2bd; }
+  #difflist .d.hunk { color:var(--lavender); background:#221d30; } #difflist .d.meta { color:var(--muted); }
+  #difflist .d.file { font-weight:700; color:var(--text); background:var(--raise); padding:8px 10px; margin-top:10px;
+                      position:sticky; top:0; border-top:1px solid var(--rail); border-bottom:1px solid var(--rail); }
+  #difflist .note { color:var(--muted); padding:30px 16px; text-align:center; font:15px -apple-system, sans-serif; }
+  #photo { padding:9px 11px; border-radius:18px; flex:none; display:inline-flex; }
+  #photo svg { width:22px; height:22px; }
   .seg { display:flex; margin:0 16px 10px; background:var(--ground); border:1px solid var(--rail); border-radius:10px; padding:3px; }
   .seg button { flex:1; border:0; background:none; padding:7px 4px; font-size:14px; border-radius:8px; color:var(--muted); }
   .seg button.on { background:var(--raise); color:var(--text); font-weight:600; }
@@ -140,6 +178,7 @@
   <header>
     <img class="icon" src="/favicon.svg" alt="">
     <div class="grow"><h1>Corral</h1><div class="sub" id="machine"></div></div>
+    <button class="iconbtn" id="bell" aria-label="Notifications">Alerts</button>
     <button class="iconbtn" id="todesk" title="Open the full desktop page">Desktop</button>
   </header>
   <nav id="jump" aria-label="Jump to a group" hidden></nav>
@@ -151,14 +190,16 @@
   <header>
     <button class="iconbtn" id="back" aria-label="Back to the list">&lsaquo;</button>
     <div class="grow"><div class="title" id="ttitle"></div><div class="sub" id="tsub"></div></div>
-    <button class="iconbtn" id="smaller" aria-label="Smaller text">A&minus;</button>
-    <button class="iconbtn" id="bigger" aria-label="Larger text">A+</button>
+    <button class="iconbtn" id="diffbtn">Changes</button>
     <button class="iconbtn" id="histbtn">History</button>
   </header>
   <div id="termwrap"><div id="term" style="height:100%"></div><span id="conn" hidden>Reconnecting&hellip;</span></div>
+  <div id="askbar" hidden></div>
   <div id="keys"></div>
   <div id="compose">
-    <textarea id="msg" rows="1" placeholder="Message, or tap the mic to dictate" enterkeyhint="send" autocapitalize="sentences"></textarea>
+    <button id="photo" aria-label="Send a photo to Claude"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+    <input id="photofile" type="file" accept="image/*" multiple hidden>
+    <textarea id="msg" rows="1" placeholder="Message or dictate" enterkeyhint="send" autocapitalize="sentences"></textarea>
     <button id="send" class="primary">Send</button>
   </div>
 </section>
@@ -172,7 +213,23 @@
   <pre id="histtext"></pre>
 </section>
 
-<div id="sheet" hidden>
+<section id="diffview" class="view" hidden>
+  <header>
+    <button class="iconbtn" id="diffback" aria-label="Back to the terminal">&lsaquo;</button>
+    <div class="grow"><div class="title" id="dtitle"></div><div class="sub" id="dsub">Changes not yet committed</div></div>
+    <button class="iconbtn" id="diffreload">Refresh</button>
+  </header>
+  <div id="difflist"></div>
+</section>
+
+<div id="notify" class="sheet" hidden>
+  <div class="panel">
+    <div class="head"><h2>Notifications</h2><button class="iconbtn" id="notifyx" aria-label="Close">&times;</button></div>
+    <div id="notifybody"></div>
+  </div>
+</div>
+
+<div id="sheet" class="sheet" hidden>
   <div class="panel">
     <div class="head"><h2>Start in a project</h2><button class="iconbtn" id="sheetx" aria-label="Close">&times;</button></div>
     <div class="seg" id="agentseg">
@@ -235,11 +292,51 @@ function ago(ms) {
   return `${Math.round(s / 86400)}d ago`;
 }
 // Claude Code's own status: busy while it works, idle when it is waiting for you.
+// "Waiting" is a prompt Claude cannot get past without you: a permission prompt, or another dialog.
 function statusOf(w) {
   if (!w.claude) return { cls: '', text: 'Shell', rank: 2 };
+  if (w.claude.status === 'waiting') return { cls: 'need', text: w.claude.waitingFor === 'permission prompt' ? 'Needs permission' : 'Waiting on a prompt', rank: 0, first: true };
   if (w.claude.status === 'busy') return { cls: 'busy', text: 'Working', rank: 1 };
   if (w.claude.status === 'idle') return { cls: 'idle', text: 'Your turn', rank: 0 };
   return { cls: '', text: 'Claude', rank: 1 };
+}
+const needsYou = (w) => w.claude?.status === 'idle' || w.claude?.status === 'waiting';
+
+// What a permission prompt asks, with a button per answer. Esc denies; Claude Code's own "No" answer is
+// left out because Deny does the same and is always there.
+function askBlock(w, showText = true) {
+  const p = w.prompt;
+  const answer = async (choice, btn) => {
+    for (const b of btn.parentNode.children) b.disabled = true;
+    try {
+      const r = await fetch(`/api/sessions/${encodeURIComponent(w.id)}/answer`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ choice }),
+      });
+      const j = await r.json().catch(() => ({}));
+      toast(r.ok ? (choice === 'deny' ? `Denied. ${w.label} will ask what to do instead.` : `Answered: ${btn.textContent}`) : j.error || 'Could not answer.');
+    } catch { toast('Could not reach the Mac.'); }
+    setTimeout(refresh, 600);
+  };
+  const stop = (e) => e.stopPropagation();
+  return h('div', { class: 'ask', onclick: stop },
+    showText ? h('pre', {}, p.text) : null,
+    h('div', { class: 'answers' },
+      ...p.options.filter((o) => !/^No\b/.test(o.label) || o.n === '1').map((o, i) => h('button', {
+        class: i === 0 ? 'primary' : '', onclick: (e) => answer(o.n, e.currentTarget),
+      }, o.label)),
+      h('button', { class: 'deny', onclick: (e) => answer('deny', e.currentTarget) }, 'Deny')));
+}
+// The same prompt, under the terminal of the window that asks.
+let askShown = '';
+function renderAskbar(w) {
+  const bar = $('#askbar');
+  const key = w?.prompt ? JSON.stringify(w.prompt) : '';
+  if (key === askShown) return;
+  askShown = key;
+  bar.hidden = !key;
+  // The terminal above already shows what Claude asks, so the bar has only the answers.
+  if (key) bar.replaceChildren(h('div', { class: 'head' }, 'Claude is asking for permission. Answer:'), askBlock(w, false));
+  requestAnimationFrame(() => current?.fit.fit());
 }
 
 // ---- Home: the list of windows ----
@@ -256,14 +353,18 @@ async function refresh() {
   for (const w of windows) {
     const now = w.claude?.status;
     const was = lastStatus.get(w.id);
-    if (was === 'busy' && now === 'idle' && current?.info.id !== w.id) toast(`${w.label} is waiting for you`);
+    if (was && was !== now && current?.info.id !== w.id) {
+      if (now === 'waiting') toast(`${w.label} needs you to answer a prompt`);
+      else if (was === 'busy' && now === 'idle') toast(`${w.label} is waiting for you`);
+    }
     lastStatus.set(w.id, now);
   }
-  const waiting = windows.filter((w) => w.claude?.status === 'idle').length;
+  const waiting = windows.filter(needsYou).length;
   document.title = waiting ? `(${waiting}) Corral` : 'Corral';
   if (current) {
     const w = windows.find((x) => x.id === current.info.id);
     if (w) $('#tsub').textContent = `${statusOf(w).text} · ${home(w.cwd)}`;
+    renderAskbar(w);
   }
   if (!$('#home').hidden) renderList();
 }
@@ -277,7 +378,8 @@ function renderList() {
       h('button', { class: 'primary', onclick: doRestore }, 'Restore')));
   }
   if (!windows.length) kids.push(h('div', { class: 'empty' }, 'Nothing is running on the Mac. Start something below.'));
-  const sorted = [...windows].sort((a, b) => statusOf(a).rank - statusOf(b).rank || (b.activity || 0) - (a.activity || 0));
+  const sorted = [...windows].sort((a, b) => statusOf(a).rank - statusOf(b).rank
+    || Number(Boolean(statusOf(b).first)) - Number(Boolean(statusOf(a).first)) || (b.activity || 0) - (a.activity || 0));
   const count = [0, 0, 0];
   for (const w of sorted) count[statusOf(w).rank]++;
   let lastRank = -1;
@@ -287,9 +389,11 @@ function renderList() {
       kids.push(h('div', { class: 'section', id: `group-${st.rank}` }, GROUPS[st.rank].title, h('span', { class: 'n' }, String(count[st.rank]))));
       lastRank = st.rank;
     }
-    kids.push(h('button', { class: 'card', onclick: () => openTerm(w) },
+    kids.push(h('div', { class: `card ${st.cls === 'need' ? 'need' : ''}`, role: 'button', tabindex: '0', onclick: () => openTerm(w),
+      onkeydown: (e) => { if (e.key === 'Enter' && e.target === e.currentTarget) openTerm(w); } },
       h('div', { class: 'top' }, h('span', { class: 'name' }, w.label), h('span', { class: `pill ${st.cls}` }, st.text)),
-      h('div', { class: 'where' }, `${home(w.cwd)}${w.activity ? ` · ${ago(w.activity)}` : ''}`)));
+      h('div', { class: 'where' }, `${home(w.cwd)}${w.activity ? ` · ${ago(w.activity)}` : ''}`),
+      w.prompt ? askBlock(w) : null));
   }
   const spacer = h('div', { 'aria-hidden': 'true' });
   const keep = list.scrollTop; // the list redraws every few seconds; stay where the reader is
@@ -302,8 +406,9 @@ function renderList() {
   }
   list.scrollTop = keep;
   const jump = $('#jump');
+  const asking = windows.some((w) => statusOf(w).cls === 'need');
   jump.replaceChildren(...GROUPS.map((g, rank) => (count[rank] ? h('button', {
-    class: g.cls, 'data-rank': rank, onclick: () => jumpTo(rank),
+    class: rank === 0 && asking ? 'need' : g.cls, 'data-rank': rank, onclick: () => jumpTo(rank),
   }, g.chip, ' ', h('b', {}, String(count[rank]))) : null)).filter(Boolean));
   jump.hidden = !windows.length;
   markGroup();
@@ -440,6 +545,8 @@ function openTerm(info) {
   $('#ttitle').textContent = info.label;
   const w = windows.find((x) => x.id === info.id) || info;
   $('#tsub').textContent = `${statusOf(w).text} · ${home(info.cwd)}`;
+  askShown = null;
+  renderAskbar(w);
   const term = new Terminal({ fontFamily: 'Menlo, Monaco, ui-monospace, monospace', fontSize, cursorBlink: false,
     scrollback: 1000, theme: { background: '#100e15', cursor: '#c9c1ff', selectionBackground: '#4d4366' } });
   const fit = new FitAddon.FitAddon();
@@ -486,16 +593,19 @@ function closeTerm() {
   $('#term').replaceChildren();
   current = null;
   setCtrl(false);
+  $('#askbar').hidden = true; askShown = '';
 }
 
 function backHome() {
   closeTerm();
-  $('#termview').hidden = true; $('#histview').hidden = true; $('#home').hidden = false;
+  $('#termview').hidden = true; $('#histview').hidden = true; $('#diffview').hidden = true; $('#home').hidden = false;
   refresh();
 }
 $('#back').onclick = () => history.back();
 window.addEventListener('popstate', () => {
-  if (!$('#histview').hidden && current) { $('#histview').hidden = true; $('#termview').hidden = false; return; }
+  if ((!$('#histview').hidden || !$('#diffview').hidden) && current) {
+    $('#histview').hidden = true; $('#diffview').hidden = true; $('#termview').hidden = false; return;
+  }
   if (current) backHome();
 });
 
@@ -510,8 +620,6 @@ function setFont(n) {
   fontSize = Math.min(20, Math.max(8, n)); store('corral.m.font', fontSize);
   if (current) { current.term.options.fontSize = fontSize; current.fit.fit(); }
 }
-$('#smaller').onclick = () => setFont(fontSize - 1);
-$('#bigger').onclick = () => setFont(fontSize + 1);
 new ResizeObserver(() => current?.fit.fit()).observe($('#termwrap'));
 
 // The keys a phone keyboard lacks. Claude Code uses Esc to interrupt, Shift-Tab to change mode,
@@ -521,11 +629,13 @@ const KEYS = [
   ['Use suggestion', 'suggest'], ['Type', 'kbd'], ['Esc', '\x1b'], ['⇧Tab', '\x1b[Z'], ['Tab', '\t'], ['Ctrl', 'ctrl'], ['^C', '\x03'],
   ['↑', '\x1b[A'], ['↓', '\x1b[B'], ['←', '\x1b[D'], ['→', '\x1b[C'], ['⏎', '\r'],
   ['1', '1'], ['2', '2'], ['3', '3'], ['y', 'y'], ['n', 'n'], ['/', '/'], ['PgUp', '\x1b[5~'], ['PgDn', '\x1b[6~'],
+  ['A−', 'smaller'], ['A+', 'bigger'],
 ];
+const LOCAL_KEYS = new Set(['kbd', 'ctrl', 'suggest', 'smaller', 'bigger']);
 function setCtrl(on) { ctrlArmed = on; $('#keys [data-k="ctrl"]')?.classList.toggle('on', on); }
 $('#keys').replaceChildren(...KEYS.map(([label, k]) => h('button', {
-  'data-k': k === 'kbd' || k === 'ctrl' || k === 'suggest' ? k : null,
-  'aria-label': { Type: 'Type straight into the terminal', '⏎': 'Enter', '⇧Tab': 'Shift Tab' }[label] || null,
+  'data-k': LOCAL_KEYS.has(k) ? k : null,
+  'aria-label': { Type: 'Type straight into the terminal', '⏎': 'Enter', '⇧Tab': 'Shift Tab', 'A−': 'Smaller text', 'A+': 'Larger text' }[label] || null,
   // Keep focus where it is, so the keyboard does not close on every key.
   onpointerdown: (e) => e.preventDefault(),
   onclick: () => {
@@ -539,6 +649,7 @@ $('#keys').replaceChildren(...KEYS.map(([label, k]) => h('button', {
       return;
     }
     if (k === 'ctrl') return setCtrl(!ctrlArmed);
+    if (k === 'smaller' || k === 'bigger') return setFont(fontSize + (k === 'bigger' ? 1 : -1));
     if (k === 'suggest') { sendRaw('\t'); setTimeout(() => sendRaw('\r'), 150); return; }
     sendRaw(k);
   },
@@ -580,9 +691,180 @@ $('#histback').onclick = () => history.back();
 $('#histcopy').onclick = () => navigator.clipboard.writeText($('#histtext').textContent)
   .then(() => toast('Copied the scrollback.')).catch(() => toast('Could not copy. Select the text instead.'));
 
+// ---- Photos: upload to the Mac, then paste the file's path, which Claude Code attaches as [Image #n] ----
+// A photo is scaled to at most 2048 pixels on its long side and sent as JPEG, so a 12-megapixel shot
+// uploads quickly over a phone connection. A file the browser cannot draw is sent as it is.
+async function shrink(file) {
+  try {
+    const bmp = await createImageBitmap(file);
+    const k = Math.min(1, 2048 / Math.max(bmp.width, bmp.height));
+    const c = Object.assign(document.createElement('canvas'), { width: Math.round(bmp.width * k), height: Math.round(bmp.height * k) });
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.88));
+    if (blob) return blob;
+  } catch {}
+  return file;
+}
+const base64 = (blob) => new Promise((resolve, reject) => {
+  const r = new FileReader();
+  r.onload = () => resolve(String(r.result).split(',')[1]);
+  r.onerror = reject;
+  r.readAsDataURL(blob);
+});
+$('#photo').onpointerdown = (e) => e.preventDefault();
+$('#photo').onclick = () => $('#photofile').click();
+$('#photofile').onchange = async () => {
+  const files = [...$('#photofile').files];
+  $('#photofile').value = '';
+  if (!current || !files.length) return;
+  const c = current;
+  toast(`Sending ${files.length === 1 ? 'the photo' : `${files.length} photos`} to the Mac…`);
+  let sent = 0;
+  for (const f of files) {
+    try {
+      const blob = await shrink(f);
+      const r = await fetch(`/api/sessions/${encodeURIComponent(c.info.id)}/upload`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: blob.type || f.type, data: await base64(blob) }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { toast(j.error || 'Could not send the photo.'); continue; }
+      if (current !== c) return;
+      c.term.paste(`${j.path} `);
+      sent++;
+    } catch { toast('Could not send the photo.'); }
+  }
+  if (sent) toast(`${sent === 1 ? 'Photo' : `${sent} photos`} added to Claude's message. Type what you want and Send.`);
+};
+
+// ---- Changes: what is not yet committed in the window's project ----
+async function showChanges() {
+  if (!current) return;
+  $('#dtitle').textContent = current.info.label;
+  if ($('#diffview').hidden) history.pushState({ diff: true }, '');
+  $('#termview').hidden = true; $('#diffview').hidden = false;
+  const list = $('#difflist');
+  list.replaceChildren(h('div', { class: 'note' }, 'Reading git…'));
+  let r;
+  try { r = await api(`/api/sessions/${encodeURIComponent(current.info.id)}/changes`); } catch { return list.replaceChildren(h('div', { class: 'note' }, 'Could not read the changes.')); }
+  if (!r.repo) { $('#dsub').textContent = home(r.cwd); return list.replaceChildren(h('div', { class: 'note' }, 'This folder is not in a git repository.')); }
+  $('#dsub').textContent = `${r.repo}${r.branch ? ` · ${r.branch}` : ''} · ${r.files.length} file${r.files.length === 1 ? '' : 's'} changed`;
+  if (!r.files.length) return list.replaceChildren(h('div', { class: 'note' }, 'Nothing has changed since the last commit.'));
+  const anchors = new Map();
+  const lines = [];
+  for (const line of r.diff.split('\n')) {
+    let cls = 'd';
+    if (line.startsWith('diff --git ')) {
+      const name = line.replace(/^diff --git a\/.* b\//, '');
+      const el = h('div', { class: 'd file' }, name);
+      anchors.set(name, el);
+      lines.push(el);
+      continue;
+    }
+    if (/^(index |--- |\+\+\+ |new file|deleted file|similarity|rename |old mode|new mode|Binary )/.test(line)) cls += ' meta';
+    else if (line.startsWith('@@')) cls += ' hunk';
+    else if (line.startsWith('+')) cls += ' add';
+    else if (line.startsWith('-')) cls += ' del';
+    lines.push(h('div', { class: cls }, line || ' '));
+  }
+  const CODES = { M: 'M', A: 'A', D: 'D', R: 'R', '??': 'new', C: 'C', U: 'U' };
+  const files = h('div', { class: 'files' }, ...r.files.map((f) => {
+    const code = f.code === '??' ? 'new' : CODES[f.code.trim()[0]] || f.code.trim();
+    const name = f.path.includes(' -> ') ? f.path.split(' -> ')[1] : f.path;
+    return h('button', { onclick: () => anchors.get(name)?.scrollIntoView({ block: 'start' }) }, h('b', {}, code), h('span', {}, name));
+  }));
+  list.replaceChildren(files, ...lines, ...(r.truncated ? [h('div', { class: 'note' }, 'The diff is long, so the rest is cut off here.')] : []));
+  list.scrollTop = 0;
+}
+$('#diffbtn').onclick = showChanges;
+$('#diffback').onclick = () => history.back();
+$('#diffreload').onclick = showChanges;
+
+// ---- Notifications: Web Push from the Mac, for a window's turn or a permission prompt ----
+// iOS allows them only in Corral opened from the Home Screen (iOS 16.4 or later), and asks only after a tap.
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const pushable = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+let swReg = null;
+if ('serviceWorker' in navigator && isSecureContext) {
+  navigator.serviceWorker.register('/sw.js').then((r) => { swReg = r; }).catch(() => {});
+  navigator.serviceWorker.addEventListener('message', (e) => { if (e.data?.open) openById(e.data.open); });
+}
+const keyBytes = (b64) => Uint8Array.from(atob(b64.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+
+async function renderNotify() {
+  const body = $('#notifybody');
+  const p = (text, cls) => h('p', { class: cls || '' }, text);
+  if (!pushable || !isSecureContext) {
+    const iphone = /iPhone|iPad/.test(navigator.userAgent);
+    return body.replaceChildren(
+      p(iphone && !standalone ? 'On an iPhone, notifications work only for Corral opened from the Home Screen.' : 'This browser cannot get notifications from Corral.', 'state'),
+      ...(iphone && !standalone ? [h('ol', {}, h('li', {}, 'Tap the Share button in Safari.'), h('li', {}, 'Choose Add to Home Screen, then Add.'),
+        h('li', {}, 'Open Corral from its new Home Screen icon and come back here.'))] : []));
+  }
+  const [info, reg] = await Promise.all([api('/api/push').catch(() => null), navigator.serviceWorker.ready]);
+  const sub = await reg.pushManager.getSubscription();
+  if (!info) return body.replaceChildren(p('Could not reach the Mac.', 'state'));
+  const on = Boolean(sub) && Notification.permission === 'granted';
+  const pref = (key, label, help) => {
+    const box = h('input', { type: 'checkbox' });
+    box.checked = Boolean(info.prefs[key]);
+    box.onchange = () => api('/api/push/prefs', { method: 'POST', body: { [key]: box.checked } }).catch(() => toast('Could not save that.'));
+    return h('label', { class: 'row' }, h('span', {}, label, h('small', {}, help)), box);
+  };
+  const kids = [];
+  if (Notification.permission === 'denied') {
+    kids.push(p('Notifications are blocked for Corral. Allow them for Corral in the phone\'s Settings app, under Notifications, then come back.', 'state'));
+  } else if (!on) {
+    kids.push(p('Get a notification on this phone when a window needs you, even when Corral is closed.', 'state'),
+      h('div', { class: 'btns' }, h('button', { class: 'primary', onclick: enablePush }, 'Turn on notifications')));
+  } else {
+    kids.push(p(`Notifications are on for this ${/iPhone/.test(navigator.userAgent) ? 'iPhone' : 'device'}.`, 'state'),
+      pref('permission', 'A permission prompt opens', 'Claude is asking before it runs something.'),
+      pref('turn', 'Claude finishes its turn', 'A window goes from Working to Your turn.'),
+      pref('away', 'Only when I am away from the Mac', 'Nothing is sent while the Mac has been used in the last 2 minutes.'),
+      h('div', { class: 'btns' },
+        h('button', { onclick: () => api('/api/push/test', { method: 'POST', body: { endpoint: sub.endpoint } })
+          .then(() => toast('Sent. It should arrive in a few seconds.')).catch(() => toast('The test did not go through.')) }, 'Send a test'),
+        h('button', { onclick: disablePush }, 'Turn off on this device')));
+  }
+  kids.push(p('A notification names the window and what it is waiting for. It travels encrypted, so the push service cannot read it.'));
+  body.replaceChildren(...kids);
+}
+async function enablePush() {
+  try {
+    if (await Notification.requestPermission() !== 'granted') return renderNotify();
+    const { key } = await api('/api/push');
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) });
+    await api('/api/push/subscribe', { method: 'POST', body: { subscription: sub.toJSON() } });
+    toast('Notifications are on.');
+  } catch (e) { toast(`Could not turn on notifications (${e.message}).`); }
+  renderNotify();
+}
+async function disablePush() {
+  const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
+  if (sub) { await api('/api/push/unsubscribe', { method: 'POST', body: { endpoint: sub.endpoint } }).catch(() => {}); await sub.unsubscribe().catch(() => {}); }
+  toast('Notifications are off on this device.');
+  renderNotify();
+}
+$('#bell').onclick = () => { $('#notify').hidden = false; $('#notifybody').replaceChildren(h('p', {}, 'Checking…')); renderNotify(); };
+$('#notifyx').onclick = () => { $('#notify').hidden = true; };
+$('#notify').onclick = (e) => { if (e.target.id === 'notify') $('#notify').hidden = true; };
+
+// A tapped notification opens the page at /m?w=<window>; go straight to that window.
+async function openById(id) {
+  if (!id) return;
+  if (!windows.length) await refresh();
+  const w = windows.find((x) => x.id === id);
+  if (w) openTerm(w); else toast('That window is no longer open.');
+}
+
 // ---- Start ----
 setVh();
-refresh();
+refresh().then(() => {
+  const w = new URLSearchParams(location.search).get('w');
+  if (w) { history.replaceState(null, '', '/m'); openById(w); }
+});
 checkRestore();
 setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 4000);
 setInterval(() => { if (!$('#home').hidden) renderList(); }, 30000); // keeps "5m ago" current

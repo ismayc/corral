@@ -384,7 +384,10 @@ function claudeUnder(rootPid, children) {
   for (let i = 0; i < queue.length && i < 200; i++) {
     const d = readJsonFile(path.join(CLAUDE_DIR, 'sessions', `${queue[i]}.json`));
     if (d && UUID.test(d.sessionId || '') && typeof d.cwd === 'string') {
-      return { sessionId: d.sessionId, cwd: d.cwd, status: typeof d.status === 'string' ? d.status : null };
+      return {
+        sessionId: d.sessionId, cwd: d.cwd, status: typeof d.status === 'string' ? d.status : null,
+        waitingFor: d.status === 'waiting' && typeof d.waitingFor === 'string' ? d.waitingFor : null,
+      };
     }
     queue.push(...(children.get(queue[i]) || []));
   }
@@ -437,7 +440,8 @@ function overview() {
     return {
       ...publicSession(s),
       activity: p ? p.activity : null,
-      claude: claude ? { status: claude.status } : null,
+      claude: claude ? { status: claude.status, waitingFor: claude.waitingFor } : null,
+      prompt: claude?.waitingFor === 'permission prompt' ? permissionPrompt(s.id) : null,
     };
   });
 }
@@ -445,6 +449,238 @@ function overview() {
 // The window's scrollback as plain text, for reading and copying on a phone.
 function windowHistory(id) {
   return tmux('capture-pane', '-p', '-J', '-S', '-3000', '-t', SESSION_PREFIX + id).replace(/\n+$/, '\n');
+}
+
+// Claude Code's permission prompt, read from the window's screen. Its session file says only that one is
+// open ("waitingFor": "permission prompt"); the screen has what it asks and the numbered answers:
+//   Bash command / <what it wants to run> / Do you want to proceed? / ❯ 1. Yes / 2. ... / 4. No / Esc to cancel
+// Pressing an answer's number picks it, and Esc denies (both checked against Claude Code 2.1.292).
+// Claude Code wraps at spaces, and splits a word only when it is too long for the line (such as a path).
+const rejoin = (a, b) => (/\S{30,}$/.test(a) ? a + b : `${a} ${b}`);
+function permissionPrompt(id) {
+  let lines;
+  try { lines = tmux('capture-pane', '-p', '-t', SESSION_PREFIX + id).split('\n').map((l) => l.trimEnd()); } catch { return null; }
+  const end = lines.findLastIndex((l) => /^\s*Esc to cancel/.test(l));
+  if (end < 0) return null;
+  // The answers are the last run numbered 1, 2, 3... above "Esc to cancel". A line between two answers
+  // continues the one above it, whether Claude Code indented the wrap or the terminal broke the line.
+  const opt = (l) => l.match(/^\s*(?:❯\s*)?(\d)\.\s+(.*)$/);
+  let first = -1;
+  for (let j = end - 1; j >= 0 && end - j < 40; j--) if (opt(lines[j])?.[1] === '1') { first = j; break; }
+  if (first < 0) return null;
+  const options = [];
+  for (let j = first; j < end; j++) {
+    const m = opt(lines[j]);
+    if (m && Number(m[1]) === options.length + 1) options.push({ n: m[1], label: m[2].trim() });
+    else if (lines[j].trim()) options[options.length - 1].label = rejoin(options[options.length - 1].label, lines[j].trim());
+  }
+  const i = first - 1;
+  // The prompt's own text runs from the full-width rule above it down to the answers.
+  let top = i;
+  while (top > 0 && !/^─{20,}$/.test(lines[top - 1].trim())) top--;
+  const text = lines.slice(top, i + 1)
+    .filter((l) => l.trim() && !/^[╌─]{20,}$/.test(l.trim()) && !/^\s*Tip:/.test(l))
+    .map((l) => l.replace(/^\s?│ ?/, '').replace(/^ /, ''))
+    .slice(-30);
+  return { text: text.join('\n'), options: options.map((o) => ({ n: o.n, label: o.label.slice(0, 160) })) };
+}
+
+// The Claude Code status of one window, read fresh.
+function windowClaude(s) {
+  let root = s.pty.pid;
+  if (s.tmux) { try { root = Number(tmux('display-message', '-p', '-t', SESSION_PREFIX + s.id, '#{pane_pid}').trim()); } catch {} }
+  return claudeUnder(root, processChildren());
+}
+
+// Answers a permission prompt with one of its numbered answers, or denies it. The prompt is read again
+// first, so an answer can only go to a prompt that is still open and offers that number.
+function answerPrompt(s, choice) {
+  if (windowClaude(s)?.waitingFor !== 'permission prompt') return { status: 409, error: 'no permission prompt is open in this window' };
+  const p = permissionPrompt(s.id);
+  if (!p) return { status: 409, error: 'could not read the prompt on the screen' };
+  if (choice === 'deny') tmux('send-keys', '-t', SESSION_PREFIX + s.id, 'Escape');
+  else if (p.options.some((o) => o.n === choice)) tmux('send-keys', '-t', SESSION_PREFIX + s.id, '-l', choice);
+  else return { status: 400, error: 'that is not one of the answers' };
+  return { status: 200, ok: true };
+}
+
+// A read-only look at what changed in a window's project: `git status` plus the diff against HEAD.
+// GIT_OPTIONAL_LOCKS=0 keeps git from taking the index lock, so it never gets in the way of Claude's own git.
+const DIFF_MAX = 600 * 1024;
+function git(cwd, args) {
+  return new Promise((resolve) => {
+    execFile('git', ['-C', cwd, ...args], { timeout: 15000, maxBuffer: 8 * 1024 * 1024, env: { ...cleanEnv(), GIT_OPTIONAL_LOCKS: '0' } },
+      (err, out) => resolve(err ? null : out));
+  });
+}
+async function windowChanges(s) {
+  const cwd = windowClaude(s)?.cwd || s.cwd;
+  const top = (await git(cwd, ['rev-parse', '--show-toplevel']))?.trim();
+  if (!top) return { status: 200, repo: null, cwd };
+  const [branch, status, diff] = await Promise.all([
+    git(top, ['branch', '--show-current']),
+    git(top, ['status', '--porcelain=v1', '-uall']),
+    git(top, ['diff', 'HEAD', '--no-color', '--no-ext-diff', '-M']),
+  ]);
+  const files = (status || '').split('\n').filter(Boolean).slice(0, 500).map((l) => ({ code: l.slice(0, 2), path: l.slice(3) }));
+  // New files are not in `git diff`; show the start of each small text one.
+  let extra = '';
+  for (const f of files.filter((x) => x.code === '??').slice(0, 20)) {
+    try {
+      const file = path.join(top, f.path);
+      const st = fs.statSync(file);
+      if (!st.isFile() || st.size > 64 * 1024) continue;
+      const body = fs.readFileSync(file, 'utf8');
+      if (body.includes('\0')) continue;
+      const lines = body.replace(/\n$/, '').split('\n').slice(0, 200);
+      extra += `diff --git a/${f.path} b/${f.path}\nnew file (not added to git yet)\n--- /dev/null\n+++ b/${f.path}\n@@ -0,0 +1,${lines.length} @@\n${lines.map((l) => `+${l}`).join('\n')}\n`;
+    } catch {}
+  }
+  let text = (diff || '') + extra;
+  const truncated = text.length > DIFF_MAX;
+  if (truncated) text = text.slice(0, DIFF_MAX);
+  return { status: 200, repo: path.basename(top), root: top, branch: (branch || '').trim(), files, diff: text, truncated };
+}
+
+// Photos from the phone go to Corral's own data folder, not the project, so they never show up in git.
+// The phone pastes the saved file's path into its message, which is how Claude Code is given an image.
+const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
+const UPLOAD_MAX = 20 * 1024 * 1024;
+const IMAGE_TYPES = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/heic': '.heic', 'image/webp': '.webp', 'image/gif': '.gif' };
+function saveUpload(body) {
+  const ext = IMAGE_TYPES[body?.type];
+  if (!ext || typeof body.data !== 'string') return { status: 400, error: 'send a photo (JPEG, PNG, HEIC, WebP, or GIF)' };
+  const buf = Buffer.from(body.data, 'base64');
+  if (!buf.length || buf.length > UPLOAD_MAX) return { status: 413, error: 'the photo is empty or too large' };
+  const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+  const file = path.join(UPLOAD_DIR, `photo-${stamp}-${Math.random().toString(36).slice(2, 6)}${ext}`);
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(file, buf, { mode: 0o600 });
+  return { status: 201, path: file };
+}
+
+// Web Push: tells the phone when a window becomes your turn or asks for permission, even with the page
+// closed. On an iPhone this works only for Corral added to the Home Screen (iOS 16.4 or later). The
+// message is encrypted for the phone (RFC 8291) and signed with this server's own key (VAPID, RFC 8292),
+// so Apple's push service carries it without being able to read it. Keys and subscriptions stay in push.json.
+const crypto = require('crypto');
+const PUSH_FILE = path.join(DATA_DIR, 'push.json');
+const b64u = (buf) => Buffer.from(buf).toString('base64url');
+let push = null; // {publicKey, privateKey (JWK), subs: [{endpoint, keys, ua, added}], prefs: {turn, permission, away}}
+function loadPush() {
+  push = readJsonFile(PUSH_FILE);
+  if (!push?.privateKey) {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    push = { publicKey: b64u(publicKey.export({ type: 'spki', format: 'der' }).subarray(-65)), privateKey: privateKey.export({ format: 'jwk' }), subs: [] };
+  }
+  push.subs = Array.isArray(push.subs) ? push.subs : [];
+  push.prefs = { turn: true, permission: true, away: true, ...push.prefs };
+  savePush();
+}
+function savePush() { try { writeJson(PUSH_FILE, push); } catch (e) { console.error('push save failed:', e.message); } }
+
+function vapidHeader(endpoint) {
+  const aud = new URL(endpoint).origin;
+  const head = b64u(JSON.stringify({ typ: 'JWT', alg: 'ES256' }));
+  const claims = b64u(JSON.stringify({ aud, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: 'https://github.com/ismayc/corral' }));
+  const key = crypto.createPrivateKey({ key: push.privateKey, format: 'jwk' });
+  const sig = crypto.sign('sha256', Buffer.from(`${head}.${claims}`), { key, dsaEncoding: 'ieee-p1363' });
+  return `vapid t=${head}.${claims}.${b64u(sig)}, k=${push.publicKey}`;
+}
+
+// aes128gcm content encoding for one subscription (RFC 8291 section 3 and RFC 8188).
+function encryptPush(sub, payload) {
+  const uaPublic = Buffer.from(sub.keys.p256dh, 'base64url');
+  const authSecret = Buffer.from(sub.keys.auth, 'base64url');
+  const ecdh = crypto.createECDH('prime256v1');
+  const asPublic = ecdh.generateKeys();
+  const shared = ecdh.computeSecret(uaPublic);
+  const ikm = Buffer.from(crypto.hkdfSync('sha256', shared, authSecret, Buffer.concat([Buffer.from('WebPush: info\0'), uaPublic, asPublic]), 32));
+  const salt = crypto.randomBytes(16);
+  const cek = Buffer.from(crypto.hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: aes128gcm\0'), 16));
+  const nonce = Buffer.from(crypto.hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: nonce\0'), 12));
+  const cipher = crypto.createCipheriv('aes-128-gcm', cek, nonce);
+  const body = Buffer.concat([cipher.update(Buffer.concat([Buffer.from(payload), Buffer.from([2])])), cipher.final(), cipher.getAuthTag()]);
+  const header = Buffer.alloc(21);
+  salt.copy(header, 0);
+  header.writeUInt32BE(4096, 16);
+  header[20] = asPublic.length;
+  return Buffer.concat([header, asPublic, body]);
+}
+
+async function sendPush(sub, message) {
+  try {
+    const r = await fetch(sub.endpoint, {
+      method: 'POST',
+      headers: { Authorization: vapidHeader(sub.endpoint), 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', TTL: '3600', Urgency: 'high' },
+      body: encryptPush(sub, JSON.stringify(message)),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (r.status === 404 || r.status === 410) return 'gone'; // the phone dropped this subscription
+    if (!r.ok) console.error(`push to ${new URL(sub.endpoint).host} failed: HTTP ${r.status} ${(await r.text()).slice(0, 200)}`);
+    return r.ok ? 'ok' : 'failed';
+  } catch (e) { console.error('push failed:', e.message); return 'failed'; }
+}
+
+async function pushAll(message) {
+  if (!push.subs.length) return [];
+  const results = await Promise.all(push.subs.map((s) => sendPush(s, message)));
+  console.log(`push "${message.title}": ${results.join(', ')}`);
+  const keep = push.subs.filter((_, i) => results[i] !== 'gone');
+  if (keep.length !== push.subs.length) { push.subs = keep; savePush(); }
+  return results;
+}
+
+// Seconds since the Mac last saw a key or the mouse, from IOKit's HIDIdleTime (nanoseconds).
+function macIdleSeconds() {
+  try {
+    const m = execFileSync('ioreg', ['-c', 'IOHIDSystem', '-d', '4'], { encoding: 'utf8', timeout: 3000 }).match(/"HIDIdleTime" = (\d+)/);
+    return m ? Number(m[1]) / 1e9 : Infinity;
+  } catch { return Infinity; }
+}
+
+// Watches every window's Claude status and sends a push on the moments worth one: a turn ending
+// (busy to idle) and a permission prompt opening. With "away" on, nothing is sent while the Mac is in use.
+const AWAY_SECONDS = 120;
+const lastSeen = new Map(); // window id -> 'busy' | 'idle' | 'permission' | ...
+let watchPrimed = false;
+function watchForPush() {
+  if (!push.subs.length) { lastSeen.clear(); watchPrimed = false; return; }
+  let rows;
+  try { rows = overview(); } catch { return; }
+  const events = [];
+  for (const w of rows) {
+    if (w.exited) continue;
+    const st = !w.claude ? 'shell' : w.claude.waitingFor === 'permission prompt' ? 'permission' : w.claude.status;
+    // Before the first look, every window's state is old news; after it, a new window counts as just started.
+    const was = lastSeen.has(w.id) ? lastSeen.get(w.id) : watchPrimed ? 'new' : st;
+    lastSeen.set(w.id, st);
+    if (was === st) continue;
+    if (st === 'permission' && push.prefs.permission) {
+      const first = (w.prompt?.text || '').split('\n').find((l) => l.trim()) || 'Claude is asking before it goes on';
+      events.push({ title: `${w.label} needs permission`, body: first.trim().slice(0, 120), tag: w.id, url: `/m?w=${w.id}` });
+    } else if (was === 'busy' && st === 'idle' && push.prefs.turn) {
+      events.push({ title: `${w.label}: your turn`, body: 'Claude finished and is waiting for you.', tag: w.id, url: `/m?w=${w.id}` });
+    }
+  }
+  for (const id of lastSeen.keys()) if (!rows.some((w) => w.id === id)) lastSeen.delete(id);
+  watchPrimed = true;
+  if (!events.length || (push.prefs.away && macIdleSeconds() < AWAY_SECONDS)) return;
+  for (const e of events) pushAll(e);
+}
+
+const PUSH_HOSTS = ['push.apple.com', 'fcm.googleapis.com', 'push.services.mozilla.com', 'notify.windows.com'];
+function cleanSubscription(b) {
+  const s = b?.subscription;
+  if (!s || typeof s.endpoint !== 'string' || s.endpoint.length > 2048) return null;
+  // Only the browsers' own push services, so the server never posts to an address a page made up.
+  try {
+    const u = new URL(s.endpoint);
+    if (u.protocol !== 'https:' || !PUSH_HOSTS.some((h) => u.hostname === h || u.hostname.endsWith(`.${h}`))) return null;
+  } catch { return null; }
+  if (typeof s.keys?.p256dh !== 'string' || typeof s.keys?.auth !== 'string') return null;
+  try { if (Buffer.from(s.keys.p256dh, 'base64url').length !== 65 || Buffer.from(s.keys.auth, 'base64url').length !== 16) return null; } catch { return null; }
+  return { endpoint: s.endpoint, keys: { p256dh: s.keys.p256dh, auth: s.keys.auth } };
 }
 
 let backupTimer = null;
@@ -674,11 +910,12 @@ function serveFile(res, file) {
   });
 }
 
-function readJson(req) {
+function readJson(req, max = 64 * 1024) {
   return new Promise((resolve) => {
     let raw = '';
-    req.on('data', (c) => { raw += c; if (raw.length > 64 * 1024) req.destroy(); });
+    req.on('data', (c) => { raw += c; if (raw.length > max) req.destroy(); });
     req.on('end', () => { try { resolve(raw ? JSON.parse(raw) : {}); } catch { resolve(null); } });
+    req.on('close', () => resolve(null)); // a body over the limit destroys the request, and 'end' never comes
   });
 }
 
@@ -783,6 +1020,62 @@ const server = http.createServer(async (req, res) => {
     if (!s || !s.tmux || s.exited) return send(res, 404, { error: 'no such window' });
     try { return send(res, 200, windowHistory(s.id), 'text/plain; charset=utf-8'); } catch { return send(res, 500, { error: 'could not read the window' }); }
   }
+  const act = url.pathname.match(/^\/api\/sessions\/([\w-]+)\/(prompt|answer|changes|upload)$/);
+  if (act) {
+    const s = sessions.get(act[1]);
+    if (!s || s.exited) return send(res, 404, { error: 'no such window' });
+    if (act[2] === 'prompt' && req.method === 'GET') {
+      return send(res, 200, { prompt: windowClaude(s)?.waitingFor === 'permission prompt' ? permissionPrompt(s.id) : null });
+    }
+    if (act[2] === 'answer' && req.method === 'POST') {
+      if (!s.tmux) return send(res, 409, { error: 'this window has no tmux session' });
+      const body = await readJson(req);
+      if (!body || typeof body.choice !== 'string') return send(res, 400, { error: 'bad json' });
+      const { status, ...r } = answerPrompt(s, body.choice);
+      return send(res, status, r);
+    }
+    if (act[2] === 'changes' && req.method === 'GET') {
+      const { status, ...r } = await windowChanges(s);
+      return send(res, status, r);
+    }
+    if (act[2] === 'upload' && req.method === 'POST') {
+      const body = await readJson(req, Math.ceil(UPLOAD_MAX * 1.4));
+      if (!body) return send(res, 400, { error: 'bad json, or the photo is too large' });
+      try { const { status, ...r } = saveUpload(body); return send(res, status, r); } catch (e) { return send(res, 500, { error: `could not save: ${e.message}` }); }
+    }
+  }
+  if (url.pathname === '/api/push' && req.method === 'GET') {
+    return send(res, 200, { key: push.publicKey, devices: push.subs.length, prefs: push.prefs });
+  }
+  if (url.pathname === '/api/push/subscribe' && req.method === 'POST') {
+    const sub = cleanSubscription(await readJson(req));
+    if (!sub) return send(res, 400, { error: 'not a push subscription from a known push service' });
+    push.subs = [...push.subs.filter((x) => x.endpoint !== sub.endpoint), { ...sub, added: Date.now(), ua: String(req.headers['user-agent'] || '').slice(0, 200) }].slice(-10);
+    savePush();
+    return send(res, 200, { ok: true, devices: push.subs.length });
+  }
+  if (url.pathname === '/api/push/unsubscribe' && req.method === 'POST') {
+    const body = await readJson(req);
+    if (!body || typeof body.endpoint !== 'string') return send(res, 400, { error: 'bad json' });
+    push.subs = push.subs.filter((x) => x.endpoint !== body.endpoint);
+    savePush();
+    return send(res, 200, { ok: true, devices: push.subs.length });
+  }
+  if (url.pathname === '/api/push/prefs' && req.method === 'POST') {
+    const body = await readJson(req);
+    if (!body) return send(res, 400, { error: 'bad json' });
+    for (const k of ['turn', 'permission', 'away']) if (typeof body[k] === 'boolean') push.prefs[k] = body[k];
+    savePush();
+    return send(res, 200, { prefs: push.prefs });
+  }
+  // Sends a test notification to one device (the one asking), so the setup can be checked from the phone.
+  if (url.pathname === '/api/push/test' && req.method === 'POST') {
+    const body = await readJson(req);
+    const sub = push.subs.find((x) => x.endpoint === body?.endpoint);
+    if (!sub) return send(res, 404, { error: 'this device is not subscribed' });
+    const r = await sendPush(sub, { title: 'Corral', body: 'Notifications work. You will hear from Corral when a window needs you.', tag: 'test', url: '/m' });
+    return send(res, r === 'ok' ? 200 : 502, r === 'ok' ? { ok: true } : { error: `the push service answered: ${r}` });
+  }
   const del = url.pathname.match(/^\/api\/sessions\/([\w-]+)$/);
   if (del && req.method === 'DELETE') {
     const s = sessions.get(del[1]);
@@ -867,6 +1160,8 @@ saveBackup();
 setInterval(saveBackup, 30000).unref(); // also catches a window switching to another Claude conversation
 loadCategories();
 loadOpenWith();
+loadPush();
+setInterval(watchForPush, 3000).unref();
 if (!loadLedger()) seedFromSnapshots();
 herdrSnapshot(); // records the current spaces right away
 setInterval(herdrSnapshot, 30000).unref(); // notices closed spaces even with no page open

@@ -136,7 +136,7 @@
   .tablewrap { overflow-x:auto; }
 
   /* Remote control: phone screenshots and setup steps */
-  .phones { display:grid; grid-template-columns:repeat(4, 1fr); gap:22px; margin-top:44px; }
+  .phones { display:grid; grid-template-columns:repeat(3, 1fr); gap:22px; margin-top:44px; max-width:900px; margin-left:auto; margin-right:auto; }
   .phones figure { margin:0; }
   .phones img { display:block; width:100%; border-radius:26px; border:6px solid #0b0a10;
                 box-shadow:0 0 0 1px var(--rail), 0 18px 40px rgba(8,6,14,.55); }
@@ -266,7 +266,8 @@
           <p class="q">"I stepped away, and Claude is waiting on me."</p>
           <h3>Answer from your phone</h3>
           <p>Through Tailscale, your phone lists every window on the Mac, with the ones waiting for you on top. Tap one
-            to reply, dictate, or start Claude Code in another project.</p>
+            to reply, dictate, or send a photo, allow or deny a permission prompt, or start Claude Code in another
+            project. A notification tells you when a session needs you.</p>
         </div>
         <div class="case">
           <p class="q">"I have forty projects and can never find the one I want."</p>
@@ -368,7 +369,8 @@
       <h2>Answer Claude from your phone</h2>
       <p class="lede">With <a href="https://tailscale.com">Tailscale</a>, the private network between your own devices,
         Corral becomes a remote control for every terminal on your Mac. See which Claude Code sessions are waiting for
-        you, answer them, start new ones, and read back what happened, from your phone, a tablet, or another computer.</p>
+        you, allow or deny what they ask, answer them, start new ones, and read back what happened, from your phone, a
+        tablet, or another computer. The phone can even get a notification when a session needs you.</p>
 
       <div class="phones">
         <figure>
@@ -379,7 +381,7 @@
         </figure>
         <figure>
           <img src="img/phone-terminal.jpg" width="585" height="1266" loading="lazy"
-               alt="The notes window on a phone: Claude Code's reply, its input box with a dimmed suggested prompt, and a row of keys starting with Use suggestion, Type, Esc, Shift-Tab, and Tab, above a message box and a Send button.">
+               alt="The notes window on a phone, with Changes and History buttons at the top: Claude Code's reply, its input box with a dimmed suggested prompt, and a row of keys starting with Use suggestion, Type, Esc, Shift-Tab, and Tab, above a camera button, a message box, and a Send button.">
           <figcaption><b>A real terminal.</b> Use suggestion sends Claude's suggested prompt in one tap; the keys cover
             what a phone keyboard lacks.</figcaption>
         </figure>
@@ -394,15 +396,29 @@
                alt="The History view of the notes window: its scrollback as plain text with a Copy all button.">
           <figcaption><b>History.</b> The scrollback as plain text to select, or copy in one tap.</figcaption>
         </figure>
+        <figure>
+          <img src="img/phone-permission.jpg" width="585" height="1266" loading="lazy"
+               alt="The phone list with data-lab at the top, marked Needs permission in red. Its card shows the command Claude wants to run, then buttons for Yes, Yes and don't ask again, and Deny.">
+          <figcaption><b>Allow or deny.</b> A session stopped at a permission prompt shows what it wants to run and
+            a button for each answer.</figcaption>
+        </figure>
+        <figure>
+          <img src="img/phone-changes.jpg" width="585" height="1266" loading="lazy"
+               alt="The Changes view for the dashboard project: the changed files, api.js and a new empty.test.js, then the diff with removed lines in red and added lines in green.">
+          <figcaption><b>Changes.</b> What is not yet committed in the window's project, as a colored diff.</figcaption>
+        </figure>
       </div>
 
       <div class="grid2">
+        <div class="card"><h3>Notifications</h3><p>Tap Alerts to get a push when a permission prompt opens or Claude
+          finishes its turn, even with Corral closed. By default nothing is sent while you are at the Mac. On an iPhone,
+          this needs Corral on the Home Screen.</p></div>
+        <div class="card"><h3>Send a photo</h3><p>The camera button sends a picture to the Mac and pastes its path into
+          Claude Code, which attaches it to your next message.</p></div>
         <div class="card"><h3>Keys a phone lacks</h3><p>Use suggestion, Esc, Shift-Tab for Claude Code's modes, Tab, Ctrl,
           ^C, the arrows, Enter, and 1, 2, and 3 for Claude Code's menus.</p></div>
         <div class="card"><h3>Type or dictate</h3><p>The message box works with the keyboard's microphone, and a message
           with several lines goes in as one.</p></div>
-        <div class="card"><h3>Notices</h3><p>When a session finishes while the page is open, a notice says it is your
-          turn, and the tab's title counts the sessions waiting.</p></div>
         <div class="card"><h3>Like an app</h3><p>Add it to your Home Screen and it opens full screen. Restore brings back
           the windows from before a Mac restart.</p></div>
       </div>
@@ -427,6 +443,8 @@
           <code style="overflow-wrap:anywhere">https://&lt;this Mac&gt;.&lt;your tailnet&gt;.ts.net:8443/m</code>.
           Send it to your phone and open it.</li>
         <li><b>Keep it on your Home Screen.</b> In Safari, use the Share button and choose <b>Add to Home Screen</b>.</li>
+        <li><b>Turn on notifications (optional).</b> Open Corral from its Home Screen icon, tap <b>Alerts</b>, then
+          <b>Turn on notifications</b>. <b>Send a test</b> checks the whole path.</li>
       </ol>
       <p class="side-note">Only you get in. Corral still listens on 127.0.0.1 only; each request through Tailscale must
         carry your Tailscale login, which Tailscale adds and a device cannot fake (details under
@@ -521,8 +539,11 @@
           location, after resolving symlinks, is outside the project.</p></div>
         <div class="card"><h3>No borrowed identity</h3><p>Started from inside Claude Code or a herdr pane, Corral strips
           that session's variables (<code>CLAUDE_CODE_*</code>, <code>HERDR_*</code>, <code>TMUX*</code>) from every shell it starts.</p></div>
+        <div class="card"><h3>Answers only to an open prompt</h3><p>Allow and Deny send one key, and only after Corral has
+          read Claude Code's session file and the screen again and found that prompt still open with that answer.</p></div>
         <div class="card"><h3>Stays on your Mac</h3><p>A few small files in <code>~/.local/share/corral</code>, your browser's
-          local storage, and a private tmux server. The page loads no outside resources.</p></div>
+          local storage, and a private tmux server. The page loads no outside resources. If you turn on notifications,
+          each one goes through your phone's push service, encrypted so that the service cannot read it.</p></div>
       </div>
     </div>
   </section>
@@ -538,6 +559,8 @@
           screen. Older scrollback stays in tmux (<code>tmux -L corral attach</code>).</p></div>
         <div class="card"><h3>Undocumented re-sort</h3><p>Reopen re-sorts herdr's spaces alphabetically through an
           undocumented herdr method, <code>workspace.move_block</code>.</p></div>
+        <div class="card"><h3>Prompts read off the screen</h3><p>Allow and Deny read Claude Code's permission prompt from
+          the terminal (tested with Claude Code 2.1.292). If a release changes its look, answer in the terminal.</p></div>
       </div>
     </div>
   </section>
