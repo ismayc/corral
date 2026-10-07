@@ -42,7 +42,9 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
 - **A resizable bottom bar.** Minimized windows wait in the bar at the
   bottom. Drag its top edge to make it bigger or smaller; double-click the
   edge to reset it.
-- **Your windows on your phone**, through [Tailscale](https://tailscale.com).
+- **Your windows on your phone**, through [Tailscale](https://tailscale.com)
+  (setup and screenshots below, in
+  [Remote control from your phone](#remote-control-from-your-phone-with-tailscale)).
   Open `/m` from any device signed in to your tailnet to see every window on
   the Mac, sorted by whose turn it is (Claude waiting for you, Claude working,
   plain shells), with the last few lines of each. Tap one for a full terminal
@@ -104,27 +106,99 @@ Settings, all optional, by environment variable:
 | `CORRAL_TAILSCALE_PORT` | `8443` | The HTTPS port `tailscale serve` uses for Corral |
 | `CORRAL_TAILSCALE_USERS` | the login that owns this Mac in Tailscale | Comma-separated Tailscale logins allowed in |
 
-### On your phone and other devices
+To use Corral from your phone or another computer, see the next section.
 
-Corral itself never listens beyond `127.0.0.1`. To reach it from your other
-devices, have [Tailscale](https://tailscale.com) forward to it, from inside
-your tailnet only:
+## Remote control from your phone, with Tailscale
 
-```sh
-npm run tailscale   # tailscale serve --bg --https=8443 http://127.0.0.1:8777
-```
+<p align="center">
+  <img src="docs/img/phone-list.jpg" width="200" alt="Corral's phone page listing four windows: notes and dashboard under Waiting for you, api-server under Working, and a blog shell, each with its last lines of output.">
+  <img src="docs/img/phone-terminal.jpg" width="200" alt="The notes window on a phone: Claude Code's reply, its input box with a dimmed suggested prompt, and a row of keys starting with Use suggestion, Type, Esc, Shift-Tab, and Tab, above a message box and a Send button.">
+  <img src="docs/img/phone-start.jpg" width="200" alt="The Start in a project sheet: a choice of Claude Code, Last session, or Shell, a search box, and the list of herdr spaces with their status dots.">
+  <img src="docs/img/phone-history.jpg" width="200" alt="The History view of the notes window: its scrollback as plain text with a Copy all button.">
+</p>
+<p align="center"><sub>The phone page with made-up projects: the list of windows, a Claude Code window, starting something new, and History.</sub></p>
 
-Then open `https://<this Mac>.<your tailnet>.ts.net:8443/m` on your phone (the
-desktop page's **On your phone** button copies the link). A phone that opens
-`/` is sent to `/m`; `/?desktop` keeps the desktop page. The setting stays on
-until you run `tailscale serve --https=8443 off`. Port 8443 leaves 443 free for
-anything else you already serve.
+Corral works as a remote control for every terminal on your Mac. From your
+phone (or a tablet, or another computer), you can see which Claude Code
+sessions are waiting for you, answer them, start new ones, and read back
+what happened, all over [Tailscale](https://tailscale.com), the private
+network between your own devices.
+
+### What you can do from the phone
+
+- **See whose turn it is.** Every window on the Mac is listed, Claude Code
+  sessions waiting for you first, then the ones still working, then plain
+  shells, each with its last few lines of output. When a session finishes
+  while the page is open, a notice says so.
+- **Answer in a real terminal.** Tap a window to open it. A row of keys covers
+  what a phone keyboard lacks: **Use suggestion** (sends Claude Code's dimmed
+  suggested prompt in one tap), Esc, Shift-Tab (Claude Code's modes), Tab,
+  Ctrl, ^C, the arrows, Enter, and 1, 2, and 3 for Claude Code's menus.
+- **Type or dictate.** The message box at the bottom works with the
+  keyboard's microphone. A message with several lines goes in as one.
+- **Start something new.** Pick Claude Code, its last session, or a shell, then
+  a herdr space or another project. The new window also shows up, minimized,
+  in the bottom bar of Corral on the Mac, so it is there when you sit down.
+- **Read back.** History shows the window's scrollback as plain text you can
+  select, or copy in one tap.
+- **Restore** the windows from before a Mac restart.
 
 How it compares with Claude Code's Remote Control (`/rc`): Remote Control
-reaches the Claude Code sessions you turned it on for, through Anthropic's
-servers. Corral shows every window on the Mac without turning anything on
+needs no setup beyond signing in, and reaches the Claude Code sessions you
+turned it on for, through Anthropic's servers. Corral needs Tailscale on both
+devices, and then shows every window on the Mac without turning anything on
 (Claude Code and plain shells alike), lets you start new ones in any project,
 and reaches your Mac over your tailnet, encrypted end to end.
+
+### Set it up
+
+1. **Install Tailscale** on the Mac and on your phone from
+   <https://tailscale.com/download>, and sign in to the same account on both.
+2. **Turn on HTTPS for your tailnet.** In the Tailscale admin console, open
+   the **DNS** page, make sure **MagicDNS** is on, and under **HTTPS
+   Certificates** choose **Enable HTTPS**. Tailscale's certificates are
+   recorded in a public log that includes the machine's name, so rename the
+   Mac in Tailscale first if its name says anything private.
+3. **Have Tailscale forward to Corral.** With Corral running, run this once
+   on the Mac:
+
+   ```sh
+   npm run tailscale   # tailscale serve --bg --https=8443 http://127.0.0.1:8777
+   ```
+
+   If HTTPS is not on yet, the command prints a link to turn it on. The
+   setting survives restarts. Port 8443 leaves 443 free for anything else you
+   serve.
+4. **Open it on the phone.** On the Mac, Corral's **On your phone** button
+   copies the address, which looks like
+   `https://<this Mac>.<your tailnet>.ts.net:8443/m`. Send it to your phone and
+   open it. (Corral's log also prints it, on the line that starts with
+   `tailnet access:`.)
+5. **Keep it on your Home Screen.** In Safari, use the Share button and
+   choose **Add to Home Screen**. Corral then opens full screen, like an app.
+
+Another computer on your tailnet can open the same address without the `/m`
+to get the full desktop page. A phone that opens `/` is sent to `/m`, and
+`/?desktop` keeps the desktop page.
+
+### Who can get in
+
+Only you. Corral itself still listens on `127.0.0.1` only; Tailscale delivers
+requests from your devices to that address. A request through Tailscale must
+name this Mac's tailnet address and carry an allowed Tailscale login, which
+Tailscale adds to each request and which a device cannot fake. By default the
+only allowed login is the one that owns the Mac in Tailscale; set
+`CORRAL_TAILSCALE_USERS` to change that. A public Tailscale Funnel request
+carries no login, so it gets nothing.
+
+### Turn it off
+
+```sh
+tailscale serve --https=8443 off
+```
+
+Or start Corral with `CORRAL_TAILSCALE=0`, which refuses every request that
+comes through Tailscale.
 
 ## Security
 

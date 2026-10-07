@@ -127,6 +127,22 @@
   td:first-child code { white-space:nowrap; }
   .tablewrap { overflow-x:auto; }
 
+  /* Remote control: phone screenshots and setup steps */
+  .phones { display:grid; grid-template-columns:repeat(4, 1fr); gap:22px; margin-top:44px; }
+  .phones figure { margin:0; }
+  .phones img { display:block; width:100%; border-radius:26px; border:6px solid #0b0a10;
+                box-shadow:0 0 0 1px var(--rail), 0 18px 40px rgba(8,6,14,.55); }
+  .phones figcaption { margin-top:12px; font-size:14.5px; color:var(--muted); line-height:1.45; }
+  .phones figcaption b { color:var(--text); font-family:var(--brand); }
+  .steps { counter-reset:step; list-style:none; margin:28px 0 0; padding:0; display:grid; gap:14px; }
+  .steps > li { counter-increment:step; position:relative; padding:18px 22px 18px 64px; background:var(--panel);
+                border:1px solid var(--rail); border-radius:14px; color:#cfc8dc; font-size:16px; min-width:0; }
+  .steps > li::before { content:counter(step); position:absolute; left:20px; top:16px; width:30px; height:30px;
+                        border-radius:50%; background:var(--fence); color:#fff; font:700 15px/30px var(--brand); text-align:center; }
+  .steps b { color:var(--text); }
+  .steps pre { margin-top:12px; }
+  .steps .fine { font-size:14px; color:var(--muted); margin-top:8px; }
+
   /* Security and limits */
   .grid2 { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:18px; margin-top:36px; }
   .card { background:var(--panel); border:1px solid var(--rail); border-radius:14px; padding:22px 24px; }
@@ -147,6 +163,7 @@
     .link.both span::before { left:-4px; top:-1px; border-right:5px solid transparent; border-left:5px solid transparent;
                         border-bottom:8px solid var(--fence); border-top:0; }
     .cols { grid-template-columns:1fr; }
+    .phones { grid-template-columns:repeat(2, 1fr); }
     section { padding:64px 0; }
   }
   @media (max-width:560px) {
@@ -154,6 +171,10 @@
     .top nav { display:none; }
     body { font-size:16px; }
     .shot { margin-top:40px; }
+    .phones { gap:14px; }
+    .phones img { border-width:4px; border-radius:18px; }
+    .steps > li { padding:16px 16px 16px 54px; }
+    .steps > li::before { left:14px; }
   }
 </style>
 </head>
@@ -167,7 +188,7 @@
       <nav aria-label="Sections">
         <a href="#why">Why</a>
         <a href="#features">Features</a>
-        <a href="#phone">Phone</a>
+        <a href="#phone">Remote control</a>
         <a href="#how">How it works</a>
         <a href="#install">Install</a>
         <a href="https://github.com/ismayc/corral">GitHub</a>
@@ -332,33 +353,73 @@
 
   <section id="phone">
     <div class="wrap">
-      <p class="eyebrow">On your phone</p>
-      <h2>Keep working from any of your devices</h2>
-      <p class="lede">With <a href="https://tailscale.com">Tailscale</a>, Corral opens on your phone, tablet, or another
-        computer, and reaches your Mac over your own tailnet.</p>
+      <p class="eyebrow">Remote control</p>
+      <h2>Answer Claude from your phone</h2>
+      <p class="lede">With <a href="https://tailscale.com">Tailscale</a>, the private network between your own devices,
+        Corral becomes a remote control for every terminal on your Mac. See which Claude Code sessions are waiting for
+        you, answer them, start new ones, and read back what happened, from your phone, a tablet, or another computer.</p>
 
-      <div class="feat">
-        <div class="copy">
-          <h3>Every window, sorted by whose turn it is</h3>
-          <p>The phone page lists each window on the Mac: Claude Code waiting for you first, then the ones still working,
-            then plain shells, each with its last few lines.</p>
-          <ul>
-            <li>Tap a window for a full terminal, with the keys a phone lacks: Esc, Shift-Tab, Ctrl, arrows, and the
-              numbers for Claude Code's menus. Use suggestion sends Claude Code's suggested next prompt in one tap.</li>
-            <li>Type or dictate in the message box; a multi-line message goes in as one.</li>
-            <li>History shows the scrollback as text you can select and copy.</li>
-            <li>Start Claude Code in any project; it also waits, minimized, in the bottom bar on the Mac. Or restore
-              windows after a restart.</li>
-            <li>Add it to your Home Screen and it opens like an app.</li>
-          </ul>
-          <p>Compared with Claude Code's Remote Control, it shows every window on the Mac without turning anything on,
-            covers plain shells too, and reaches your Mac over your tailnet, encrypted end to end.</p>
-        </div>
-        <div class="frame narrow">
-          <img src="img/phone.jpg" width="585" height="1025" loading="lazy"
-               alt="Corral's phone page: dashboard and notes under Waiting for you, api-server under Working, and a blog shell, each with its last lines of output, and a Start something button.">
-        </div>
+      <div class="phones">
+        <figure>
+          <img src="img/phone-list.jpg" width="585" height="1266" loading="lazy"
+               alt="Corral's phone page listing four windows: notes and dashboard under Waiting for you, api-server under Working, and a blog shell, each with its last lines of output.">
+          <figcaption><b>Whose turn it is.</b> Sessions waiting for you come first, then the ones working, then shells,
+            each with its last lines.</figcaption>
+        </figure>
+        <figure>
+          <img src="img/phone-terminal.jpg" width="585" height="1266" loading="lazy"
+               alt="The notes window on a phone: Claude Code's reply, its input box with a dimmed suggested prompt, and a row of keys starting with Use suggestion, Type, Esc, Shift-Tab, and Tab, above a message box and a Send button.">
+          <figcaption><b>A real terminal.</b> Use suggestion sends Claude's suggested prompt in one tap; the keys cover
+            what a phone keyboard lacks.</figcaption>
+        </figure>
+        <figure>
+          <img src="img/phone-start.jpg" width="585" height="1266" loading="lazy"
+               alt="The Start in a project sheet: a choice of Claude Code, Last session, or Shell, a search box, and the list of herdr spaces with their status dots.">
+          <figcaption><b>Start something.</b> Claude Code, its last session, or a shell, in any space. It also waits in
+            the Mac's bottom bar.</figcaption>
+        </figure>
+        <figure>
+          <img src="img/phone-history.jpg" width="585" height="1266" loading="lazy"
+               alt="The History view of the notes window: its scrollback as plain text with a Copy all button.">
+          <figcaption><b>History.</b> The scrollback as plain text to select, or copy in one tap.</figcaption>
+        </figure>
       </div>
+
+      <div class="grid2">
+        <div class="card"><h3>Keys a phone lacks</h3><p>Use suggestion, Esc, Shift-Tab for Claude Code's modes, Tab, Ctrl,
+          ^C, the arrows, Enter, and 1, 2, and 3 for Claude Code's menus.</p></div>
+        <div class="card"><h3>Type or dictate</h3><p>The message box works with the keyboard's microphone, and a message
+          with several lines goes in as one.</p></div>
+        <div class="card"><h3>Notices</h3><p>When a session finishes while the page is open, a notice says it is your
+          turn, and the tab's title counts the sessions waiting.</p></div>
+        <div class="card"><h3>Like an app</h3><p>Add it to your Home Screen and it opens full screen. Restore brings back
+          the windows from before a Mac restart.</p></div>
+      </div>
+      <p class="side-note">Compared with Claude Code's Remote Control (<code>/rc</code>): Remote Control needs no setup
+        beyond signing in, and reaches the sessions you turned it on for, through Anthropic's servers. Corral needs
+        Tailscale on both devices, and then shows every window on the Mac without turning anything on (Claude Code and
+        plain shells alike), lets you start new ones in any project, and reaches your Mac over your tailnet, encrypted
+        end to end.</p>
+
+      <h3 style="margin-top:56px">Set it up</h3>
+      <ol class="steps">
+        <li><b>Install Tailscale</b> on the Mac and on your phone from
+          <a href="https://tailscale.com/download">tailscale.com/download</a>, and sign in to the same account on both.</li>
+        <li><b>Turn on HTTPS for your tailnet.</b> In the Tailscale admin console, open the <b>DNS</b> page, make sure
+          <b>MagicDNS</b> is on, and under <b>HTTPS Certificates</b> choose <b>Enable HTTPS</b>.
+          <p class="fine">Tailscale's certificates are recorded in a public log that includes the machine's name, so
+            rename the Mac in Tailscale first if its name says anything private.</p></li>
+        <li><b>Have Tailscale forward to Corral.</b> With Corral running, run this once on the Mac. If HTTPS is not on
+          yet, it prints a link to turn it on.
+          <pre><span class="p">$</span> npm run tailscale   <span class="c"># tailscale serve --bg --https=8443 http://127.0.0.1:8777</span></pre></li>
+        <li><b>Open it on the phone.</b> Corral's <b>On your phone</b> button copies the address, which looks like
+          <code style="overflow-wrap:anywhere">https://&lt;this Mac&gt;.&lt;your tailnet&gt;.ts.net:8443/m</code>.
+          Send it to your phone and open it.</li>
+        <li><b>Keep it on your Home Screen.</b> In Safari, use the Share button and choose <b>Add to Home Screen</b>.</li>
+      </ol>
+      <p class="side-note">Only you get in. Corral still listens on 127.0.0.1 only; each request through Tailscale must
+        carry your Tailscale login, which Tailscale adds and a device cannot fake (details under
+        <a href="#security">Security</a>). To turn it off, run <code>tailscale serve --https=8443 off</code>.</p>
     </div>
   </section>
 
@@ -421,11 +482,8 @@
           </tbody>
         </table>
       </div>
-      <h3 style="margin-top:40px">On your phone and other devices</h3>
-      <p style="overflow-wrap:anywhere">Have Tailscale forward to Corral from inside your tailnet, then open
-        <code>https://&lt;this Mac&gt;.&lt;your tailnet&gt;.ts.net:8443/m</code> on any device signed in to it. The desktop
-        page's <b>On your phone</b> button copies the link.</p>
-      <pre><span class="p">$</span> npm run tailscale   <span class="c"># tailscale serve --bg --https=8443 http://127.0.0.1:8777</span></pre>
+      <p style="margin-top:28px">To use Corral from your phone or another computer, follow
+        <a href="#phone">the remote control setup</a>.</p>
     </div>
   </section>
 
