@@ -96,7 +96,7 @@
   .banner { background:var(--raise); border:1px solid var(--fence); border-radius:14px; padding:12px 14px; margin-bottom:12px;
             display:flex; gap:10px; align-items:center; }
   .banner .grow { flex:1; }
-  #fab { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(18px + env(safe-area-inset-bottom));
+  #fab { position:fixed; z-index:5; left:50%; transform:translateX(-50%); bottom:calc(18px + env(safe-area-inset-bottom));
          padding:14px 26px; border-radius:99px; font-size:17px; box-shadow:0 8px 24px #0008; white-space:nowrap; }
 
   /* Sheets: start something new, and notifications */
@@ -128,6 +128,30 @@
   #difflist .d.file { font-weight:700; color:var(--text); background:var(--raise); padding:8px 10px; margin-top:10px;
                       position:sticky; top:0; border-top:1px solid var(--rail); border-bottom:1px solid var(--rail); }
   #difflist .note { color:var(--muted); padding:30px 16px; text-align:center; font:15px -apple-system, sans-serif; }
+  /* Card controls: Stop on a working window, and ⋯ for the window's own menu */
+  .card { -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
+  .card .top .more { flex:none; padding:0 10px; height:28px; line-height:26px; border-radius:8px; font-size:17px; color:var(--muted); }
+  .card .tags { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center; }
+  .card .tag { font-size:12px; color:var(--muted); border:1px solid var(--rail); border-radius:99px; padding:2px 9px; }
+  .card .tags button { font-size:14px; padding:6px 12px; }
+  .card .tags button.stop { border-color:var(--working); color:var(--working); }
+  /* Quick replies: tap one to put it in the message box */
+  #quick { display:flex; gap:6px; overflow-x:auto; padding:6px 8px 0; background:var(--panel); flex:none; scrollbar-width:none; }
+  #quick::-webkit-scrollbar { display:none; }
+  #quick button { flex:none; font-size:14px; padding:6px 12px; border-radius:99px; background:var(--ground); }
+  #quick button.edit { color:var(--muted); border-style:dashed; }
+  /* The window menu, the last reply, and the quick reply editor reuse the sheet */
+  .sheetbody { overflow-y:auto; padding:0 16px 18px; }
+  .sheetbody .menu button { display:block; width:100%; text-align:left; margin-bottom:8px; padding:12px 14px; font-size:16px; }
+  .sheetbody .menu button.danger { border-color:var(--blocked); color:#ffb4ad; }
+  .sheetbody p { color:var(--muted); margin:0 0 12px; font-size:15px; }
+  .sheetbody input, .sheetbody textarea { width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--rail);
+    background:var(--ground); color:var(--text); font:16px/1.4 -apple-system, BlinkMacSystemFont, sans-serif; margin-bottom:10px; }
+  .sheetbody .reply { white-space:pre-wrap; word-break:break-word; font-size:15px; line-height:1.5; background:var(--ground);
+    border:1px solid var(--rail); border-radius:10px; padding:12px; margin-bottom:12px; -webkit-user-select:text; user-select:text; }
+  .sheetbody .btns { display:flex; gap:8px; flex-wrap:wrap; }
+  #difflist .files button.commit { margin-top:10px; width:auto; padding:10px 16px; border-radius:10px; background:var(--fence);
+                                   color:#fff; font:600 15px -apple-system, BlinkMacSystemFont, sans-serif; }
   #photo { padding:9px 11px; border-radius:18px; flex:none; display:inline-flex; }
   #photo svg { width:22px; height:22px; }
   .seg { display:flex; margin:0 16px 10px; background:var(--ground); border:1px solid var(--rail); border-radius:10px; padding:3px; }
@@ -196,6 +220,7 @@
   <div id="termwrap"><div id="term" style="height:100%"></div><span id="conn" hidden>Reconnecting&hellip;</span></div>
   <div id="askbar" hidden></div>
   <div id="keys"></div>
+  <div id="quick"></div>
   <div id="compose">
     <button id="photo" aria-label="Send a photo to Claude"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
     <input id="photofile" type="file" accept="image/*" multiple hidden>
@@ -221,6 +246,13 @@
   </header>
   <div id="difflist"></div>
 </section>
+
+<div id="gen" class="sheet" hidden>
+  <div class="panel">
+    <div class="head"><h2 id="gentitle"></h2><button class="iconbtn" id="genx" aria-label="Close">&times;</button></div>
+    <div class="sheetbody" id="genbody"></div>
+  </div>
+</div>
 
 <div id="notify" class="sheet" hidden>
   <div class="panel">
@@ -310,7 +342,7 @@ function askBlock(w, showText = true) {
     for (const b of btn.parentNode.children) b.disabled = true;
     try {
       const r = await fetch(`/api/sessions/${encodeURIComponent(w.id)}/answer`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ choice }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ choice, key: p.key }),
       });
       const j = await r.json().catch(() => ({}));
       toast(r.ok ? (choice === 'deny' ? `Denied. ${w.label} will ask what to do instead.` : `Answered: ${btn.textContent}`) : j.error || 'Could not answer.');
@@ -339,6 +371,120 @@ function renderAskbar(w) {
   requestAnimationFrame(() => current?.fit.fit());
 }
 
+// How long Claude has been working, from the session file's statusUpdatedAt.
+function took(since) {
+  const m = Math.max(0, Math.round((Date.now() - since) / 60000));
+  return m < 1 ? 'just started' : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+// The terminal's subtitle: status, mode, and folder.
+const termSub = (w) => [statusOf(w).text, w.claude?.mode ? modeName(w.claude.mode) : null, home(w.cwd)].filter(Boolean).join(' · ');
+const modeName = (m) => (/mode$|edits$/.test(m) ? m : `${m} mode`).replace(/^./, (c) => c.toUpperCase());
+
+// Stop (Esc) and next mode (Shift-Tab), sent without opening the window.
+async function cardKey(w, key) {
+  try {
+    const r = await fetch(`/api/sessions/${encodeURIComponent(w.id)}/key`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }),
+    });
+    const j = await r.json().catch(() => ({}));
+    toast(r.ok ? (key === 'stop' ? `Stopped ${w.label}. It will ask what to do instead.` : `Switched ${w.label} to the next mode.`) : j.error || 'Could not do that.');
+  } catch { toast('Could not reach the Mac.'); }
+  setTimeout(refresh, 700);
+}
+
+// A general sheet for the window menu, the last reply, renaming, and the quick reply editor.
+function sheet(title, ...body) {
+  $('#gentitle').textContent = title;
+  $('#genbody').replaceChildren(...body);
+  $('#gen').hidden = false;
+}
+const closeSheet = () => { $('#gen').hidden = true; };
+$('#genx').onclick = closeSheet;
+$('#gen').onclick = (e) => { if (e.target.id === 'gen') closeSheet(); };
+
+// The ⋯ menu on a card.
+function windowMenu(w) {
+  const item = (label, fn, cls) => h('button', { class: cls || '', onclick: fn }, label);
+  const claude = Boolean(w.claude);
+  sheet(w.label, h('div', { class: 'menu' },
+    item('Open the window', () => { closeSheet(); openTerm(w); }),
+    claude ? item('Last reply', () => showLastReply(w)) : null,
+    claude && w.claude.status !== 'waiting' ? item(`Next mode${w.claude.mode ? ` (now ${modeName(w.claude.mode)})` : ''}`, () => { closeSheet(); cardKey(w, 'mode'); }) : null,
+    item(w.muted ? 'Notify me about this window again' : 'Mute notifications for this window', () => setMuted(w, !w.muted)),
+    item('Rename', () => renameSheet(w)),
+    item('Close the window', () => closeSheetFor(w), 'danger')));
+}
+
+async function setMuted(w, muted) {
+  closeSheet();
+  try {
+    await api(`/api/sessions/${encodeURIComponent(w.id)}/mute`, { method: 'POST', body: { muted } });
+    toast(muted ? `No notifications for ${w.label} until you turn them back on.` : `Notifications for ${w.label} are back on.`);
+  } catch { toast('Could not change that.'); }
+  refresh();
+}
+
+function renameSheet(w) {
+  const input = h('input', { value: w.label, maxlength: '60', autocapitalize: 'off', enterkeyhint: 'done' });
+  const save = async () => {
+    try {
+      const r = await api(`/api/sessions/${encodeURIComponent(w.id)}/rename`, { method: 'POST', body: { label: input.value } });
+      closeSheet();
+      toast(`Renamed to ${r.label}.`);
+      if (current?.info.id === w.id) { current.info.label = r.label; $('#ttitle').textContent = r.label; }
+    } catch { toast('Use a name of 1 to 60 characters.'); }
+    refresh();
+  };
+  input.onkeydown = (e) => { if (e.key === 'Enter') save(); };
+  sheet('Rename the window', input, h('div', { class: 'btns' }, h('button', { class: 'primary', onclick: save }, 'Save')));
+  input.focus();
+  input.select();
+}
+
+function closeSheetFor(w) {
+  sheet(`Close ${w.label}?`,
+    h('p', {}, w.claude ? 'This ends the window and the Claude Code session running in it, on the Mac too. The conversation stays on disk.' : 'This ends the window and its shell, on the Mac too.'),
+    h('div', { class: 'btns' },
+      h('button', { class: 'primary', style: 'background:var(--blocked);border-color:var(--blocked)', onclick: async () => {
+        closeSheet();
+        try { await api(`/api/sessions/${encodeURIComponent(w.id)}`, { method: 'DELETE' }); toast(`Closed ${w.label}.`); } catch { toast('Could not close it.'); }
+        if (current?.info.id === w.id) history.back();
+        refresh();
+      } }, 'Close it'),
+      h('button', { onclick: closeSheet }, 'Keep it')));
+}
+
+// Claude's last reply, read from its transcript on the Mac.
+async function showLastReply(w) {
+  sheet(`${w.label}: last reply`, h('p', {}, 'Loading…'));
+  let r;
+  try { r = await api(`/api/sessions/${encodeURIComponent(w.id)}/last`); } catch { return sheet(`${w.label}: last reply`, h('p', {}, 'Could not read it.')); }
+  sheet(`${w.label}: last reply`,
+    r.text ? h('div', { class: 'reply' }, r.text) : h('p', {}, 'Claude has not replied since your last message.'),
+    h('div', { class: 'btns' }, h('button', { class: 'primary', onclick: () => { closeSheet(); openTerm(w); } }, 'Open the window')));
+}
+
+// Press and hold a card to read Claude's last reply without opening the window.
+let pressTimer = null, pressStart = null, pressedAt = 0;
+const longPressed = () => Date.now() - pressedAt < 700;
+$('#list').addEventListener('pointerdown', (e) => {
+  const card = e.target.closest('.card');
+  if (!card || e.target.closest('button')) return;
+  pressStart = { x: e.clientX, y: e.clientY };
+  clearTimeout(pressTimer);
+  pressTimer = setTimeout(() => {
+    const w = windows.find((x) => x.id === card.dataset.id);
+    if (!w?.claude) return;
+    pressedAt = Date.now();
+    showLastReply(w);
+  }, 550);
+});
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('#list').addEventListener(ev, () => clearTimeout(pressTimer));
+$('#list').addEventListener('pointermove', (e) => {
+  if (pressStart && Math.hypot(e.clientX - pressStart.x, e.clientY - pressStart.y) > 10) clearTimeout(pressTimer);
+});
+$('#list').addEventListener('contextmenu', (e) => { if (e.target.closest('.card')) e.preventDefault(); });
+
 // ---- Home: the list of windows ----
 let windows = [];
 let restore = null;
@@ -363,7 +509,7 @@ async function refresh() {
   document.title = waiting ? `(${waiting}) Corral` : 'Corral';
   if (current) {
     const w = windows.find((x) => x.id === current.info.id);
-    if (w) $('#tsub').textContent = `${statusOf(w).text} · ${home(w.cwd)}`;
+    if (w) $('#tsub').textContent = termSub(w);
     renderAskbar(w);
   }
   if (!$('#home').hidden) renderList();
@@ -378,8 +524,7 @@ function renderList() {
       h('button', { class: 'primary', onclick: doRestore }, 'Restore')));
   }
   if (!windows.length) kids.push(h('div', { class: 'empty' }, 'Nothing is running on the Mac. Start something below.'));
-  const sorted = [...windows].sort((a, b) => statusOf(a).rank - statusOf(b).rank
-    || Number(Boolean(statusOf(b).first)) - Number(Boolean(statusOf(a).first)) || (b.activity || 0) - (a.activity || 0));
+  const sorted = listOrder();
   const count = [0, 0, 0];
   for (const w of sorted) count[statusOf(w).rank]++;
   let lastRank = -1;
@@ -389,10 +534,21 @@ function renderList() {
       kids.push(h('div', { class: 'section', id: `group-${st.rank}` }, GROUPS[st.rank].title, h('span', { class: 'n' }, String(count[st.rank]))));
       lastRank = st.rank;
     }
-    kids.push(h('div', { class: `card ${st.cls === 'need' ? 'need' : ''}`, role: 'button', tabindex: '0', onclick: () => openTerm(w),
+    const stop = (e) => e.stopPropagation();
+    const busy = w.claude?.status === 'busy';
+    const tags = [
+      busy ? h('button', { class: 'stop', onclick: (e) => { stop(e); cardKey(w, 'stop'); } }, 'Stop') : null,
+      w.claude?.mode ? h('span', { class: 'tag' }, modeName(w.claude.mode)) : null,
+      w.muted ? h('span', { class: 'tag' }, 'Muted') : null,
+    ].filter(Boolean);
+    kids.push(h('div', { class: `card ${st.cls === 'need' ? 'need' : ''}`, role: 'button', tabindex: '0', 'data-id': w.id,
+      onclick: (e) => { if (!longPressed(e)) openTerm(w); },
       onkeydown: (e) => { if (e.key === 'Enter' && e.target === e.currentTarget) openTerm(w); } },
-      h('div', { class: 'top' }, h('span', { class: 'name' }, w.label), h('span', { class: `pill ${st.cls}` }, st.text)),
+      h('div', { class: 'top' }, h('span', { class: 'name' }, w.label),
+        h('span', { class: `pill ${st.cls}` }, busy && w.claude.since ? `${st.text} · ${took(w.claude.since)}` : st.text),
+        h('button', { class: 'more', 'aria-label': `More for ${w.label}`, onclick: (e) => { stop(e); windowMenu(w); } }, '⋯')),
       h('div', { class: 'where' }, `${home(w.cwd)}${w.activity ? ` · ${ago(w.activity)}` : ''}`),
+      tags.length ? h('div', { class: 'tags' }, ...tags) : null,
       w.prompt ? askBlock(w) : null));
   }
   const spacer = h('div', { 'aria-hidden': 'true' });
@@ -413,6 +569,10 @@ function renderList() {
   jump.hidden = !windows.length;
   markGroup();
 }
+
+// The order of the list, which swiping in a terminal also follows.
+const listOrder = () => [...windows].sort((a, b) => statusOf(a).rank - statusOf(b).rank
+  || Number(Boolean(statusOf(b).first)) - Number(Boolean(statusOf(a).first)) || (b.activity || 0) - (a.activity || 0));
 
 // The three groups, in list order.
 const GROUPS = [
@@ -539,12 +699,12 @@ let ctrlArmed = false;
 
 function sendRaw(d) { if (current?.ws?.readyState === 1) current.ws.send(JSON.stringify({ t: 'in', d })); }
 
-function openTerm(info) {
+function openTerm(info, swiped) {
   closeTerm();
   $('#home').hidden = true; $('#termview').hidden = false;
   $('#ttitle').textContent = info.label;
   const w = windows.find((x) => x.id === info.id) || info;
-  $('#tsub').textContent = `${statusOf(w).text} · ${home(info.cwd)}`;
+  $('#tsub').textContent = termSub(w);
   askShown = null;
   renderAskbar(w);
   const term = new Terminal({ fontFamily: 'Menlo, Monaco, ui-monospace, monospace', fontSize, cursorBlink: false,
@@ -555,7 +715,7 @@ function openTerm(info) {
   // Tapping the terminal should not pop up the keyboard; typing goes through the box below, or the Type key.
   term.textarea.setAttribute('inputmode', 'none');
   current = { info, term, fit, ws: null, alive: true };
-  history.pushState({ term: info.id }, '');
+  if (swiped) history.replaceState({ term: info.id }, ''); else history.pushState({ term: info.id }, '');
   fit.fit();
   term.onData((d) => {
     if (ctrlArmed && d.length === 1) { d = String.fromCharCode(d.toUpperCase().charCodeAt(0) & 31); setCtrl(false); }
@@ -773,6 +933,17 @@ async function showChanges() {
     const name = f.path.includes(' -> ') ? f.path.split(' -> ')[1] : f.path;
     return h('button', { onclick: () => anchors.get(name)?.scrollIntoView({ block: 'start' }) }, h('b', {}, code), h('span', {}, name));
   }));
+  // After reading the diff, hand the commit to Claude in this window.
+  const win = windows.find((x) => x.id === current?.info.id);
+  if (win?.claude) {
+    files.append(h('button', { class: 'primary commit', onclick: () => {
+      if (!current) return;
+      current.term.paste('Commit these changes.');
+      setTimeout(() => sendRaw('\r'), 80);
+      history.back();
+      toast(`Asked ${current.info.label} to commit.`);
+    } }, 'Ask Claude to commit these'));
+  }
   list.replaceChildren(files, ...lines, ...(r.truncated ? [h('div', { class: 'note' }, 'The diff is long, so the rest is cut off here.')] : []));
   list.scrollTop = 0;
 }
@@ -794,23 +965,27 @@ const keyBytes = (b64) => Uint8Array.from(atob(b64.replace(/-/g, '+').replace(/_
 async function renderNotify() {
   const body = $('#notifybody');
   const p = (text, cls) => h('p', { class: cls || '' }, text);
-  if (!pushable || !isSecureContext) {
-    const iphone = /iPhone|iPad/.test(navigator.userAgent);
-    return body.replaceChildren(
-      p(iphone && !standalone ? 'On an iPhone, notifications work only for Corral opened from the Home Screen.' : 'This browser cannot get notifications from Corral.', 'state'),
-      ...(iphone && !standalone ? [h('ol', {}, h('li', {}, 'Tap the Share button in Safari.'), h('li', {}, 'Choose Add to Home Screen, then Add.'),
-        h('li', {}, 'Open Corral from its new Home Screen icon and come back here.'))] : []));
-  }
-  const [info, reg] = await Promise.all([api('/api/push').catch(() => null), navigator.serviceWorker.ready]);
-  const sub = await reg.pushManager.getSubscription();
+  const info = await api('/api/push').catch(() => null);
   if (!info) return body.replaceChildren(p('Could not reach the Mac.', 'state'));
-  const on = Boolean(sub) && Notification.permission === 'granted';
   const pref = (key, label, help) => {
     const box = h('input', { type: 'checkbox' });
     box.checked = Boolean(info.prefs[key]);
     box.onchange = () => api('/api/push/prefs', { method: 'POST', body: { [key]: box.checked } }).catch(() => toast('Could not save that.'));
     return h('label', { class: 'row' }, h('span', {}, label, h('small', {}, help)), box);
   };
+  // Not a notification setting, but it decides whether the Mac is there to send one.
+  const mac = [h('div', { class: 'section', style: 'margin:18px -16px 0' }, 'On the Mac'),
+    pref('awake', 'Keep the Mac awake while Claude works', 'Stops idle sleep while any window is working or waiting on a prompt. Closing the lid still sleeps.')];
+  if (!pushable || !isSecureContext) {
+    const iphone = /iPhone|iPad/.test(navigator.userAgent);
+    return body.replaceChildren(
+      p(iphone && !standalone ? 'On an iPhone, notifications work only for Corral opened from the Home Screen.' : 'This browser cannot get notifications from Corral.', 'state'),
+      ...(iphone && !standalone ? [h('ol', {}, h('li', {}, 'Tap the Share button in Safari.'), h('li', {}, 'Choose Add to Home Screen, then Add.'),
+        h('li', {}, 'Open Corral from its new Home Screen icon and come back here.'))] : []), ...mac);
+  }
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  const on = Boolean(sub) && Notification.permission === 'granted';
   const kids = [];
   if (Notification.permission === 'denied') {
     kids.push(p('Notifications are blocked for Corral. Allow them for Corral in the phone\'s Settings app, under Notifications, then come back.', 'state'));
@@ -827,7 +1002,7 @@ async function renderNotify() {
           .then(() => toast('Sent. It should arrive in a few seconds.')).catch(() => toast('The test did not go through.')) }, 'Send a test'),
         h('button', { onclick: disablePush }, 'Turn off on this device')));
   }
-  kids.push(p('A notification names the window and what it is waiting for. It travels encrypted, so the push service cannot read it.'));
+  kids.push(p('A notification names the window and what it is waiting for. It travels encrypted, so the push service cannot read it. To silence one window, use its ⋯ menu.'), ...mac);
   body.replaceChildren(...kids);
 }
 async function enablePush() {
@@ -858,6 +1033,50 @@ async function openById(id) {
   const w = windows.find((x) => x.id === id);
   if (w) openTerm(w); else toast('That window is no longer open.');
 }
+
+// ---- Quick replies: tap one to put it in the message box, then Send ----
+// Kept on this device. Tapping fills the box rather than sending, so a slip of the finger sends nothing.
+const QUICK_DEFAULT = ['Continue', 'Yes, go ahead', 'Run the tests', 'Commit and push', '/clear'];
+let quick = load('corral.m.quick', QUICK_DEFAULT);
+function renderQuick() {
+  $('#quick').replaceChildren(...quick.map((q) => h('button', {
+    onpointerdown: (e) => e.preventDefault(),
+    onclick: () => { msg.value = msg.value ? `${msg.value} ${q}` : q; grow(); },
+  }, q)), h('button', { class: 'edit', onclick: editQuick }, 'Edit'));
+}
+function editQuick() {
+  const ta = h('textarea', { rows: '7' });
+  ta.value = quick.join('\n');
+  sheet('Quick replies', h('p', {}, 'One per line. Tapping one puts it in the message box; Send sends it.'), ta,
+    h('div', { class: 'btns' },
+      h('button', { class: 'primary', onclick: () => {
+        quick = ta.value.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 20);
+        store('corral.m.quick', quick); renderQuick(); closeSheet();
+      } }, 'Save'),
+      h('button', { onclick: () => { ta.value = QUICK_DEFAULT.join('\n'); } }, 'Reset')));
+}
+renderQuick();
+
+// ---- Swipe left or right in a terminal to go to the next or previous window in the list ----
+let swipe = null;
+$('#termview').addEventListener('touchstart', (e) => {
+  // The key rows and the message box scroll or select sideways themselves.
+  if (e.touches.length !== 1 || e.target.closest('#keys, #quick, #compose, #askbar')) { swipe = null; return; }
+  swipe = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
+}, { passive: true });
+$('#termview').addEventListener('touchend', (e) => {
+  if (!swipe || !current) return;
+  const dx = e.changedTouches[0].clientX - swipe.x, dy = e.changedTouches[0].clientY - swipe.y;
+  const quickEnough = Date.now() - swipe.t < 700;
+  swipe = null;
+  if (!quickEnough || Math.abs(dx) < 80 || Math.abs(dy) > 50) return;
+  const order = listOrder();
+  const i = order.findIndex((w) => w.id === current.info.id);
+  if (i < 0 || order.length < 2) return;
+  const next = order[(i + (dx < 0 ? 1 : -1) + order.length) % order.length];
+  openTerm(next, true);
+  toast(`${next.label} (${order.indexOf(next) + 1} of ${order.length})`);
+}, { passive: true });
 
 // ---- Start ----
 setVh();

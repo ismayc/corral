@@ -387,6 +387,7 @@ function claudeUnder(rootPid, children) {
       return {
         sessionId: d.sessionId, cwd: d.cwd, status: typeof d.status === 'string' ? d.status : null,
         waitingFor: d.status === 'waiting' && typeof d.waitingFor === 'string' ? d.waitingFor : null,
+        since: Number(d.statusUpdatedAt) || null, // when the status last changed, so "Working · 14m" can be shown
       };
     }
     queue.push(...(children.get(queue[i]) || []));
@@ -422,8 +423,9 @@ function openWindows() {
 }
 
 // What the phone page lists: each open window with its last output time and Claude Code's own status
-// (busy, idle, or shell, from its session file).
-function overview() {
+// (busy, idle, or shell, from its session file). With screens, it also reads each Claude window's screen
+// for its mode line and any permission prompt; the push watcher, which runs every few seconds, does not.
+function overview({ screens = true } = {}) {
   const children = processChildren();
   const panes = new Map();
   if (TMUX) {
@@ -437,13 +439,94 @@ function overview() {
   return [...sessions.values()].sort((a, b) => a.created - b.created).map((s) => {
     const p = panes.get(SESSION_PREFIX + s.id);
     const claude = s.exited ? null : claudeUnder(p ? p.pid : s.pty.pid, children);
+    const screen = screens && claude && s.tmux ? screenLines(s.id) : null;
     return {
       ...publicSession(s),
       activity: p ? p.activity : null,
-      claude: claude ? { status: claude.status, waitingFor: claude.waitingFor } : null,
-      prompt: claude?.waitingFor === 'permission prompt' ? permissionPrompt(s.id) : null,
+      claude: claude ? { status: claude.status, waitingFor: claude.waitingFor, since: claude.since, mode: screen ? screenMode(screen) : null } : null,
+      askKey: claude?.waitingFor === 'permission prompt' ? promptKey(claude) : null,
+      prompt: screen && claude.waitingFor === 'permission prompt' ? withKey(permissionPrompt(s.id, screen), claude) : null,
+      muted: Boolean(push.muted[s.id]),
     };
   });
+}
+
+const withKey = (p, claude) => (p ? { ...p, key: promptKey(claude) } : null);
+
+function screenLines(id) {
+  try { return tmux('capture-pane', '-p', '-t', SESSION_PREFIX + id).split('\n').map((l) => l.trimEnd()); } catch { return null; }
+}
+
+// Claude Code's permission mode, from the line under its input box: "⏵⏵ auto mode on (shift+tab to cycle)",
+// "⏵⏵ accept edits on", "⏸ plan mode on", "⏸ manual mode on". Shift-Tab moves to the next one.
+function screenMode(lines) {
+  const filled = lines.filter((l) => l.trim()).slice(-8); // the mode line sits near the bottom of what is drawn
+  for (let i = filled.length - 1; i >= 0; i--) {
+    const m = filled[i].match(/(?:⏵⏵|⏸)\s+([a-z][a-z ]{2,30}?) on\b/i);
+    if (m) return m[1].replace(/ mode$/, '').toLowerCase();
+  }
+  return null;
+}
+
+// Keys a card can send to a window without opening it. A fixed list; the page never names a key.
+//   stop: Esc, which interrupts Claude while it works. mode: Shift-Tab, Claude Code's next permission mode.
+const CARD_KEYS = { stop: { tmux: 'Escape', when: ['busy'] }, mode: { tmux: 'BTab', when: ['busy', 'idle'] } };
+function sendCardKey(s, name) {
+  const k = CARD_KEYS[name];
+  if (!k) return { status: 400, error: 'unknown key' };
+  const st = windowClaude(s)?.status;
+  if (!k.when.includes(st)) return { status: 409, error: name === 'stop' ? 'Claude is not working in this window' : 'Claude is not ready to change modes' };
+  tmux('send-keys', '-t', SESSION_PREFIX + s.id, k.tmux);
+  return { status: 200, ok: true };
+}
+
+function renameWindow(s, label) {
+  const name = typeof label === 'string' ? label.trim().replace(/\s+/g, ' ') : '';
+  if (!name || name.length > 60) return { status: 400, error: 'a name of 1 to 60 characters' };
+  s.label = name;
+  if (s.tmux) { try { tmux('set-option', '-t', SESSION_PREFIX + s.id, '@corral_label', name); } catch {} }
+  saveBackupSoon();
+  return { status: 200, ok: true, label: name };
+}
+
+// Claude's last reply in a window: every text block it wrote after the last message you typed, read from
+// the end of Claude Code's own transcript (~/.claude/projects/<project>/<conversation>.jsonl).
+function lastReply(s) {
+  const c = windowClaude(s);
+  if (!c) return { status: 409, error: 'Claude Code is not running in this window' };
+  let file = null;
+  try {
+    const projects = path.join(CLAUDE_DIR, 'projects');
+    for (const d of fs.readdirSync(projects)) {
+      const f = path.join(projects, d, `${c.sessionId}.jsonl`);
+      if (fs.existsSync(f)) { file = f; break; }
+    }
+  } catch {}
+  if (!file) return { status: 404, error: 'no transcript yet' };
+  const size = fs.statSync(file).size;
+  const fd = fs.openSync(file, 'r');
+  const buf = Buffer.alloc(Math.min(size, 1024 * 1024));
+  fs.readSync(fd, buf, 0, buf.length, size - buf.length);
+  fs.closeSync(fd);
+  const lines = buf.toString('utf8').split('\n');
+  if (buf.length < size) lines.shift(); // the first line may be cut
+  const texts = [];
+  for (let i = lines.length - 1; i >= 0; i--) {
+    let d;
+    try { d = JSON.parse(lines[i]); } catch { continue; }
+    if (d.isSidechain) continue;
+    const content = d.message?.content;
+    if (d.type === 'user') {
+      const typed = typeof content === 'string' || (Array.isArray(content) && content.some((x) => x?.type === 'text'));
+      if (typed && !d.isMeta) break; // the message you sent; the reply starts after it
+    } else if (d.type === 'assistant' && Array.isArray(content)) {
+      for (const x of [...content].reverse()) if (x?.type === 'text' && x.text.trim()) texts.unshift(x.text.trim());
+    }
+  }
+  if (!texts.length) return { status: 200, text: null };
+  let text = texts.join('\n\n');
+  if (text.length > 6000) text = `…${text.slice(-6000)}`;
+  return { status: 200, text, at: fs.statSync(file).mtimeMs };
 }
 
 // The window's scrollback as plain text, for reading and copying on a phone.
@@ -457,9 +540,9 @@ function windowHistory(id) {
 // Pressing an answer's number picks it, and Esc denies (both checked against Claude Code 2.1.292).
 // Claude Code wraps at spaces, and splits a word only when it is too long for the line (such as a path).
 const rejoin = (a, b) => (/\S{30,}$/.test(a) ? a + b : `${a} ${b}`);
-function permissionPrompt(id) {
-  let lines;
-  try { lines = tmux('capture-pane', '-p', '-t', SESSION_PREFIX + id).split('\n').map((l) => l.trimEnd()); } catch { return null; }
+function permissionPrompt(id, screen) {
+  const lines = screen || screenLines(id);
+  if (!lines) return null;
   const end = lines.findLastIndex((l) => /^\s*Esc to cancel/.test(l));
   if (end < 0) return null;
   // The answers are the last run numbered 1, 2, 3... above "Esc to cancel". A line between two answers
@@ -485,6 +568,11 @@ function permissionPrompt(id) {
   return { text: text.join('\n'), options: options.map((o) => ({ n: o.n, label: o.label.slice(0, 160) })) };
 }
 
+// Names one permission prompt, so an answer meant for it is refused once another prompt has taken its
+// place. Claude Code rewrites statusUpdatedAt each time a prompt opens (and goes busy between two), so the
+// conversation plus that time picks out this prompt however the screen is wrapped.
+const promptKey = (claude) => require('crypto').createHash('sha256').update(`${claude.sessionId}:${claude.since}`).digest('hex').slice(0, 16);
+
 // The Claude Code status of one window, read fresh.
 function windowClaude(s) {
   let root = s.pty.pid;
@@ -494,10 +582,12 @@ function windowClaude(s) {
 
 // Answers a permission prompt with one of its numbered answers, or denies it. The prompt is read again
 // first, so an answer can only go to a prompt that is still open and offers that number.
-function answerPrompt(s, choice) {
-  if (windowClaude(s)?.waitingFor !== 'permission prompt') return { status: 409, error: 'no permission prompt is open in this window' };
+function answerPrompt(s, choice, key) {
+  const c = windowClaude(s);
+  if (c?.waitingFor !== 'permission prompt') return { status: 409, error: 'no permission prompt is open in this window' };
   const p = permissionPrompt(s.id);
   if (!p) return { status: 409, error: 'could not read the prompt on the screen' };
+  if (key !== promptKey(c)) return { status: 409, error: 'Claude is asking something else now. Look again before answering.' };
   if (choice === 'deny') tmux('send-keys', '-t', SESSION_PREFIX + s.id, 'Escape');
   else if (p.options.some((o) => o.n === choice)) tmux('send-keys', '-t', SESSION_PREFIX + s.id, '-l', choice);
   else return { status: 400, error: 'that is not one of the answers' };
@@ -574,7 +664,9 @@ function loadPush() {
     push = { publicKey: b64u(publicKey.export({ type: 'spki', format: 'der' }).subarray(-65)), privateKey: privateKey.export({ format: 'jwk' }), subs: [] };
   }
   push.subs = Array.isArray(push.subs) ? push.subs : [];
-  push.prefs = { turn: true, permission: true, away: true, ...push.prefs };
+  // awake: keep the Mac from sleeping while Claude works or waits on a prompt (see keepAwake below).
+  push.prefs = { turn: true, permission: true, away: true, awake: true, ...push.prefs };
+  push.muted = push.muted && typeof push.muted === 'object' ? push.muted : {}; // window id -> true: no pushes for it
   savePush();
 }
 function savePush() { try { writeJson(PUSH_FILE, push); } catch (e) { console.error('push save failed:', e.message); } }
@@ -639,34 +731,76 @@ function macIdleSeconds() {
   } catch { return Infinity; }
 }
 
-// Watches every window's Claude status and sends a push on the moments worth one: a turn ending
-// (busy to idle) and a permission prompt opening. With "away" on, nothing is sent while the Mac is in use.
+// Keeps the Mac awake while any window has Claude working or stopped at a prompt, so the phone can still
+// reach it and a push can still be sent. `caffeinate -i` blocks idle sleep only: closing the lid or
+// choosing Sleep still sleeps. `-w` ends it if this server dies.
+let caffeinate = null;
+function keepAwake(on) {
+  if (on && !caffeinate) {
+    try {
+      caffeinate = require('child_process').spawn('/usr/bin/caffeinate', ['-i', '-w', String(process.pid)], { stdio: 'ignore' });
+      caffeinate.on('exit', () => { caffeinate = null; });
+    } catch { caffeinate = null; }
+  } else if (!on && caffeinate) {
+    caffeinate.kill();
+    caffeinate = null;
+  }
+}
+
+// Watches every window's Claude status, every few seconds. It sends a push on the moments worth one (a
+// turn ending, busy to idle, and a permission prompt opening) unless the window is muted or, with "away"
+// on, the Mac is in use. It also keeps the Mac awake while anything is working or waiting.
 const AWAY_SECONDS = 120;
 const lastSeen = new Map(); // window id -> 'busy' | 'idle' | 'permission' | ...
 let watchPrimed = false;
-function watchForPush() {
-  if (!push.subs.length) { lastSeen.clear(); watchPrimed = false; return; }
+function watchWindows() {
   let rows;
-  try { rows = overview(); } catch { return; }
+  try { rows = overview({ screens: false }); } catch { return; }
+  const live = rows.filter((w) => !w.exited);
+  keepAwake(push.prefs.awake && live.some((w) => w.claude?.status === 'busy' || w.claude?.status === 'waiting'));
+  let mutedChanged = false;
+  for (const id of Object.keys(push.muted)) if (!live.some((w) => w.id === id)) { delete push.muted[id]; mutedChanged = true; }
+  if (mutedChanged) savePush();
+  if (!push.subs.length) { lastSeen.clear(); watchPrimed = false; return; }
   const events = [];
-  for (const w of rows) {
-    if (w.exited) continue;
+  for (const w of live) {
     const st = !w.claude ? 'shell' : w.claude.waitingFor === 'permission prompt' ? 'permission' : w.claude.status;
     // Before the first look, every window's state is old news; after it, a new window counts as just started.
     const was = lastSeen.has(w.id) ? lastSeen.get(w.id) : watchPrimed ? 'new' : st;
     lastSeen.set(w.id, st);
-    if (was === st) continue;
+    if (was === st || w.muted) continue;
     if (st === 'permission' && push.prefs.permission) {
-      const first = (w.prompt?.text || '').split('\n').find((l) => l.trim()) || 'Claude is asking before it goes on';
-      events.push({ title: `${w.label} needs permission`, body: first.trim().slice(0, 120), tag: w.id, url: `/m?w=${w.id}` });
+      const p = permissionPrompt(w.id);
+      // The tool and what it runs: the first lines of the prompt, without the question itself.
+      const what = (p?.text || '').split('\n').map((l) => l.trim()).filter((l) => l && !/^Do you want to/.test(l) && !/requires approval$/.test(l));
+      events.push({
+        title: `${w.label} needs permission`, body: (what.slice(0, 4).join(' · ') || 'Claude is asking before it goes on').slice(0, 220),
+        tag: w.id, url: `/m?w=${w.id}`,
+        // Allow and Deny on the notification itself, where the phone shows them (not on an iPhone).
+        ...(p ? { answer: { id: w.id, key: w.askKey }, actions: [{ action: 'allow', title: 'Allow' }, { action: 'deny', title: 'Deny' }] } : {}),
+      });
     } else if (was === 'busy' && st === 'idle' && push.prefs.turn) {
       events.push({ title: `${w.label}: your turn`, body: 'Claude finished and is waiting for you.', tag: w.id, url: `/m?w=${w.id}` });
     }
   }
-  for (const id of lastSeen.keys()) if (!rows.some((w) => w.id === id)) lastSeen.delete(id);
+  for (const id of lastSeen.keys()) if (!live.some((w) => w.id === id)) lastSeen.delete(id);
   watchPrimed = true;
   if (!events.length || (push.prefs.away && macIdleSeconds() < AWAY_SECONDS)) return;
   for (const e of events) pushAll(e);
+}
+
+// Photos from the phone are kept 14 days, then deleted.
+const UPLOAD_DAYS = 14;
+function pruneUploads() {
+  let files = [];
+  try { files = fs.readdirSync(UPLOAD_DIR); } catch { return; }
+  const cutoff = Date.now() - UPLOAD_DAYS * 86400000;
+  let n = 0;
+  for (const f of files) {
+    const p = path.join(UPLOAD_DIR, f);
+    try { if (/^photo-/.test(f) && fs.statSync(p).mtimeMs < cutoff) { fs.unlinkSync(p); n++; } } catch {}
+  }
+  if (n) console.log(`deleted ${n} photo(s) older than ${UPLOAD_DAYS} days`);
 }
 
 const PUSH_HOSTS = ['push.apple.com', 'fcm.googleapis.com', 'push.services.mozilla.com', 'notify.windows.com'];
@@ -1020,19 +1154,40 @@ const server = http.createServer(async (req, res) => {
     if (!s || !s.tmux || s.exited) return send(res, 404, { error: 'no such window' });
     try { return send(res, 200, windowHistory(s.id), 'text/plain; charset=utf-8'); } catch { return send(res, 500, { error: 'could not read the window' }); }
   }
-  const act = url.pathname.match(/^\/api\/sessions\/([\w-]+)\/(prompt|answer|changes|upload)$/);
+  const act = url.pathname.match(/^\/api\/sessions\/([\w-]+)\/(prompt|answer|changes|upload|key|rename|mute|last)$/);
   if (act) {
     const s = sessions.get(act[1]);
     if (!s || s.exited) return send(res, 404, { error: 'no such window' });
     if (act[2] === 'prompt' && req.method === 'GET') {
-      return send(res, 200, { prompt: windowClaude(s)?.waitingFor === 'permission prompt' ? permissionPrompt(s.id) : null });
+      const c = windowClaude(s);
+      return send(res, 200, { prompt: c?.waitingFor === 'permission prompt' ? withKey(permissionPrompt(s.id), c) : null });
     }
     if (act[2] === 'answer' && req.method === 'POST') {
       if (!s.tmux) return send(res, 409, { error: 'this window has no tmux session' });
       const body = await readJson(req);
       if (!body || typeof body.choice !== 'string') return send(res, 400, { error: 'bad json' });
-      const { status, ...r } = answerPrompt(s, body.choice);
+      const { status, ...r } = answerPrompt(s, body.choice, typeof body.key === 'string' ? body.key : null);
       return send(res, status, r);
+    }
+    if (act[2] === 'key' && req.method === 'POST') {
+      if (!s.tmux) return send(res, 409, { error: 'this window has no tmux session' });
+      const body = await readJson(req);
+      const { status, ...r } = sendCardKey(s, body?.key);
+      return send(res, status, r);
+    }
+    if (act[2] === 'rename' && req.method === 'POST') {
+      const { status, ...r } = renameWindow(s, (await readJson(req))?.label);
+      return send(res, status, r);
+    }
+    if (act[2] === 'mute' && req.method === 'POST') {
+      const body = await readJson(req);
+      if (typeof body?.muted !== 'boolean') return send(res, 400, { error: 'bad json' });
+      if (body.muted) push.muted[s.id] = true; else delete push.muted[s.id];
+      savePush();
+      return send(res, 200, { muted: body.muted });
+    }
+    if (act[2] === 'last' && req.method === 'GET') {
+      try { const { status, ...r } = lastReply(s); return send(res, status, r); } catch { return send(res, 500, { error: 'could not read the transcript' }); }
     }
     if (act[2] === 'changes' && req.method === 'GET') {
       const { status, ...r } = await windowChanges(s);
@@ -1064,7 +1219,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/push/prefs' && req.method === 'POST') {
     const body = await readJson(req);
     if (!body) return send(res, 400, { error: 'bad json' });
-    for (const k of ['turn', 'permission', 'away']) if (typeof body[k] === 'boolean') push.prefs[k] = body[k];
+    for (const k of ['turn', 'permission', 'away', 'awake']) if (typeof body[k] === 'boolean') push.prefs[k] = body[k];
     savePush();
     return send(res, 200, { prefs: push.prefs });
   }
@@ -1161,7 +1316,9 @@ setInterval(saveBackup, 30000).unref(); // also catches a window switching to an
 loadCategories();
 loadOpenWith();
 loadPush();
-setInterval(watchForPush, 3000).unref();
+setInterval(watchWindows, 3000).unref();
+pruneUploads();
+setInterval(pruneUploads, 6 * 3600000).unref();
 if (!loadLedger()) seedFromSnapshots();
 herdrSnapshot(); // records the current spaces right away
 setInterval(herdrSnapshot, 30000).unref(); // notices closed spaces even with no page open

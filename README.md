@@ -56,7 +56,10 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   the scrollback as text you can select. When Claude Code asks for
   permission, its request and answers (Yes, don't ask again, Deny) appear on
   the window's card, and the phone can get a push notification for it, or
-  when a turn ends, even with the page closed. You can also start
+  when a turn ends, even with the page closed. Cards also offer Stop, the
+  permission mode, and a menu to rename, mute, or close a window; quick
+  replies and a swipe between windows save typing and tapping. Corral keeps
+  the Mac awake while Claude works. You can also start
   Claude Code in any project (it also appears, minimized, in the bottom bar of
   the Mac's Corral page), or restore windows after a restart. Add it to
   your Home Screen and it opens like an app. Another computer on your tailnet
@@ -116,7 +119,7 @@ To use Corral from your phone or another computer, see the next section.
 
 <p align="center">
   <img src="docs/img/phone-list.jpg" width="200" alt="Corral's phone page listing four windows: notes and dashboard under Waiting for you, api-server under Working, and a blog shell, each with its folder.">
-  <img src="docs/img/phone-terminal.jpg" width="200" alt="The notes window on a phone, with Changes and History buttons at the top: Claude Code's reply, its input box with a dimmed suggested prompt, and a row of keys starting with Use suggestion, Type, Esc, Shift-Tab, and Tab, above a camera button, a message box, and a Send button.">
+  <img src="docs/img/phone-terminal.jpg" width="200" alt="The notes window on a phone, with Changes and History buttons at the top: Claude Code's reply, its input box with a dimmed suggested prompt, and a row of keys starting with Use suggestion, Type, Esc, Shift-Tab, and Tab, above a row of quick replies, a camera button, a message box, and a Send button.">
   <img src="docs/img/phone-start.jpg" width="200" alt="The Start in a project sheet: a choice of Claude Code, Last session, or Shell, a search box, and the list of herdr spaces with their status dots.">
   <img src="docs/img/phone-history.jpg" width="200" alt="The History view of the notes window: its scrollback as plain text with a Copy all button.">
   <img src="docs/img/phone-permission.jpg" width="200" alt="The phone list with data-lab at the top, marked Needs permission in red. Its card shows the command Claude wants to run, then buttons for Yes, Yes and don't ask again, and Deny.">
@@ -138,22 +141,45 @@ network between your own devices.
   title counts each group (Your turn, Working, Shells) and jumps to it, and
   each group's header stays at the top while you scroll through it. When a
   session finishes while the page is open, a notice says so.
+- **Stop, switch modes, and more from the card.** A working session's card
+  shows how long it has been working and a **Stop** button (Esc, without
+  opening the window). Each Claude card shows its permission mode (Accept
+  edits, Plan mode, Auto mode, and so on). The **⋯** button opens the window's
+  menu: Last reply, Next mode (Shift-Tab), mute its notifications, Rename,
+  and Close (after asking).
+- **Read the last reply.** Press and hold a card, or use Last reply in its
+  menu, to read what Claude last said, taken from Claude Code's own
+  transcript, without opening the window.
 - **Allow or deny from the list.** A session stopped at a permission prompt
   goes to the top with a red **Needs permission** label. Its card shows what
   Claude wants to run and a button for each answer Claude Code offers (Yes,
   Yes and don't ask again, and so on) plus **Deny**. The same buttons appear
-  under the terminal when you open that window. Corral reads the prompt off
-  the screen and checks that it is still open before it presses anything.
+  under the terminal when you open that window, and on the Mac's desktop
+  page. Corral reads the prompt off the screen, and an answer names the prompt
+  it was given for: if another prompt has opened since, Corral refuses it
+  rather than answer the wrong one.
 - **Get notified.** Tap **Alerts** to have the Mac send a push notification
   when a permission prompt opens or Claude finishes its turn, even when Corral
   is closed. By default nothing is sent while you are using the Mac. Tapping
-  a notification opens that window. On an iPhone, this needs Corral on the
-  Home Screen (step 5 below) and iOS 16.4 or later.
+  a notification opens that window. To silence one busy window, mute it from
+  its ⋯ menu. On an iPhone, this needs Corral on the Home Screen (step 5
+  below) and iOS 16.4 or later. On Android and desktop browsers, a permission
+  notification also has **Allow** and **Deny** buttons; an iPhone does not
+  show them.
+- **Keep the Mac awake.** While any window is working or waiting on a prompt,
+  Corral stops the Mac from going to sleep on its own (`caffeinate -i`), so
+  the phone can still reach it. Closing the lid still sleeps. Turn it off
+  under Alerts.
 - **Answer in a real terminal.** Tap a window to open it. A row of keys covers
   what a phone keyboard lacks: **Use suggestion** (sends Claude Code's dimmed
   suggested prompt in one tap), Esc, Shift-Tab (Claude Code's modes), Tab,
   Ctrl, ^C, the arrows, Enter, 1, 2, and 3 for Claude Code's menus, and text
-  size.
+  size. Swipe left or right across the terminal to go to the next or
+  previous window in the list.
+- **Quick replies.** A row of chips above the message box (Continue, Run the
+  tests, Commit and push, `/clear`, and others) puts that text in the box;
+  tap Send to send it. **Edit** changes the list, which is kept on that
+  device.
 - **Type or dictate.** The message box at the bottom works with the
   keyboard's microphone. A message with several lines goes in as one.
 - **Send a photo.** The camera button next to the message box opens the
@@ -162,7 +188,8 @@ network between your own devices.
   your question after it and send.
 - **Check the changes.** **Changes** shows what is not yet committed in the
   window's project: each changed file, then the diff in color, with new files
-  included. It is read-only.
+  included. It is read-only; **Ask Claude to commit these** sends "Commit
+  these changes." to that window.
 - **Start something new.** Pick Claude Code, its last session, or a shell, then
   a herdr space or another project. The new window also shows up, minimized,
   in the bottom bar of Corral on the Mac, so it is there when you sit down. A
@@ -171,6 +198,12 @@ network between your own devices.
 - **Read back.** History shows the window's scrollback as plain text you can
   select, or copy in one tap.
 - **Restore** the windows from before a Mac restart.
+
+On the Mac's desktop page, a window with a permission prompt gets the same
+answer buttons under its title bar (and its chip in the bottom bar turns
+red). **Alerts** in the top bar turns on desktop notifications for when a
+window needs you while the page is in the background or the window is
+minimized. A window renamed or closed from the phone changes there too.
 
 How it compares with Claude Code's Remote Control (`/rc`): Remote Control
 needs no setup beyond signing in, and reaches the Claude Code sessions you
@@ -258,8 +291,11 @@ about who can reach it:
   page cannot name any other program.
 - Answering a permission prompt sends one key to that window (the answer's
   number, or Esc to deny), and only after Corral has read Claude Code's
-  session file and the screen again and found that prompt still open with
-  that answer.
+  session file and the screen again and found the same prompt still open
+  with that answer. The page must name the prompt (by conversation and the
+  time it opened), so an answer never lands on a newer prompt.
+- A card can send only Esc (Stop, while Claude works) or Shift-Tab (next
+  mode), from a fixed list; the page never names a key.
 - A photo from the phone is saved under `~/.local/share/corral/uploads`, not
   in the project, and only as an image type (JPEG, PNG, HEIC, WebP, or GIF).
 - The Changes view runs read-only `git status` and `git diff` with
@@ -290,10 +326,11 @@ about who can reach it:
   backup are no longer running; the Restore button reads it and then deletes
   it.
 - `~/.local/share/corral/push.json`: the key Corral signs notifications with,
-  the devices that turned them on, and your notification settings
-  (owner-only permissions).
+  the devices that turned them on, your notification and keep-awake settings,
+  and which windows are muted (owner-only permissions).
+- The phone's quick replies, in that phone's browser storage.
 - `~/.local/share/corral/uploads/`: photos sent from the phone (owner-only
-  permissions). Corral does not delete them; clear the folder when you like.
+  permissions). Corral deletes each one after 14 days.
 - Your browser's local storage: window layout, which windows are open or
   minimized, and display preferences.
 - A private tmux server named `corral`, separate from your own tmux and
@@ -332,6 +369,10 @@ public API, so a future herdr release could change them.
   terminal.
 - "Only when I am away from the Mac" goes by the last key press or mouse
   move on the Mac, so a Mac playing a video with no input counts as away.
+- Keeping the Mac awake blocks idle sleep only. A closed lid or a chosen
+  Sleep still puts the Mac to sleep, and then the phone cannot reach it.
+- The mode shown on a card is read from Claude Code's status line, and Last
+  reply from its transcript file; both are tested with Claude Code 2.1.292.
 - After a Corral restart, a window shows the current screen; older scrollback
   stays in tmux (`tmux -L corral attach`) rather than in the browser.
 - Reopen re-sorts herdr's spaces alphabetically with

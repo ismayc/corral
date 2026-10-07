@@ -381,7 +381,7 @@
         </figure>
         <figure>
           <img src="img/phone-terminal.jpg" width="585" height="1266" loading="lazy"
-               alt="The notes window on a phone, with Changes and History buttons at the top: Claude Code's reply, its input box with a dimmed suggested prompt, and a row of keys starting with Use suggestion, Type, Esc, Shift-Tab, and Tab, above a camera button, a message box, and a Send button.">
+               alt="The notes window on a phone, with Changes and History buttons at the top: Claude Code's reply, its input box with a dimmed suggested prompt, and a row of keys starting with Use suggestion, Type, Esc, Shift-Tab, and Tab, above a row of quick replies, a camera button, a message box, and a Send button.">
           <figcaption><b>A real terminal.</b> Use suggestion sends Claude's suggested prompt in one tap; the keys cover
             what a phone keyboard lacks.</figcaption>
         </figure>
@@ -411,8 +411,17 @@
 
       <div class="grid2">
         <div class="card"><h3>Notifications</h3><p>Tap Alerts to get a push when a permission prompt opens or Claude
-          finishes its turn, even with Corral closed. By default nothing is sent while you are at the Mac. On an iPhone,
-          this needs Corral on the Home Screen.</p></div>
+          finishes its turn, even with Corral closed. By default nothing is sent while you are at the Mac. Mute any one
+          window from its menu. On an iPhone, this needs Corral on the Home Screen.</p></div>
+        <div class="card"><h3>From the card</h3><p>A working session shows how long it has run and a Stop button. Each
+          card shows the permission mode, and its ⋯ menu has Last reply, Next mode, Mute, Rename, and Close. Press and
+          hold a card to read Claude's last reply.</p></div>
+        <div class="card"><h3>Quick replies and swipes</h3><p>Chips such as Continue, Run the tests, and Commit and push
+          fill the message box in one tap. Swipe across a terminal to move to the next window.</p></div>
+        <div class="card"><h3>Mac stays awake</h3><p>While a window is working or waiting on a prompt, Corral keeps the
+          Mac from idling to sleep, so the phone can still reach it. Closing the lid still sleeps.</p></div>
+        <div class="card"><h3>On the Mac too</h3><p>The desktop page shows the same Allow and Deny buttons in each window,
+          and its Alerts button sends a desktop notification when a window needs you.</p></div>
         <div class="card"><h3>Send a photo</h3><p>The camera button sends a picture to the Mac and pastes its path into
           Claude Code, which attaches it to your next message.</p></div>
         <div class="card"><h3>Keys a phone lacks</h3><p>Use suggestion, Esc, Shift-Tab for Claude Code's modes, Tab, Ctrl,
@@ -540,7 +549,9 @@
         <div class="card"><h3>No borrowed identity</h3><p>Started from inside Claude Code or a herdr pane, Corral strips
           that session's variables (<code>CLAUDE_CODE_*</code>, <code>HERDR_*</code>, <code>TMUX*</code>) from every shell it starts.</p></div>
         <div class="card"><h3>Answers only to an open prompt</h3><p>Allow and Deny send one key, and only after Corral has
-          read Claude Code's session file and the screen again and found that prompt still open with that answer.</p></div>
+          read Claude Code's session file and the screen again and found the same prompt still open with that answer.
+          An answer names its prompt, so it never lands on a newer one. A card can otherwise send only Esc or
+          Shift-Tab.</p></div>
         <div class="card"><h3>Stays on your Mac</h3><p>A few small files in <code>~/.local/share/corral</code>, your browser's
           local storage, and a private tmux server. The page loads no outside resources. If you turn on notifications,
           each one goes through your phone's push service, encrypted so that the service cannot read it.</p></div>
@@ -561,6 +572,8 @@
           undocumented herdr method, <code>workspace.move_block</code>.</p></div>
         <div class="card"><h3>Prompts read off the screen</h3><p>Allow and Deny read Claude Code's permission prompt from
           the terminal (tested with Claude Code 2.1.292). If a release changes its look, answer in the terminal.</p></div>
+        <div class="card"><h3>Awake, not lid-proof</h3><p>Keeping the Mac awake blocks idle sleep only. A closed lid still
+          sleeps, and then the phone cannot reach it.</p></div>
       </div>
     </div>
   </section>

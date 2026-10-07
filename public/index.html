@@ -145,6 +145,15 @@
   .title button { padding:0 7px; line-height:18px; background:transparent; border-color:transparent; color:var(--muted); }
   .title button:hover { color:var(--text); border-color:var(--rail); }
   .term { flex:1; min-height:0; padding:5px 0 0 8px; }
+  /* A permission prompt in this window: its answers, under the title bar. */
+  .win .ask { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:6px 8px; background:#3a1d1f;
+              border-bottom:1px solid var(--blocked, #e5584d); font-size:12.5px; }
+  .win .ask b { color:#ffb4ad; margin-right:4px; }
+  .win .ask button { padding:2px 10px; }
+  .win .ask button.allow { background:var(--fence); border-color:var(--fence); color:#fff; }
+  .win .ask button.deny { border-color:#e5584d; color:#ffb4ad; }
+  .win.asking { border-color:#e5584d; }
+  #tray .chip.asking { border-color:#e5584d; color:#ffb4ad; }
   .zone-empty > div { height:100%; border:1px dashed var(--rail); border-radius:8px; display:flex; align-items:center;
                       justify-content:center; text-align:center; padding:12px; color:var(--muted); font-size:12.5px; }
   .zone-empty.over > div, .slot.over .win { border-color:var(--fence); border-style:solid; }
@@ -204,6 +213,7 @@
       <label id="colslab" hidden>Columns <select id="cols"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
       <label id="rowslab" hidden>Rows <select id="rows"><option value="auto">Auto</option><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
       <span class="sp"></span>
+      <button id="alerts" title="Show a desktop notification when a window needs you while this page is in the background">Alerts: off</button>
       <button id="phone" hidden title="Copy the link that opens Corral on your phone or another Tailscale device">On your phone</button>
       <span id="count" class="note"></span>
     </div>
@@ -439,8 +449,8 @@ function layout() {
     bar.append(l);
     for (const id of ids) {
       const c = document.createElement('button');
-      c.className = `chip${minimized.has(id) ? ' min' : ''}`;
-      c.textContent = open.get(id).info.label;
+      c.className = `chip${minimized.has(id) ? ' min' : ''}${open.get(id).asking ? ' asking' : ''}`;
+      c.textContent = `${open.get(id).asking ? '● ' : ''}${open.get(id).info.label}`;
       c.title = tip;
       c.draggable = true;
       c.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/x-corral', id); e.dataTransfer.effectAllowed = 'move'; });
@@ -1104,7 +1114,98 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#laymen
   showPhoneLink();
   setInterval(pickUpNewWindows, 3000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) pickUpNewWindows(); });
+  watchStatus();
+  setInterval(watchStatus, 3000);
 })();
+
+// Each window's Claude status, every few seconds: the Allow and Deny bar for a permission prompt, names
+// changed on another device, windows closed on another device, and desktop notifications.
+const lastStatus = new Map();
+let alertsOn = load('corral.alerts', false) && 'Notification' in window && Notification.permission === 'granted';
+function showAlerts() { $('#alerts').textContent = `Alerts: ${alertsOn ? 'on' : 'off'}`; }
+$('#alerts').onclick = async () => {
+  if (!('Notification' in window)) return toast('This browser cannot show notifications.');
+  if (!alertsOn && Notification.permission !== 'granted' && await Notification.requestPermission() !== 'granted') {
+    return toast('Notifications are blocked for this page in the browser settings.');
+  }
+  alertsOn = !alertsOn;
+  store('corral.alerts', alertsOn);
+  showAlerts();
+  toast(alertsOn ? 'A notification will appear when a window needs you while Corral is in the background or the window is minimized.' : 'Desktop alerts are off.');
+};
+showAlerts();
+
+async function watchStatus() {
+  const r = await api('/api/overview').catch(() => null);
+  if (!r?.sessions) return;
+  const byId = new Map(r.sessions.map((s) => [s.id, s]));
+  let relayout = false;
+  for (const [id, w] of [...open]) {
+    const s = byId.get(id);
+    if (!s || s.exited) { // closed on another device
+      if (!s) { open.delete(id); w.ws?.close(); w.term.dispose(); w.slot.remove(); persist(); relayout = true; }
+      continue;
+    }
+    if (s.label !== w.info.label) { w.info.label = s.label; w.el.querySelector('.t').textContent = s.label; relayout = true; }
+    const key = s.prompt?.key || null;
+    if (key !== (w.askKey || null)) {
+      w.askKey = key;
+      w.el.querySelector('.ask')?.remove();
+      w.asking = Boolean(s.prompt);
+      w.el.classList.toggle('asking', w.asking);
+      if (s.prompt) w.el.querySelector('.title').after(askBar(s));
+      requestAnimationFrame(() => w.fit.fit());
+      relayout = true;
+    }
+    const now = s.claude?.status;
+    const was = lastStatus.get(id);
+    lastStatus.set(id, now);
+    const unseen = document.hidden || minimized.has(id) || tray.includes(id);
+    if (alertsOn && was && was !== now && unseen && !s.muted) {
+      if (now === 'waiting') notify(`${s.label} needs you`, s.prompt ? 'Claude is asking for permission.' : 'Claude is waiting on a prompt.', id);
+      else if (was === 'busy' && now === 'idle') notify(`${s.label}: your turn`, 'Claude finished and is waiting for you.', id);
+    }
+  }
+  if (relayout) { layout(); arrange(); }
+}
+
+function notify(title, body, id) {
+  const n = new Notification(title, { body, tag: id, icon: '/apple-touch-icon.png' });
+  n.onclick = () => { window.focus(); if (minimized.has(id) || tray.includes(id)) restore(id); setFocus(id); n.close(); };
+}
+
+// The answers to a permission prompt, as buttons. The terminal shows what Claude asks; Deny is Esc.
+function askBar(s) {
+  const bar = document.createElement('div');
+  bar.className = 'ask';
+  const b = document.createElement('b');
+  b.textContent = 'Claude is asking for permission:';
+  bar.append(b);
+  const answer = async (choice, label) => {
+    for (const x of bar.querySelectorAll('button')) x.disabled = true;
+    const r = await fetch(`/api/sessions/${s.id}/answer`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ choice, key: s.prompt.key }),
+    }).catch(() => null);
+    const j = r ? await r.json().catch(() => ({})) : {};
+    toast(r?.ok ? (choice === 'deny' ? `Denied. ${s.label} will ask what to do instead.` : `Answered: ${label}`) : j.error || 'Could not reach Corral.');
+    setTimeout(watchStatus, 600);
+  };
+  s.prompt.options.filter((o) => !/^No\b/.test(o.label)).forEach((o, i) => {
+    const btn = document.createElement('button');
+    btn.className = i === 0 ? 'allow' : '';
+    btn.textContent = o.label;
+    btn.title = `Answer ${o.n}`;
+    btn.onclick = () => answer(o.n, o.label);
+    bar.append(btn);
+  });
+  const deny = document.createElement('button');
+  deny.className = 'deny';
+  deny.textContent = 'Deny';
+  deny.title = 'Esc';
+  deny.onclick = () => answer('deny', 'Deny');
+  bar.append(deny);
+  return bar;
+}
 
 // Windows started somewhere else (the phone page, another browser) show up here in the bottom bar.
 // A window counts only once it has been seen twice without this page attaching it, so one this page
