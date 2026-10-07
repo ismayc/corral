@@ -14,3 +14,4 @@ function run(argv) {
   }
   return JSON.stringify({ def: def.isNil() ? null : ObjC.unwrap(def.path), apps });
 }
+if (typeof module === 'object') module.exports = { run };

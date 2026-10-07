@@ -1,0 +1,7 @@
+[tool.coverage.run]
+# herdr-sort-spaces has no .py extension, so name it explicitly.
+include = ["scripts/herdr-sort-spaces"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true

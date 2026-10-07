@@ -13,7 +13,8 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { execFile, execFileSync } = require('child_process');
+// Called through the module object (cp.execFile, not a destructured execFile) so tests can stand in for it.
+const cp = require('child_process');
 const pty = require('node-pty');
 const { WebSocketServer } = require('ws');
 
@@ -55,7 +56,7 @@ let tailnet = null; // {host, origin, url, logins:Set, machine}
 
 function detectTailnet() {
   if (process.env.CORRAL_TAILSCALE === '0' || !TS_BIN) return;
-  execFile(TS_BIN, ['status', '--json'], { timeout: 5000, maxBuffer: 4 * 1024 * 1024 }, (err, out) => {
+  cp.execFile(TS_BIN, ['status', '--json'], { timeout: 5000, maxBuffer: 4 * 1024 * 1024 }, (err, out) => {
     if (err) return;
     try {
       const d = JSON.parse(out);
@@ -67,7 +68,7 @@ function detectTailnet() {
       const host = `${name}:${TS_PORT}`.toLowerCase();
       const next = { host, origin: `https://${host}`, url: `https://${host}/`, logins, machine: d.Self?.HostName || name, served: false };
       // Whether `tailscale serve` actually forwards that address here; only then is the link offered.
-      execFile(TS_BIN, ['serve', 'status', '--json'], { timeout: 5000 }, (err2, out2) => {
+      cp.execFile(TS_BIN, ['serve', 'status', '--json'], { timeout: 5000 }, (err2, out2) => {
         try {
           const proxy = JSON.parse(out2).Web?.[host]?.Handlers?.['/']?.Proxy || '';
           next.served = !err2 && /^(http:\/\/)?(127\.0\.0\.1|localhost):(\d+)\/?$/.test(proxy) && Number(proxy.match(/:(\d+)\/?$/)[1]) === PORT;
@@ -96,7 +97,7 @@ const TMUX = ['/opt/homebrew/bin/tmux', '/usr/local/bin/tmux', '/usr/bin/tmux'].
 function legacyTmuxInUse() {
   if (!TMUX) return false;
   try {
-    return execFileSync(TMUX, ['-L', 'webterm', 'list-sessions', '-F', '#{session_name}'], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'pipe'] })
+    return cp.execFileSync(TMUX, ['-L', 'webterm', 'list-sessions', '-F', '#{session_name}'], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'pipe'] })
       .split('\n').some((n) => n.startsWith('wt-'));
   } catch { return false; }
 }
@@ -123,7 +124,7 @@ function cleanEnv(extra = {}) {
 // starts the tmux server, which keeps that call's working folder for its whole life; home is used so
 // it never holds a folder that may later be moved or deleted (such as this repo).
 function tmux(...args) {
-  return execFileSync(TMUX, ['-L', TMUX_SOCKET, ...args], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'pipe'], env: cleanEnv(), cwd: os.homedir() });
+  return cp.execFileSync(TMUX, ['-L', TMUX_SOCKET, ...args], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'pipe'], env: cleanEnv(), cwd: os.homedir() });
 }
 
 // A tmux server started by an earlier run keeps the polluted variables in its global environment
@@ -398,7 +399,7 @@ function claudeUnder(rootPid, children) {
 function processChildren() {
   const children = new Map();
   try {
-    for (const line of execFileSync('ps', ['-axo', 'pid=,ppid='], { encoding: 'utf8', timeout: 5000 }).split('\n')) {
+    for (const line of cp.execFileSync('ps', ['-axo', 'pid=,ppid='], { encoding: 'utf8', timeout: 5000 }).split('\n')) {
       const [pid, ppid] = line.trim().split(/\s+/).map(Number);
       if (pid && ppid) children.set(ppid, [...(children.get(ppid) || []), pid]);
     }
@@ -466,6 +467,13 @@ function screenMode(lines) {
     if (m) return m[1].replace(/ mode$/, '').toLowerCase();
   }
   return null;
+}
+
+// Claude Code's status lines: everything drawn under the rule below its input box (a status line command's
+// output, then the mode line). While a permission prompt is open the input box is gone, so there are none.
+function screenStatus(lines) {
+  const rule = lines.findLastIndex((l) => /^\s*─{20,}\s*$/.test(l));
+  return rule < 0 ? [] : lines.slice(rule + 1).filter((l) => l.trim()).slice(0, 8);
 }
 
 // Keys a card can send to a window without opening it. A fixed list; the page never names a key.
@@ -597,7 +605,11 @@ function conversation(s) {
       for (const x of content) if (x?.type === 'text' && x.text.trim()) add('claude', x.text.trim(), d.timestamp);
     }
   }
-  return { status: 200, items: items.slice(-300), cut: items.length > 300 || fs.statSync(file).size > MAX };
+  const screen = s.tmux && c.waitingFor !== 'permission prompt' ? screenLines(s.id) : null;
+  return {
+    status: 200, items: items.slice(-300), cut: items.length > 300 || fs.statSync(file).size > MAX,
+    claude: c.status, statusLines: screen ? screenStatus(screen) : [],
+  };
 }
 
 // The window's scrollback as plain text, for reading and copying on a phone.
@@ -642,7 +654,7 @@ function permissionPrompt(id, screen) {
 // Names one permission prompt, so an answer meant for it is refused once another prompt has taken its
 // place. Claude Code rewrites statusUpdatedAt each time a prompt opens (and goes busy between two), so the
 // conversation plus that time picks out this prompt however the screen is wrapped.
-const promptKey = (claude) => require('crypto').createHash('sha256').update(`${claude.sessionId}:${claude.since}`).digest('hex').slice(0, 16);
+const promptKey = (claude) => crypto.createHash('sha256').update(`${claude.sessionId}:${claude.since}`).digest('hex').slice(0, 16);
 
 // The Claude Code status of one window, read fresh.
 function windowClaude(s) {
@@ -670,7 +682,7 @@ function answerPrompt(s, choice, key) {
 const DIFF_MAX = 600 * 1024;
 function git(cwd, args) {
   return new Promise((resolve) => {
-    execFile('git', ['-C', cwd, ...args], { timeout: 15000, maxBuffer: 8 * 1024 * 1024, env: { ...cleanEnv(), GIT_OPTIONAL_LOCKS: '0' } },
+    cp.execFile('git', ['-C', cwd, ...args], { timeout: 15000, maxBuffer: 8 * 1024 * 1024, env: { ...cleanEnv(), GIT_OPTIONAL_LOCKS: '0' } },
       (err, out) => resolve(err ? null : out));
   });
 }
@@ -797,7 +809,7 @@ async function pushAll(message) {
 // Seconds since the Mac last saw a key or the mouse, from IOKit's HIDIdleTime (nanoseconds).
 function macIdleSeconds() {
   try {
-    const m = execFileSync('ioreg', ['-c', 'IOHIDSystem', '-d', '4'], { encoding: 'utf8', timeout: 3000 }).match(/"HIDIdleTime" = (\d+)/);
+    const m = cp.execFileSync('ioreg', ['-c', 'IOHIDSystem', '-d', '4'], { encoding: 'utf8', timeout: 3000 }).match(/"HIDIdleTime" = (\d+)/);
     return m ? Number(m[1]) / 1e9 : Infinity;
   } catch { return Infinity; }
 }
@@ -809,7 +821,7 @@ let caffeinate = null;
 function keepAwake(on) {
   if (on && !caffeinate) {
     try {
-      caffeinate = require('child_process').spawn('/usr/bin/caffeinate', ['-i', '-w', String(process.pid)], { stdio: 'ignore' });
+      caffeinate = cp.spawn('/usr/bin/caffeinate', ['-i', '-w', String(process.pid)], { stdio: 'ignore' });
       caffeinate.on('exit', () => { caffeinate = null; });
     } catch { caffeinate = null; }
   } else if (!on && caffeinate) {
@@ -884,7 +896,8 @@ function cleanSubscription(b) {
     if (u.protocol !== 'https:' || !PUSH_HOSTS.some((h) => u.hostname === h || u.hostname.endsWith(`.${h}`))) return null;
   } catch { return null; }
   if (typeof s.keys?.p256dh !== 'string' || typeof s.keys?.auth !== 'string') return null;
-  try { if (Buffer.from(s.keys.p256dh, 'base64url').length !== 65 || Buffer.from(s.keys.auth, 'base64url').length !== 16) return null; } catch { return null; }
+  // Buffer.from never throws on bad base64url; it decodes to fewer bytes, which the lengths catch.
+  if (Buffer.from(s.keys.p256dh, 'base64url').length !== 65 || Buffer.from(s.keys.auth, 'base64url').length !== 16) return null;
   return { endpoint: s.endpoint, keys: { p256dh: s.keys.p256dh, auth: s.keys.auth } };
 }
 
@@ -953,10 +966,10 @@ async function reopenProject(root) {
   let label = e.label;
   if (snap.spaces.some((s) => s.label === label)) label = `${path.basename(path.dirname(root))}/${path.basename(root)}`;
   const created = await new Promise((resolve) => {
-    execFile(HERDR, ['workspace', 'create', '--cwd', root, '--label', label, '--no-focus'], { timeout: 10000 }, (err) => resolve(!err));
+    cp.execFile(HERDR, ['workspace', 'create', '--cwd', root, '--label', label, '--no-focus'], { timeout: 10000 }, (err) => resolve(!err));
   });
   if (!created) return { status: 502, error: 'herdr could not create the space' };
-  await new Promise((resolve) => execFile(SORT_BIN, ['--apply'], { timeout: 15000 }, () => resolve()));
+  await new Promise((resolve) => cp.execFile(SORT_BIN, ['--apply'], { timeout: 15000 }, () => resolve()));
   await herdrSnapshot(); // refreshes the ledger's open set
   return { status: 200, ok: true, label };
 }
@@ -972,7 +985,7 @@ function identityRoots() {
 
 function herdrSnapshot() {
   return new Promise((resolve) => {
-    execFile(HERDR, ['api', 'snapshot'], { maxBuffer: 32 * 1024 * 1024, timeout: 5000 }, (err, out) => {
+    cp.execFile(HERDR, ['api', 'snapshot'], { maxBuffer: 32 * 1024 * 1024, timeout: 5000 }, (err, out) => {
       if (err) return resolve({ available: false, error: String(err.message || err), spaces: [] });
       try {
         const snap = JSON.parse(out).result.snapshot;
@@ -1069,7 +1082,7 @@ async function spaceFile(spaceId, rel) {
 
 function appsFor(file) {
   return new Promise((resolve) => {
-    execFile('osascript', ['-l', 'JavaScript', APPS_SCRIPT, file], { timeout: 10000 }, (err, out) => {
+    cp.execFile('osascript', ['-l', 'JavaScript', APPS_SCRIPT, file], { timeout: 10000 }, (err, out) => {
       try { resolve(err ? { def: null, apps: [] } : JSON.parse(out)); } catch { resolve({ def: null, apps: [] }); }
     });
   });
@@ -1097,7 +1110,7 @@ async function openFile(file, app) {
     if (!apps.some((a) => a.path === app)) return { status: 400, error: 'that app does not open this file' };
     args = ['-a', app, file];
   }
-  const ok = await new Promise((resolve) => execFile('open', args, { timeout: 10000 }, (err) => resolve(!err)));
+  const ok = await new Promise((resolve) => cp.execFile('open', args, { timeout: 10000 }, (err) => resolve(!err)));
   return ok ? { status: 200, ok: true } : { status: 502, error: 'macOS could not open it' };
 }
 
@@ -1388,28 +1401,60 @@ server.on('upgrade', (req, socket, head) => {
   });
 });
 
-scrubTmuxEnv();
-adoptSessions();
-prepareRestore(); // must read the previous backup before saveBackup() replaces it
-saveBackup();
-setInterval(saveBackup, 30000).unref(); // also catches a window switching to another Claude conversation
-loadCategories();
-loadOpenWith();
-loadPush();
-setInterval(watchWindows, 3000).unref();
-pruneUploads();
-setInterval(pruneUploads, 6 * 3600000).unref();
-if (!loadLedger()) seedFromSnapshots();
-herdrSnapshot(); // records the current spaces right away
-setInterval(herdrSnapshot, 30000).unref(); // notices closed spaces even with no page open
-detectTailnet();
-setInterval(detectTailnet, 60000).unref(); // picks up Tailscale starting, or a renamed Mac
-server.listen(PORT, HOST, () => console.log(`Corral listening on http://${HOST}:${PORT} (${TMUX ? 'tmux ' + TMUX_SOCKET : 'no tmux, plain shells'})`));
-
 // Killing a tmux attach client only detaches it; the tmux session keeps running.
 function shutdown() {
   for (const s of sessions.values()) { try { s.pty.kill(); } catch {} }
   process.exit(0);
 }
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+
+// Everything that touches tmux, the network, or the data folder at startup. Loading this file (as the tests
+// do) runs none of it; `node server.js` does. Tests pass a port of 0 to listen anywhere.
+function start(port = PORT) {
+  scrubTmuxEnv();
+  adoptSessions();
+  prepareRestore(); // must read the previous backup before saveBackup() replaces it
+  saveBackup();
+  setInterval(saveBackup, 30000).unref(); // also catches a window switching to another Claude conversation
+  loadCategories();
+  loadOpenWith();
+  loadPush();
+  setInterval(watchWindows, 3000).unref();
+  pruneUploads();
+  setInterval(pruneUploads, 6 * 3600000).unref();
+  if (!loadLedger()) seedFromSnapshots();
+  herdrSnapshot(); // records the current spaces right away
+  setInterval(herdrSnapshot, 30000).unref(); // notices closed spaces even with no page open
+  detectTailnet();
+  setInterval(detectTailnet, 60000).unref(); // picks up Tailscale starting, or a renamed Mac
+  server.listen(port, HOST, () => console.log(`Corral listening on http://${HOST}:${server.address().port} (${TMUX ? 'tmux ' + TMUX_SOCKET : 'no tmux, plain shells'})`));
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+  return server;
+}
+
+module.exports = {
+  start, shutdown, server, wss, sessions, ledger, openWith, lastSeen,
+  // Module state the tests read and set.
+  state: {
+    get tailnet() { return tailnet; }, set tailnet(v) { tailnet = v; },
+    get push() { return push; }, set push(v) { push = v; },
+    get categories() { return categories; },
+    get openRoots() { return openRoots; },
+    get caffeinate() { return caffeinate; },
+    get watchPrimed() { return watchPrimed; },
+    set rootCache(v) { rootCache = v; },
+  },
+  constants: { PORT, TMUX, TMUX_SOCKET, TS_BIN, HERDR, DATA_DIR, CLAUDE_DIR, SESSION_PREFIX, UPLOAD_DIR },
+  detectTailnet, requestAccess, legacyTmuxInUse, cleanEnv, tmux, scrubTmuxEnv, shq, programFor, startCommand,
+  attachPty, register, createSession, adoptSessions, publicSession, skippedRoot, saveLedger, migrateLegacyData,
+  loadLedger, seedFromSnapshots, updateLedger, ledgerView, cleanCategories, loadCategories, saveCategories,
+  writeJson, readJsonFile, claudeUnder, processChildren, openWindows, overview, withKey, screenLines, screenMode, screenStatus,
+  sendCardKey, renameWindow, transcriptFile, tailLines, lastReply, typedText, conversation, windowHistory, rejoin,
+  permissionPrompt, promptKey, windowClaude, answerPrompt, git, windowChanges, saveUpload, loadPush, savePush,
+  vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, pruneUploads,
+  cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows,
+  reopenProject, identityRoots, herdrSnapshot, rootFor, listDir, loadOpenWith, saveOpenWith, fileKind, spaceFile,
+  appsFor, openChoices, openFile, appName, send, serveFile, readJson,
+};
+
+if (require.main === module) start();

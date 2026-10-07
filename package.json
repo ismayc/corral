@@ -10,6 +10,10 @@
   },
   "scripts": {
     "start": "node server.js",
+    "test": "npm run test:js && npm run test:py",
+    "test:js": "mkdir -p coverage && node --test --experimental-test-coverage --test-coverage-include=server.js --test-coverage-include='public/*.js' --test-coverage-include=scripts/apps-for-file.js --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info 'test/**/*.test.js' && node test/helpers/gaps.js --check",
+    "test:py": ".venv/bin/python -m pytest -q test/python --cov --cov-branch --cov-fail-under=100",
+    "coverage:gaps": "mkdir -p coverage && node --test --experimental-test-coverage --test-coverage-include=server.js --test-coverage-include='public/*.js' --test-coverage-include=scripts/apps-for-file.js --test-reporter=dot --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info 'test/**/*.test.js'; node test/helpers/gaps.js",
     "tailscale": "tailscale serve --bg --https=8443 http://127.0.0.1:8777",
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper"
   },
@@ -19,5 +23,8 @@
     "@xterm/xterm": "^6.0.0",
     "node-pty": "^1.1.0",
     "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
   }
 }

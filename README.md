@@ -49,13 +49,16 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   [Remote control from your phone](#remote-control-from-your-phone-with-tailscale)).
   Open `/m` from any device signed in to your tailnet to see every window on
   the Mac, sorted by whose turn it is (Claude waiting for you, Claude working,
-  plain shells), with each one's folder and when it last printed. Tap one for
-  a full terminal with the keys a phone lacks (Esc, Shift-Tab, Ctrl, arrows,
-  and the numbers for Claude Code's menus), a **Use suggestion** key that
-  sends Claude Code's suggested next prompt (Tab, then Enter), a message box
-  that works with dictation, a photo button that hands Claude a picture, a
-  Changes view of the project's uncommitted git diff, and a History view of
-  the conversation (your prompts and Claude's replies) or the scrollback. When Claude Code asks for
+  plain shells), with each one's folder and when it last printed. Tap one
+  running Claude Code and it opens on the **conversation**: your prompts and
+  Claude's replies, with Claude Code's status lines under them. **Terminal**
+  switches to the full terminal (and **Chat** back). Both views have the keys
+  a phone lacks (Esc, Shift-Tab, Ctrl, arrows, and the numbers for Claude
+  Code's menus), a **Use suggestion** key that sends Claude Code's suggested
+  next prompt (Tab, then Enter), a message box that works with dictation, and
+  a photo button that hands Claude a picture. The **⋯** menu has a Changes
+  view of the project's uncommitted git diff and the window's scrollback as
+  text. When Claude Code asks for
   permission, its request and answers (Yes, don't ask again, Deny) appear on
   the window's card, and the phone can get a push notification for it, or
   when a turn ends, even with the page closed. Cards also offer Stop, the
@@ -121,13 +124,12 @@ To use Corral from your phone or another computer, see the next section.
 
 <p align="center">
   <img src="docs/img/phone-list.jpg" width="200" alt="Corral's phone page listing four windows: notes and dashboard under Waiting for you, api-server under Working, and a blog shell, each with its folder.">
-  <img src="docs/img/phone-terminal.jpg" width="200" alt="The notes window on a phone, with Changes and History buttons at the top: Claude Code's reply, its input box with a dimmed suggested prompt, and a row of keys starting with Use suggestion, Type, Esc, Shift-Tab, and Tab, above a row of quick replies, a camera button, a message box, and a Send button.">
+  <img src="docs/img/phone-conversation.jpg" width="200" alt="The notes window on a phone, in Conversation: your prompts as purple bubbles on the right with their times, Claude's replies on the left, the status line under them, then a row of keys starting with Use suggestion, Type, Esc, and Shift-Tab, quick replies, a camera button, a message box, and a Send button. The header has a Terminal button and a menu button.">
   <img src="docs/img/phone-start.jpg" width="200" alt="The Start in a project sheet: a choice of Claude Code, Last session, or Shell, a search box, and the list of herdr spaces with their status dots.">
-  <img src="docs/img/phone-history.jpg" width="200" alt="The History view of the notes window, on Conversation: your prompts as purple bubbles on the right with their times, and Claude's replies on the left, with a Screen tab beside it and a Copy all button.">
   <img src="docs/img/phone-permission.jpg" width="200" alt="The phone list with data-lab at the top, marked Needs permission in red. Its card shows the command Claude wants to run, then buttons for Yes, Yes and don't ask again, and Deny.">
   <img src="docs/img/phone-changes.jpg" width="200" alt="The Changes view for the dashboard project: the changed files, api.js and a new empty.test.js, then the diff with removed lines in red and added lines in green.">
 </p>
-<p align="center"><sub>The phone page with made-up projects: the list of windows, a Claude Code window, starting something new, History, a permission prompt, and Changes.</sub></p>
+<p align="center"><sub>The phone page with made-up projects: the list of windows, a Claude Code window in Conversation, starting something new, a permission prompt, and Changes.</sub></p>
 
 Corral works as a remote control for every terminal on your Mac. From your
 phone (or a tablet, or another computer), you can see which Claude Code
@@ -197,13 +199,16 @@ network between your own devices.
   in the bottom bar of Corral on the Mac, so it is there when you sit down. A
   space that already has a window is marked **Open**, and tapping it says so
   instead of starting a second one.
-- **Read back.** The terminal itself does not scroll back on a phone, so
-  History does it. **Conversation** lists every prompt you typed (including
+- **Read back.** The terminal itself does not scroll back on a phone, so the
+  conversation is where you read. It lists every prompt you typed (including
   ones sent from the Mac, slash commands, and messages sent while Claude was
-  working) and every reply, read from Claude Code's transcript without the
-  tool calls in between, newest at the bottom; scroll up for older ones.
-  **Screen** shows the window's scrollback as plain text. Either one can be
-  selected, or copied in one tap.
+  working) and every reply, read from Claude Code's transcript every few
+  seconds without the tool calls in between, newest at the bottom; scroll up
+  for older ones, and it stays where you are while new messages arrive. The
+  status lines under it are the ones Claude Code draws under its input box,
+  such as a status line command's output and the mode. The phone remembers
+  whether you last used Chat or Terminal. **Scrollback as text**, in the ⋯
+  menu, shows the window's scrollback to select or copy in one tap.
 - **Restore** the windows from before a Mac restart.
 
 On the Mac's desktop page, a window with a permission prompt gets the same
@@ -360,7 +365,26 @@ session, and streams it to [xterm.js](https://xtermjs.org/) over a WebSocket
 `herdr api snapshot` and each space's project folder from herdr's
 `~/.config/herdr/session.json`, and polls herdr every 30 seconds so it notices
 a space that closes while no page is open. herdr's session files are not a
-public API, so a future herdr release could change them.
+public API, so a future herdr release could change them. The pages' scripts
+are `public/app.js` (the Mac) and `public/m.js` (the phone).
+
+## Tests
+
+```bash
+npm test               # every test, failing below 100% line, branch, and function coverage
+npm run coverage:gaps  # lists each uncovered line, branch, and function with its source
+```
+
+The tests never touch tmux, herdr, git remotes, or your data: `server.js`
+runs against a throwaway home folder with tmux, `ps`, herdr, and macOS's
+helpers replaced by fakes, and the two pages run in
+[jsdom](https://github.com/jsdom/jsdom) with stand-ins for xterm.js, the
+WebSocket, and push. `scripts/herdr-sort-spaces` is tested with pytest against
+a fake herdr socket; set it up once with
+`python3 -m venv .venv && .venv/bin/pip install pytest pytest-cov`.
+Coverage spans `server.js`, `public/*.js`, and both scripts in `scripts/`;
+`scripts/render-assets.sh`, which renders the site's images, is the one file
+outside it.
 
 ## Limits
 
@@ -378,8 +402,9 @@ public API, so a future herdr release could change them.
   move on the Mac, so a Mac playing a video with no input counts as away.
 - Keeping the Mac awake blocks idle sleep only. A closed lid or a chosen
   Sleep still puts the Mac to sleep, and then the phone cannot reach it.
-- The mode shown on a card is read from Claude Code's status line, and Last
-  reply from its transcript file; both are tested with Claude Code 2.1.292.
+- The mode shown on a card and the phone's status lines are read from Claude
+  Code's screen, and the conversation and Last reply from its transcript file;
+  all are tested with Claude Code 2.1.292.
 - After a Corral restart, a window shows the current screen; older scrollback
   stays in tmux (`tmux -L corral attach`) rather than in the browser.
 - Reopen re-sorts herdr's spaces alphabetically with
