@@ -42,6 +42,16 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
 - **A resizable bottom bar.** Minimized windows wait in the bar at the
   bottom. Drag its top edge to make it bigger or smaller; double-click the
   edge to reset it.
+- **Your windows on your phone**, through [Tailscale](https://tailscale.com).
+  Open `/m` from any device signed in to your tailnet to see every window on
+  the Mac, sorted by whose turn it is (Claude waiting for you, Claude working,
+  plain shells), with the last few lines of each. Tap one for a full terminal
+  with the keys a phone lacks (Esc, Shift-Tab, Ctrl, arrows, and the numbers
+  for Claude Code's menus), a message box that works with dictation, and a
+  History view of the scrollback as text you can select. You can also start
+  Claude Code in any project, or restore windows after a restart. Add it to
+  your Home Screen and it opens like an app. Another computer on your tailnet
+  gets the full desktop page.
 - **Categories** you define, with collapsible groups. To move a space,
   right-click it (or use its ⋯ button) and pick a group, or drag it onto any
   group's header or rows. Cmd-click or Shift-click to select several spaces
@@ -82,14 +92,46 @@ Settings, all optional, by environment variable:
 | `CORRAL_TMUX_SOCKET` | `corral` | Name of Corral's private tmux server |
 | `HERDR_BIN` | `~/.local/bin/herdr`, else `herdr` on your `PATH` | Path to the herdr command |
 | `CORRAL_SORT_BIN` | `scripts/herdr-sort-spaces` | Script that re-sorts herdr spaces after a Reopen |
+| `CORRAL_TAILSCALE` | on | Set to `0` to refuse every request through Tailscale |
+| `CORRAL_TAILSCALE_PORT` | `8443` | The HTTPS port `tailscale serve` uses for Corral |
+| `CORRAL_TAILSCALE_USERS` | the login that owns this Mac in Tailscale | Comma-separated Tailscale logins allowed in |
+
+### On your phone and other devices
+
+Corral itself never listens beyond `127.0.0.1`. To reach it from your other
+devices, have [Tailscale](https://tailscale.com) forward to it, from inside
+your tailnet only:
+
+```sh
+npm run tailscale   # tailscale serve --bg --https=8443 http://127.0.0.1:8777
+```
+
+Then open `https://<this Mac>.<your tailnet>.ts.net:8443/m` on your phone (the
+desktop page's **On your phone** button copies the link). A phone that opens
+`/` is sent to `/m`; `/?desktop` keeps the desktop page. The setting stays on
+until you run `tailscale serve --https=8443 off`. Port 8443 leaves 443 free for
+anything else you already serve.
+
+How it compares with Claude Code's Remote Control (`/rc`): Remote Control
+reaches the Claude Code sessions you turned it on for, through Anthropic's
+servers. Corral shows every window on the Mac without turning anything on
+(Claude Code and plain shells alike), lets you start new ones in any project,
+and reaches your Mac over your tailnet, encrypted end to end.
 
 ## Security
 
 A browser terminal is remote code execution by design, so Corral is strict
 about who can reach it:
 
-- It listens on `127.0.0.1` only and has **no login**. Do not expose it on
-  another interface or behind a proxy without adding real authentication.
+- It listens on `127.0.0.1` only and has **no login of its own**. Do not
+  expose it on another interface or behind any other proxy.
+- Through Tailscale, a request must name this Mac's tailnet address and carry
+  an allowed Tailscale login. `tailscale serve` adds that login to every
+  request it forwards and replaces any value the sender supplied; a Funnel
+  (public internet) request has none, so turning on Funnel for this port lets
+  no one in. By default only the login that owns this Mac is allowed. Each
+  change and terminal connection must also come from that same address as its
+  `Origin`.
 - Every request must carry a loopback `Host` header, which blocks DNS
   rebinding. Every change and every terminal connection must also come from a
   loopback `Origin`, so other websites you visit cannot drive it.
@@ -122,8 +164,8 @@ about who can reach it:
   `~/.tmux.conf`. You can attach to a Corral shell from any terminal with
   `tmux -L corral attach -t wt-<id>`.
 
-Nothing is sent anywhere. The page loads no outside resources; the font is
-bundled.
+Nothing is sent anywhere, except to your own devices when you turn on
+Tailscale access. The page loads no outside resources; the font is bundled.
 
 ## How it works
 
@@ -141,6 +183,11 @@ public API, so a future herdr release could change them.
 - Corral's terminals are its own. herdr's API offers snapshots and events but
   no live byte stream, so Corral cannot show or type into the terminals inside
   herdr itself.
+- A window open on the Mac and a phone at once takes the size of whichever
+  one typed last (tmux's `window-size latest`), so the other shows it smaller
+  or larger until you type there.
+- The phone page shows a toast when a Claude Code window turns to "your turn"
+  while the page is open; it does not send push notifications.
 - After a Corral restart, a window shows the current screen; older scrollback
   stays in tmux (`tmux -L corral attach`) rather than in the browser.
 - Reopen re-sorts herdr's spaces alphabetically with

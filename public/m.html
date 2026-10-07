@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Corral</title>
+<meta name="theme-color" content="#1b1823">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Corral">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/vendor/xterm.css">
+<style>
+  /* The phone view of Corral: the same dusk palette as the desktop page. Green, amber, and red mean
+     agent status only. */
+  @font-face { font-family:'Bricolage Grotesque'; font-style:normal; font-weight:400 800; font-display:swap;
+               src:url(/fonts/bricolage-grotesque-latin.woff2) format('woff2'); }
+  :root {
+    --ground:#1b1823; --panel:#24202d; --raise:#2d2838; --rail:#3a3446; --text:#eee9f6; --muted:#9d94ad;
+    --fence:#8b7cf6; --lavender:#c9c1ff; --term:#100e15;
+    --working:#e5a93d; --idle:#4cc38a; --blocked:#e5584d; --unknown:#5d566b;
+    --brand:'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, sans-serif;
+    --mono:Menlo, Monaco, ui-monospace, monospace;
+    --vh:100dvh;
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  [hidden] { display:none !important; }
+  html, body { margin:0; background:var(--ground); color:var(--text); height:100%;
+               font:16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  body { overscroll-behavior:none; }
+  button { font:inherit; color:var(--text); background:var(--raise); border:1px solid var(--rail);
+           border-radius:10px; padding:8px 14px; cursor:pointer; touch-action:manipulation; }
+  button:active { background:var(--rail); }
+  button.primary { background:var(--fence); border-color:var(--fence); color:#fff; font-weight:600; }
+  :focus-visible { outline:2px solid var(--lavender); outline-offset:1px; }
+
+  .view { position:fixed; inset:0; height:var(--vh); display:flex; flex-direction:column;
+          padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); }
+  header { display:flex; align-items:center; gap:10px; padding:10px 14px; min-height:52px;
+           border-bottom:1px solid var(--rail); background:var(--panel); flex:none; }
+  header h1 { font:700 20px/1.1 var(--brand); margin:0; letter-spacing:-.01em; }
+  header .sub { color:var(--muted); font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  header .grow { flex:1; min-width:0; }
+  header .title { font:600 16px/1.2 var(--brand); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .icon { width:28px; height:28px; flex:none; }
+  .iconbtn { padding:6px 10px; min-width:40px; }
+
+  /* Home: the windows running on the Mac */
+  #list { flex:1; overflow-y:auto; padding:12px 12px calc(96px + env(safe-area-inset-bottom)); }
+  .section { color:var(--muted); font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.06em;
+             margin:14px 4px 8px; }
+  .card { display:block; width:100%; text-align:left; background:var(--panel); border:1px solid var(--rail);
+          border-radius:14px; padding:12px 14px; margin-bottom:10px; }
+  .card:active { background:var(--raise); }
+  .card .top { display:flex; align-items:center; gap:8px; }
+  .card .name { font:600 17px/1.2 var(--brand); flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .card .when { color:var(--muted); font-size:13px; flex:none; }
+  .card .where { color:var(--muted); font-size:13px; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .card pre { margin:8px 0 0; padding:8px 10px; background:var(--term); border-radius:8px; color:#cfc8dc;
+              font:12px/1.35 var(--mono); white-space:pre-wrap; word-break:break-word; max-height:7.2em; overflow:hidden; }
+  .pill { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:2px 9px;
+          border-radius:99px; background:var(--raise); color:var(--muted); flex:none; }
+  .pill::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--unknown); }
+  .pill.idle { color:var(--idle); } .pill.idle::before { background:var(--idle); }
+  .pill.busy { color:var(--working); } .pill.busy::before { background:var(--working); animation:pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity:.35; } }
+  .empty { color:var(--muted); text-align:center; padding:40px 20px; }
+  .banner { background:var(--raise); border:1px solid var(--fence); border-radius:14px; padding:12px 14px; margin-bottom:12px;
+            display:flex; gap:10px; align-items:center; }
+  .banner .grow { flex:1; }
+  #fab { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(18px + env(safe-area-inset-bottom));
+         padding:14px 26px; border-radius:99px; font-size:17px; box-shadow:0 8px 24px #0008; white-space:nowrap; }
+
+  /* Sheet: start something new */
+  #sheet { position:fixed; inset:0; background:#0009; display:flex; align-items:flex-end; z-index:20; }
+  #sheet .panel { width:100%; max-height:88%; background:var(--panel); border-radius:18px 18px 0 0; display:flex; flex-direction:column;
+                  padding-bottom:env(safe-area-inset-bottom); }
+  #sheet .head { padding:14px 16px 10px; display:flex; gap:10px; align-items:center; }
+  #sheet .head h2 { font:700 18px var(--brand); margin:0; flex:1; }
+  .seg { display:flex; margin:0 16px 10px; background:var(--ground); border:1px solid var(--rail); border-radius:10px; padding:3px; }
+  .seg button { flex:1; border:0; background:none; padding:7px 4px; font-size:14px; border-radius:8px; color:var(--muted); }
+  .seg button.on { background:var(--raise); color:var(--text); font-weight:600; }
+  #q { margin:0 16px 8px; padding:10px 12px; border-radius:10px; border:1px solid var(--rail); background:var(--ground);
+       color:var(--text); font-size:16px; }
+  #projects { overflow-y:auto; padding:0 10px 14px; }
+  .proj { display:flex; width:100%; align-items:center; gap:10px; text-align:left; border:0; background:none;
+          border-bottom:1px solid var(--rail); border-radius:0; padding:12px 8px; }
+  .proj .dot { width:9px; height:9px; border-radius:50%; background:var(--unknown); flex:none; }
+  .proj .dot.working { background:var(--working); } .proj .dot.idle, .proj .dot.done { background:var(--idle); }
+  .proj .dot.blocked { background:var(--blocked); }
+  .proj .n { flex:1; min-width:0; } .proj .n div { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .proj .n .p { color:var(--muted); font-size:12px; }
+
+  /* Terminal view */
+  #termwrap { flex:1; min-height:0; background:var(--term); padding:4px 2px 0 4px; position:relative; }
+  #termwrap .xterm { height:100%; }
+  #keys { display:flex; gap:6px; overflow-x:auto; padding:7px 8px; background:var(--panel); border-top:1px solid var(--rail);
+          flex:none; scrollbar-width:none; }
+  #keys::-webkit-scrollbar { display:none; }
+  #keys button { flex:none; padding:7px 11px; font:600 14px var(--mono); border-radius:8px; min-width:42px; }
+  #keys button.on { background:var(--fence); border-color:var(--fence); }
+  #compose { display:flex; gap:8px; align-items:flex-end; padding:8px 8px calc(8px + env(safe-area-inset-bottom));
+             background:var(--panel); flex:none; }
+  #msg { flex:1; min-width:0; resize:none; max-height:30vh; padding:10px 12px; border-radius:18px; border:1px solid var(--rail);
+         background:var(--ground); color:var(--text); font:16px/1.35 -apple-system, BlinkMacSystemFont, sans-serif; }
+  #msg::placeholder { color:var(--muted); }
+  #send { border-radius:18px; padding:10px 16px; }
+  #conn { position:absolute; top:8px; right:10px; font-size:12px; color:var(--muted); background:#000a; padding:3px 8px; border-radius:99px; }
+
+  /* History: the scrollback as plain text */
+  #histtext { flex:1; overflow:auto; margin:0; padding:12px 12px calc(16px + env(safe-area-inset-bottom)); background:var(--term);
+              font:12px/1.4 var(--mono); white-space:pre-wrap; word-break:break-word; color:#ddd6ea;
+              -webkit-user-select:text; user-select:text; }
+
+  #toast { position:fixed; left:12px; right:12px; top:calc(10px + env(safe-area-inset-top)); z-index:30; background:var(--raise);
+           border:1px solid var(--fence); border-radius:12px; padding:12px 14px; box-shadow:0 8px 24px #0009; }
+</style>
+</head>
+<body>
+
+<section id="home" class="view">
+  <header>
+    <img class="icon" src="/favicon.svg" alt="">
+    <div class="grow"><h1>Corral</h1><div class="sub" id="machine"></div></div>
+    <button class="iconbtn" id="todesk" title="Open the full desktop page">Desktop</button>
+  </header>
+  <div id="list"></div>
+  <button id="fab" class="primary">+ Start something</button>
+</section>
+
+<section id="termview" class="view" hidden>
+  <header>
+    <button class="iconbtn" id="back" aria-label="Back to the list">&lsaquo;</button>
+    <div class="grow"><div class="title" id="ttitle"></div><div class="sub" id="tsub"></div></div>
+    <button class="iconbtn" id="smaller" aria-label="Smaller text">A&minus;</button>
+    <button class="iconbtn" id="bigger" aria-label="Larger text">A+</button>
+    <button class="iconbtn" id="histbtn">History</button>
+  </header>
+  <div id="termwrap"><div id="term" style="height:100%"></div><span id="conn" hidden>Reconnecting&hellip;</span></div>
+  <div id="keys"></div>
+  <div id="compose">
+    <textarea id="msg" rows="1" placeholder="Message, or tap the mic to dictate" enterkeyhint="send" autocapitalize="sentences"></textarea>
+    <button id="send" class="primary">Send</button>
+  </div>
+</section>
+
+<section id="histview" class="view" hidden>
+  <header>
+    <button class="iconbtn" id="histback" aria-label="Back to the terminal">&lsaquo;</button>
+    <div class="grow"><div class="title" id="htitle"></div><div class="sub">Scrollback, as text you can select</div></div>
+    <button class="iconbtn" id="histcopy">Copy all</button>
+  </header>
+  <pre id="histtext"></pre>
+</section>
+
+<div id="sheet" hidden>
+  <div class="panel">
+    <div class="head"><h2>Start in a project</h2><button class="iconbtn" id="sheetx" aria-label="Close">&times;</button></div>
+    <div class="seg" id="agentseg">
+      <button data-a="claude" class="on">Claude Code</button>
+      <button data-a="claude-continue">Last session</button>
+      <button data-a="">Shell</button>
+    </div>
+    <input id="q" type="search" placeholder="Search projects" autocomplete="off" autocapitalize="off">
+    <div id="projects"></div>
+  </div>
+</div>
+
+<div id="toast" hidden></div>
+
+<script src="/vendor/xterm.js"></script>
+<script src="/vendor/addon-fit.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const api = (url, opts = {}) => fetch(url, {
+  ...opts, headers: { 'Content-Type': 'application/json' },
+  body: opts.body ? JSON.stringify(opts.body) : undefined,
+}).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))));
+function load(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } }
+function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+// Builds an element; strings become text nodes, never HTML.
+function h(tag, attrs = {}, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') el.className = v; else if (k.startsWith('on')) el[k] = v; else if (v != null) el.setAttribute(k, v);
+  }
+  for (const c of kids.flat()) if (c != null) el.append(c);
+  return el;
+}
+
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 4000);
+}
+$('#toast').onclick = () => { $('#toast').hidden = true; };
+
+// iOS shrinks the visual viewport, not the layout one, when the keyboard opens; follow it.
+const vv = window.visualViewport;
+function setVh() {
+  if (!vv) return;
+  document.documentElement.style.setProperty('--vh', `${vv.height}px`);
+  window.scrollTo(0, 0);
+  if (current) requestAnimationFrame(() => current.fit.fit());
+}
+vv?.addEventListener('resize', setVh);
+
+const home = (p) => p?.replace(/^\/Users\/[^/]+/, '~') || '';
+function ago(ms) {
+  if (!ms) return '';
+  const s = Math.max(0, (Date.now() - ms) / 1000);
+  if (s < 45) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)}m ago`;
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+  return `${Math.round(s / 86400)}d ago`;
+}
+// Claude Code's own status: busy while it works, idle when it is waiting for you.
+function statusOf(w) {
+  if (!w.claude) return { cls: '', text: 'Shell', rank: 2 };
+  if (w.claude.status === 'busy') return { cls: 'busy', text: 'Working', rank: 1 };
+  if (w.claude.status === 'idle') return { cls: 'idle', text: 'Your turn', rank: 0 };
+  return { cls: '', text: 'Claude', rank: 1 };
+}
+
+// ---- Home: the list of windows ----
+let windows = [];
+let restore = null;
+let lastStatus = new Map();
+
+async function refresh() {
+  let o;
+  try { o = await api('/api/overview'); } catch { return; }
+  $('#machine').textContent = `on ${o.machine}`;
+  windows = o.sessions.filter((s) => !s.exited);
+  // A window whose Claude finishes while you look elsewhere gets a notice.
+  for (const w of windows) {
+    const now = w.claude?.status;
+    const was = lastStatus.get(w.id);
+    if (was === 'busy' && now === 'idle' && current?.info.id !== w.id) toast(`${w.label} is waiting for you`);
+    lastStatus.set(w.id, now);
+  }
+  const waiting = windows.filter((w) => w.claude?.status === 'idle').length;
+  document.title = waiting ? `(${waiting}) Corral` : 'Corral';
+  if (current) {
+    const w = windows.find((x) => x.id === current.info.id);
+    if (w) $('#tsub').textContent = `${statusOf(w).text} · ${home(w.cwd)}`;
+  }
+  if (!$('#home').hidden) renderList();
+}
+
+function renderList() {
+  const list = $('#list');
+  const kids = [];
+  if (restore?.windows?.length) {
+    kids.push(h('div', { class: 'banner' },
+      h('div', { class: 'grow' }, `${restore.windows.length} window${restore.windows.length === 1 ? '' : 's'} from before the restart can be reopened.`),
+      h('button', { class: 'primary', onclick: doRestore }, 'Restore')));
+  }
+  if (!windows.length) kids.push(h('div', { class: 'empty' }, 'Nothing is running on the Mac. Start something below.'));
+  const sorted = [...windows].sort((a, b) => statusOf(a).rank - statusOf(b).rank || (b.activity || 0) - (a.activity || 0));
+  let lastRank = -1;
+  for (const w of sorted) {
+    const st = statusOf(w);
+    if (st.rank !== lastRank) {
+      kids.push(h('div', { class: 'section' }, ['Waiting for you', 'Working', 'Shells'][st.rank]));
+      lastRank = st.rank;
+    }
+    kids.push(h('button', { class: 'card', onclick: () => openTerm(w) },
+      h('div', { class: 'top' }, h('span', { class: 'name' }, w.label), h('span', { class: `pill ${st.cls}` }, st.text)),
+      h('div', { class: 'where' }, `${home(w.cwd)}${w.activity ? ` · ${ago(w.activity)}` : ''}`),
+      w.preview?.length ? h('pre', {}, w.preview.join('\n')) : null));
+  }
+  list.replaceChildren(...kids);
+}
+
+async function checkRestore() {
+  restore = await api('/api/restore').catch(() => null);
+  renderList();
+}
+async function doRestore() {
+  try {
+    const r = await api('/api/restore', { method: 'POST' });
+    restore = null;
+    toast(`Reopened ${r.sessions.length} window${r.sessions.length === 1 ? '' : 's'}.`);
+    refresh();
+  } catch { toast('Could not restore the windows.'); }
+}
+
+$('#todesk').onclick = () => { location.href = '/?desktop'; };
+
+// ---- Start something: pick a project and what to run there ----
+let agent = load('corral.m.agent', 'claude');
+let projects = [];
+function setAgent(a) {
+  agent = a; store('corral.m.agent', a);
+  for (const b of $('#agentseg').children) b.classList.toggle('on', b.dataset.a === a);
+}
+for (const b of $('#agentseg').children) b.onclick = () => setAgent(b.dataset.a);
+setAgent(agent);
+
+async function openSheet() {
+  $('#sheet').hidden = false;
+  $('#q').value = '';
+  $('#projects').replaceChildren(h('div', { class: 'empty' }, 'Loading projects…'));
+  const [hd, pj] = await Promise.all([api('/api/herdr').catch(() => ({ spaces: [] })), api('/api/projects').catch(() => ({ projects: [] }))]);
+  const seen = new Set();
+  projects = [];
+  for (const s of hd.spaces || []) {
+    const root = s.root || s.cwd;
+    if (!root || seen.has(root)) continue;
+    seen.add(root);
+    projects.push({ label: s.label, root, space: s.id, status: s.status, open: true });
+  }
+  for (const p of pj.projects || []) {
+    if (seen.has(p.root) || !p.exists) continue;
+    seen.add(p.root);
+    projects.push({ label: p.label, root: p.root, space: null, status: null, open: false });
+  }
+  projects.push({ label: 'Home folder', root: null, space: null, status: null, open: false, home: true });
+  renderProjects();
+}
+function renderProjects() {
+  const q = $('#q').value.trim().toLowerCase();
+  const match = projects.filter((p) => !q || p.label.toLowerCase().includes(q) || (p.root || '').toLowerCase().includes(q));
+  const row = (p) => h('button', { class: 'proj', onclick: () => start(p) },
+    h('span', { class: `dot ${p.status || ''}` }),
+    h('span', { class: 'n' }, h('div', {}, p.label), h('div', { class: 'p' }, p.home ? '~' : home(p.root))));
+  const open = match.filter((p) => p.open), other = match.filter((p) => !p.open);
+  $('#projects').replaceChildren(
+    ...(open.length ? [h('div', { class: 'section' }, 'herdr spaces'), ...open.map(row)] : []),
+    ...(other.length ? [h('div', { class: 'section' }, 'Other projects'), ...other.map(row)] : []),
+    ...(!match.length ? [h('div', { class: 'empty' }, 'No project matches.')] : []));
+}
+$('#q').oninput = renderProjects;
+$('#fab').onclick = openSheet;
+$('#sheetx').onclick = () => { $('#sheet').hidden = true; };
+$('#sheet').onclick = (e) => { if (e.target.id === 'sheet') $('#sheet').hidden = true; };
+
+async function start(p) {
+  $('#sheet').hidden = true;
+  try {
+    const s = await api('/api/sessions', { method: 'POST', body: { cwd: p.root, label: p.home ? 'shell' : p.label, space: p.space, agent: p.home ? '' : agent } });
+    openTerm(s);
+    refresh();
+  } catch { toast('Could not start it on the Mac.'); }
+}
+
+// ---- Terminal view ----
+let current = null; // {info, term, fit, ws}
+let fontSize = load('corral.m.font', 12);
+let ctrlArmed = false;
+
+function sendRaw(d) { if (current?.ws?.readyState === 1) current.ws.send(JSON.stringify({ t: 'in', d })); }
+
+function openTerm(info) {
+  closeTerm();
+  $('#home').hidden = true; $('#termview').hidden = false;
+  $('#ttitle').textContent = info.label;
+  const w = windows.find((x) => x.id === info.id) || info;
+  $('#tsub').textContent = `${statusOf(w).text} · ${home(info.cwd)}`;
+  const term = new Terminal({ fontFamily: 'Menlo, Monaco, ui-monospace, monospace', fontSize, cursorBlink: false,
+    scrollback: 1000, theme: { background: '#100e15', cursor: '#c9c1ff', selectionBackground: '#4d4366' } });
+  const fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.open($('#term'));
+  // Tapping the terminal should not pop up the keyboard; typing goes through the box below, or the Type key.
+  term.textarea.setAttribute('inputmode', 'none');
+  current = { info, term, fit, ws: null, alive: true };
+  history.pushState({ term: info.id }, '');
+  fit.fit();
+  term.onData((d) => {
+    if (ctrlArmed && d.length === 1) { d = String.fromCharCode(d.toUpperCase().charCodeAt(0) & 31); setCtrl(false); }
+    sendRaw(d);
+  });
+  term.onResize(({ cols, rows }) => current?.ws?.readyState === 1 && current.ws.send(JSON.stringify({ t: 'resize', cols, rows })));
+  connect();
+}
+
+function connect() {
+  if (!current?.alive) return;
+  const c = current;
+  const { term } = c;
+  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?id=${encodeURIComponent(c.info.id)}&own=1&cols=${term.cols}&rows=${term.rows}`);
+  c.ws = ws;
+  ws.onopen = () => {
+    $('#conn').hidden = true;
+    term.reset();
+    c.fit.fit();
+    ws.send(JSON.stringify({ t: 'resize', cols: term.cols, rows: term.rows }));
+  };
+  ws.onmessage = (e) => term.write(e.data);
+  ws.onclose = () => {
+    if (current !== c || !c.alive) return;
+    $('#conn').hidden = false;
+    setTimeout(() => { if (current === c && c.ws === ws) connect(); }, 1500);
+  };
+}
+
+function closeTerm() {
+  if (!current) return;
+  current.alive = false;
+  current.ws?.close();
+  current.term.dispose();
+  $('#term').replaceChildren();
+  current = null;
+  setCtrl(false);
+}
+
+function backHome() {
+  closeTerm();
+  $('#termview').hidden = true; $('#histview').hidden = true; $('#home').hidden = false;
+  refresh();
+}
+$('#back').onclick = () => history.back();
+window.addEventListener('popstate', () => {
+  if (!$('#histview').hidden && current) { $('#histview').hidden = true; $('#termview').hidden = false; return; }
+  if (current) backHome();
+});
+
+// iOS drops the socket while the page is in the background; reconnect when it comes back.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  refresh();
+  if (current && current.ws?.readyState !== 1) connect();
+});
+
+function setFont(n) {
+  fontSize = Math.min(20, Math.max(8, n)); store('corral.m.font', fontSize);
+  if (current) { current.term.options.fontSize = fontSize; current.fit.fit(); }
+}
+$('#smaller').onclick = () => setFont(fontSize - 1);
+$('#bigger').onclick = () => setFont(fontSize + 1);
+new ResizeObserver(() => current?.fit.fit()).observe($('#termwrap'));
+
+// The keys a phone keyboard lacks. Claude Code uses Esc to interrupt, Shift-Tab to change mode,
+// and numbers to answer its menus.
+const KEYS = [
+  ['Type', 'kbd'], ['Esc', '\x1b'], ['⇧Tab', '\x1b[Z'], ['Tab', '\t'], ['Ctrl', 'ctrl'], ['^C', '\x03'],
+  ['↑', '\x1b[A'], ['↓', '\x1b[B'], ['←', '\x1b[D'], ['→', '\x1b[C'], ['⏎', '\r'],
+  ['1', '1'], ['2', '2'], ['3', '3'], ['y', 'y'], ['n', 'n'], ['/', '/'], ['PgUp', '\x1b[5~'], ['PgDn', '\x1b[6~'],
+];
+function setCtrl(on) { ctrlArmed = on; $('#keys [data-k="ctrl"]')?.classList.toggle('on', on); }
+$('#keys').replaceChildren(...KEYS.map(([label, k]) => h('button', {
+  'data-k': k === 'kbd' || k === 'ctrl' ? k : null,
+  'aria-label': { Type: 'Type straight into the terminal', '⏎': 'Enter', '⇧Tab': 'Shift Tab' }[label] || null,
+  // Keep focus where it is, so the keyboard does not close on every key.
+  onpointerdown: (e) => e.preventDefault(),
+  onclick: () => {
+    if (k === 'kbd') {
+      const ta = current?.term.textarea;
+      if (!ta) return;
+      const typing = ta.getAttribute('inputmode') !== 'none' && document.activeElement === ta;
+      ta.setAttribute('inputmode', typing ? 'none' : 'text');
+      if (typing) ta.blur(); else { ta.blur(); ta.focus(); }
+      $('#keys [data-k="kbd"]').classList.toggle('on', !typing);
+      return;
+    }
+    if (k === 'ctrl') return setCtrl(!ctrlArmed);
+    sendRaw(k);
+  },
+}, label)));
+
+// The message box: text goes in as a paste (so a multi-line message stays one message), then Enter.
+const msg = $('#msg');
+function grow() { msg.style.height = 'auto'; msg.style.height = `${Math.min(msg.scrollHeight, innerHeight * 0.3)}px`; }
+msg.addEventListener('input', grow);
+function sendMsg() {
+  if (!current) return;
+  const text = msg.value;
+  if (text) current.term.paste(text);
+  setTimeout(() => sendRaw('\r'), text ? 80 : 0);
+  msg.value = ''; grow();
+}
+$('#send').onpointerdown = (e) => e.preventDefault();
+$('#send').onclick = sendMsg;
+msg.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMsg(); }
+});
+
+// ---- History: the window's scrollback as plain text ----
+async function showHistory() {
+  if (!current) return;
+  $('#htitle').textContent = current.info.label;
+  $('#histtext').textContent = 'Loading…';
+  $('#termview').hidden = true; $('#histview').hidden = false;
+  history.pushState({ hist: true }, '');
+  try {
+    const r = await fetch(`/api/sessions/${encodeURIComponent(current.info.id)}/history`);
+    $('#histtext').textContent = r.ok ? await r.text() : 'This window has no saved scrollback.';
+  } catch { $('#histtext').textContent = 'Could not load the scrollback.'; }
+  const pre = $('#histtext');
+  pre.scrollTop = pre.scrollHeight;
+}
+$('#histbtn').onclick = showHistory;
+$('#histback').onclick = () => history.back();
+$('#histcopy').onclick = () => navigator.clipboard.writeText($('#histtext').textContent)
+  .then(() => toast('Copied the scrollback.')).catch(() => toast('Could not copy. Select the text instead.'));
+
+// ---- Start ----
+setVh();
+refresh();
+checkRestore();
+setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 4000);
+setInterval(() => { if (!$('#home').hidden) renderList(); }, 30000); // keeps "5m ago" current
+</script>
+</body>
+</html>

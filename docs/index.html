@@ -113,6 +113,7 @@
 
   /* Install */
   .cols { display:grid; grid-template-columns:1fr 1fr; gap:40px; margin-top:36px; }
+  .cols > * { min-width:0; } /* lets the code block scroll instead of widening the page on a phone */
   pre { font:14.5px/1.65 var(--mono); background:var(--term); border:1px solid var(--rail); border-radius:12px;
         padding:18px 20px; overflow-x:auto; margin:0; color:#e7e2f0; }
   pre .c { color:#7f7790; } pre .p { color:var(--idle); }
@@ -166,6 +167,7 @@
       <nav aria-label="Sections">
         <a href="#why">Why</a>
         <a href="#features">Features</a>
+        <a href="#phone">Phone</a>
         <a href="#how">How it works</a>
         <a href="#install">Install</a>
         <a href="https://github.com/ismayc/corral">GitHub</a>
@@ -221,6 +223,18 @@
           <h3>Terminals that survive</h3>
           <p>Every shell lives in its own tmux session. Closing the tab, reloading, or restarting Corral leaves the
             work running, and reopening the page puts each window back where it was.</p>
+        </div>
+        <div class="case">
+          <p class="q">"My Mac restarted, and all my sessions are gone."</p>
+          <h3>Restore them</h3>
+          <p>Corral keeps a backup of the open windows and the Claude Code conversation in each. After a restart, a
+            Restore button reopens every window in its folder, resuming its conversation.</p>
+        </div>
+        <div class="case">
+          <p class="q">"I stepped away, and Claude is waiting on me."</p>
+          <h3>Answer from your phone</h3>
+          <p>Through Tailscale, your phone lists every window on the Mac, with the ones waiting for you on top. Tap one
+            to reply, dictate, or start Claude Code in another project.</p>
         </div>
         <div class="case">
           <p class="q">"I have forty projects and can never find the one I want."</p>
@@ -284,7 +298,8 @@
             <li>Halves, Thirds, Quarters, Main + 2, Main over 2, 2 over 1, Main + 3, 3 x 3, and more.</li>
             <li>A plain grid with the number of columns and rows you choose.</li>
             <li>Drag a window's title bar onto another zone to move it there or swap.</li>
-            <li>Minimize a window to the bottom bar. It keeps running, and one click brings it back.</li>
+            <li>Minimize a window to the bottom bar. It keeps running, and one click brings it back. Drag the bar's top
+              edge to make it bigger or smaller.</li>
           </ul>
         </div>
         <div class="frame">
@@ -302,6 +317,8 @@
             <li>Closing a window ends its shell. Minimizing, reloading, or closing the tab does not.</li>
             <li>Attach to any Corral shell from another terminal with <code>tmux -L corral attach -t wt-&lt;id&gt;</code>.</li>
             <li>Links printed in a terminal are clickable.</li>
+            <li>Drag across text to copy it. Option-drag makes a browser selection instead.</li>
+            <li>After a Mac restart, Restore reopens the windows you had, each resuming its Claude Code conversation.</li>
           </ul>
         </div>
         <div class="frame">
@@ -312,12 +329,44 @@
     </div>
   </section>
 
+  <section id="phone">
+    <div class="wrap">
+      <p class="eyebrow">On your phone</p>
+      <h2>Keep working from any of your devices</h2>
+      <p class="lede">With <a href="https://tailscale.com">Tailscale</a>, Corral opens on your phone, tablet, or another
+        computer, and reaches your Mac over your own tailnet.</p>
+
+      <div class="feat">
+        <div class="copy">
+          <h3>Every window, sorted by whose turn it is</h3>
+          <p>The phone page lists each window on the Mac: Claude Code waiting for you first, then the ones still working,
+            then plain shells, each with its last few lines.</p>
+          <ul>
+            <li>Tap a window for a full terminal, with the keys a phone lacks: Esc, Shift-Tab, Ctrl, arrows, and the
+              numbers for Claude Code's menus.</li>
+            <li>Type or dictate in the message box; a multi-line message goes in as one.</li>
+            <li>History shows the scrollback as text you can select and copy.</li>
+            <li>Start Claude Code in any project, or restore windows after a restart.</li>
+            <li>Add it to your Home Screen and it opens like an app.</li>
+          </ul>
+          <p>Compared with Claude Code's Remote Control, it shows every window on the Mac without turning anything on,
+            covers plain shells too, and reaches your Mac over your tailnet, encrypted end to end.</p>
+        </div>
+        <div class="frame narrow">
+          <img src="img/phone.jpg" width="585" height="1025" loading="lazy"
+               alt="Corral's phone page: dashboard and notes under Waiting for you, api-server under Working, and a blog shell, each with its last lines of output, and a Start something button.">
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section id="how">
     <div class="wrap">
       <p class="eyebrow">How it works</p>
       <h2>One small Node process</h2>
       <p class="lede"><code>server.js</code> serves the page, runs each shell in a pseudo-terminal attached to a tmux
-        session, and streams it to the browser over a WebSocket. Nothing leaves your machine.</p>
+        session, and streams it to the browser over a WebSocket. Nothing leaves your machine, except to your own devices
+        when you turn on Tailscale access.</p>
 
       <div class="flow" role="list" aria-label="Data flow from browser to tmux">
         <div class="node" role="listitem"><b>Your browser</b><p>xterm.js draws each terminal and sends your keystrokes.</p></div>
@@ -331,7 +380,9 @@
       <div class="side-note">The sidebar comes from <code>herdr api snapshot</code>, and each space's project folder from
         herdr's <code>~/.config/herdr/session.json</code>. Corral polls herdr every 30 seconds, so it notices a space that
         closes even while no page is open. herdr's session files are not a public API, so a future herdr release could
-        change them.</div>
+        change them. Another device reaches Corral through <code>tailscale serve</code>, which forwards to the same
+        loopback address; each device gets its own tmux client, so tmux sizes a window for whichever device typed
+        last.</div>
     </div>
   </section>
 
@@ -362,9 +413,17 @@
             <tr><td><code>CORRAL_TMUX_SOCKET</code></td><td><code>corral</code></td><td>Name of Corral's private tmux server</td></tr>
             <tr><td><code>HERDR_BIN</code></td><td><code>~/.local/bin/herdr</code>, else <code>herdr</code> on your <code>PATH</code></td><td>Path to the herdr command</td></tr>
             <tr><td><code>CORRAL_SORT_BIN</code></td><td><code>scripts/herdr-sort-spaces</code></td><td>Script that re-sorts herdr spaces after a Reopen</td></tr>
+            <tr><td><code>CORRAL_TAILSCALE</code></td><td>on</td><td>Set to <code>0</code> to refuse every request through Tailscale</td></tr>
+            <tr><td><code>CORRAL_TAILSCALE_PORT</code></td><td><code>8443</code></td><td>The HTTPS port <code>tailscale serve</code> uses for Corral</td></tr>
+            <tr><td><code>CORRAL_TAILSCALE_USERS</code></td><td>The login that owns this Mac in Tailscale</td><td>Comma-separated Tailscale logins allowed in</td></tr>
           </tbody>
         </table>
       </div>
+      <h3 style="margin-top:40px">On your phone and other devices</h3>
+      <p style="overflow-wrap:anywhere">Have Tailscale forward to Corral from inside your tailnet, then open
+        <code>https://&lt;this Mac&gt;.&lt;your tailnet&gt;.ts.net:8443/m</code> on any device signed in to it. The desktop
+        page's <b>On your phone</b> button copies the link.</p>
+      <pre><span class="p">$</span> npm run tailscale   <span class="c"># tailscale serve --bg --https=8443 http://127.0.0.1:8777</span></pre>
     </div>
   </section>
 
@@ -373,10 +432,13 @@
       <p class="eyebrow">Security</p>
       <h2>Strict about who can reach it</h2>
       <p class="lede">A browser terminal can run any command by design, so Corral only answers your own machine and
-        never takes a command from the page.</p>
+        your own Tailscale login, and never takes a command from the page.</p>
       <div class="grid2">
-        <div class="card"><h3>Loopback only, no login</h3><p>It listens on 127.0.0.1. Do not expose it on another
-          interface or behind a proxy without adding real authentication.</p></div>
+        <div class="card"><h3>Loopback only</h3><p>It listens on 127.0.0.1 and has no login of its own. Do not expose it
+          on another interface or behind any proxy other than <code>tailscale serve</code>.</p></div>
+        <div class="card"><h3>Your tailnet, your login</h3><p>Through Tailscale, a request must name this Mac's tailnet
+          address and carry an allowed Tailscale login, which <code>tailscale serve</code> sets and a sender cannot fake.
+          A public Funnel request carries none, so it gets nothing.</p></div>
         <div class="card"><h3>Other sites cannot drive it</h3><p>Every request needs a loopback <code>Host</code> header,
           which blocks DNS rebinding, and every change and terminal connection needs a loopback <code>Origin</code>.</p></div>
         <div class="card"><h3>A fixed menu of programs</h3><p>The page can choose Claude Code, Claude Code with
@@ -385,7 +447,7 @@
           location, after resolving symlinks, is outside the project.</p></div>
         <div class="card"><h3>No borrowed identity</h3><p>Started from inside Claude Code or a herdr pane, Corral strips
           that session's variables (<code>CLAUDE_CODE_*</code>, <code>HERDR_*</code>, <code>TMUX*</code>) from every shell it starts.</p></div>
-        <div class="card"><h3>Stays on your Mac</h3><p>Two small files in <code>~/.local/share/corral</code>, your browser's
+        <div class="card"><h3>Stays on your Mac</h3><p>A few small files in <code>~/.local/share/corral</code>, your browser's
           local storage, and a private tmux server. The page loads no outside resources.</p></div>
       </div>
     </div>

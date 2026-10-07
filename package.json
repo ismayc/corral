@@ -10,6 +10,7 @@
   },
   "scripts": {
     "start": "node server.js",
+    "tailscale": "tailscale serve --bg --https=8443 http://127.0.0.1:8777",
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper"
   },
   "dependencies": {

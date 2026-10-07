@@ -5,6 +5,9 @@
 // Binds to 127.0.0.1 only. A shell is remote code execution, so every request
 // is checked for a loopback Host header and every mutation or socket upgrade
 // for a loopback Origin (blocks DNS rebinding and cross-site requests).
+// Other devices can reach it only through `tailscale serve`, which forwards
+// to loopback; those requests must name this Mac's tailnet host and carry an
+// allowed Tailscale login (see tailnetAccess below).
 
 const http = require('http');
 const fs = require('fs');
@@ -34,10 +37,58 @@ const TYPES = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.woff2': 'font/woff2',
+  '.webmanifest': 'application/manifest+json',
 };
 
 const allowedHosts = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
 const allowedOrigins = new Set([`http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`]);
+
+// Tailnet access. `tailscale serve --bg --https=8443 http://127.0.0.1:8777` makes Corral reachable from
+// the user's own devices at https://<this Mac>.<tailnet>.ts.net:8443, still over loopback here.
+// Tailscale serve adds Tailscale-User-Login to every request it forwards and replaces any value the
+// client sent; a Funnel (public) request has none. So a request is accepted through the tailnet name
+// only when that login is allowed: by default, the login that owns this Mac in Tailscale.
+const TS_PORT = Number(process.env.CORRAL_TAILSCALE_PORT || 8443);
+const TS_BIN = ['/usr/local/bin/tailscale', '/opt/homebrew/bin/tailscale', '/Applications/Tailscale.app/Contents/MacOS/Tailscale']
+  .find((p) => fs.existsSync(p)) || null;
+let tailnet = null; // {host, origin, url, logins:Set, machine}
+
+function detectTailnet() {
+  if (process.env.CORRAL_TAILSCALE === '0' || !TS_BIN) return;
+  execFile(TS_BIN, ['status', '--json'], { timeout: 5000, maxBuffer: 4 * 1024 * 1024 }, (err, out) => {
+    if (err) return;
+    try {
+      const d = JSON.parse(out);
+      const name = String(d.Self?.DNSName || '').replace(/\.$/, '');
+      const owner = d.User?.[d.Self?.UserID]?.LoginName;
+      const extra = (process.env.CORRAL_TAILSCALE_USERS || '').split(',').map((s) => s.trim()).filter(Boolean);
+      const logins = new Set(extra.length ? extra : owner ? [owner] : []);
+      if (!/^[a-z0-9.-]+\.ts\.net$/i.test(name) || !logins.size) return;
+      const host = `${name}:${TS_PORT}`.toLowerCase();
+      const next = { host, origin: `https://${host}`, url: `https://${host}/`, logins, machine: d.Self?.HostName || name, served: false };
+      // Whether `tailscale serve` actually forwards that address here; only then is the link offered.
+      execFile(TS_BIN, ['serve', 'status', '--json'], { timeout: 5000 }, (err2, out2) => {
+        try {
+          const proxy = JSON.parse(out2).Web?.[host]?.Handlers?.['/']?.Proxy || '';
+          next.served = !err2 && /^(http:\/\/)?(127\.0\.0\.1|localhost):(\d+)\/?$/.test(proxy) && Number(proxy.match(/:(\d+)\/?$/)[1]) === PORT;
+        } catch {}
+        if (!tailnet || tailnet.host !== next.host || tailnet.served !== next.served) {
+          console.log(`tailnet access: ${next.url} for ${[...logins].join(', ')}${next.served ? '' : ` (not served yet: tailscale serve --bg --https=${TS_PORT} http://127.0.0.1:${PORT})`}`);
+        }
+        tailnet = next;
+      });
+    } catch {}
+  });
+}
+
+// Classifies a request: {local:true} from this Mac, {remote:true, login} through the tailnet, or null.
+function requestAccess(req) {
+  const host = (req.headers.host || '').toLowerCase();
+  if (allowedHosts.has(host)) return { local: true, origins: allowedOrigins };
+  const login = String(req.headers['tailscale-user-login'] || '');
+  if (tailnet && host === tailnet.host && tailnet.logins.has(login)) return { remote: true, login, origins: new Set([tailnet.origin]) };
+  return null;
+}
 
 const TMUX = ['/opt/homebrew/bin/tmux', '/usr/local/bin/tmux', '/usr/bin/tmux'].find((p) => fs.existsSync(p)) || null;
 // Before the rename the tmux server used the socket name 'webterm'. If it still holds sessions,
@@ -332,13 +383,15 @@ function claudeUnder(rootPid, children) {
   const queue = [rootPid];
   for (let i = 0; i < queue.length && i < 200; i++) {
     const d = readJsonFile(path.join(CLAUDE_DIR, 'sessions', `${queue[i]}.json`));
-    if (d && UUID.test(d.sessionId || '') && typeof d.cwd === 'string') return { sessionId: d.sessionId, cwd: d.cwd };
+    if (d && UUID.test(d.sessionId || '') && typeof d.cwd === 'string') {
+      return { sessionId: d.sessionId, cwd: d.cwd, status: typeof d.status === 'string' ? d.status : null };
+    }
     queue.push(...(children.get(queue[i]) || []));
   }
   return null;
 }
 
-function openWindows() {
+function processChildren() {
   const children = new Map();
   try {
     for (const line of execFileSync('ps', ['-axo', 'pid=,ppid='], { encoding: 'utf8', timeout: 5000 }).split('\n')) {
@@ -346,6 +399,11 @@ function openWindows() {
       if (pid && ppid) children.set(ppid, [...(children.get(ppid) || []), pid]);
     }
   } catch {}
+  return children;
+}
+
+function openWindows() {
+  const children = processChildren();
   return [...sessions.values()].filter((s) => !s.exited).sort((a, b) => a.created - b.created).map((s) => {
     let root = s.pty.pid;
     if (s.tmux) { try { root = Number(tmux('display-message', '-p', '-t', SESSION_PREFIX + s.id, '#{pane_pid}').trim()); } catch {} }
@@ -358,6 +416,47 @@ function openWindows() {
     }
     return w;
   });
+}
+
+// The last few lines of a window's screen. In Claude Code the input box (between two horizontal
+// rules) and the status lines under it are dropped, so the preview shows the latest reply.
+const RULE = /^\s*[─━]{8,}\s*$/;
+function screenPreview(id) {
+  let lines;
+  try { lines = tmux('capture-pane', '-p', '-J', '-t', SESSION_PREFIX + id).split('\n'); } catch { return []; }
+  const rules = lines.map((l, i) => (RULE.test(l) ? i : -1)).filter((i) => i >= 0);
+  if (rules.length >= 2) lines = lines.slice(0, rules[rules.length - 2]);
+  return lines.map((l) => l.trimEnd()).filter((l) => l.trim()).slice(-5).map((l) => l.slice(0, 240));
+}
+
+// What the phone page lists: each open window with its last output time, Claude Code's own status
+// (busy, idle, or shell, from its session file), and a short preview of the screen.
+function overview() {
+  const children = processChildren();
+  const panes = new Map();
+  if (TMUX) {
+    try {
+      for (const line of tmux('list-panes', '-a', '-F', '#{session_name}\t#{pane_pid}\t#{window_activity}').split('\n')) {
+        const [name, pid, activity] = line.split('\t');
+        if (name?.startsWith(SESSION_PREFIX) && !panes.has(name)) panes.set(name, { pid: Number(pid), activity: Number(activity) * 1000 });
+      }
+    } catch {}
+  }
+  return [...sessions.values()].sort((a, b) => a.created - b.created).map((s) => {
+    const p = panes.get(SESSION_PREFIX + s.id);
+    const claude = s.exited ? null : claudeUnder(p ? p.pid : s.pty.pid, children);
+    return {
+      ...publicSession(s),
+      activity: p ? p.activity : null,
+      claude: claude ? { status: claude.status } : null,
+      preview: s.tmux && !s.exited ? screenPreview(s.id) : [],
+    };
+  });
+}
+
+// The window's scrollback as plain text, for reading and copying on a phone.
+function windowHistory(id) {
+  return tmux('capture-pane', '-p', '-J', '-S', '-3000', '-t', SESSION_PREFIX + id).replace(/\n+$/, '\n');
 }
 
 let backupTimer = null;
@@ -531,11 +630,12 @@ function readJson(req) {
 }
 
 const server = http.createServer(async (req, res) => {
-  if (!allowedHosts.has(req.headers.host || '')) return send(res, 403, { error: 'bad host' });
+  const access = requestAccess(req);
+  if (!access) return send(res, 403, { error: 'bad host' });
   const url = new URL(req.url, `http://${req.headers.host}`);
   const mutating = req.method !== 'GET' && req.method !== 'HEAD';
   if (mutating) {
-    if (!allowedOrigins.has(req.headers.origin || '')) return send(res, 403, { error: 'bad origin' });
+    if (!access.origins.has(req.headers.origin || '')) return send(res, 403, { error: 'bad origin' });
     if (!(req.headers['content-type'] || '').startsWith('application/json')) return send(res, 415, { error: 'json only' });
   }
 
@@ -584,6 +684,18 @@ const server = http.createServer(async (req, res) => {
       return send(res, 500, { error: `could not start shell: ${e.message}` });
     }
   }
+  if (url.pathname === '/api/overview' && req.method === 'GET') {
+    return send(res, 200, { machine: tailnet?.machine || os.hostname().replace(/\.local$/, ''), sessions: overview() });
+  }
+  if (url.pathname === '/api/remote' && req.method === 'GET') {
+    return send(res, 200, { url: tailnet?.served ? tailnet.url : null, machine: tailnet?.machine || null, remote: Boolean(access.remote) });
+  }
+  const hist = url.pathname.match(/^\/api\/sessions\/([\w-]+)\/history$/);
+  if (hist && req.method === 'GET') {
+    const s = sessions.get(hist[1]);
+    if (!s || !s.tmux || s.exited) return send(res, 404, { error: 'no such window' });
+    try { return send(res, 200, windowHistory(s.id), 'text/plain; charset=utf-8'); } catch { return send(res, 500, { error: 'could not read the window' }); }
+  }
   const del = url.pathname.match(/^\/api\/sessions\/([\w-]+)$/);
   if (del && req.method === 'DELETE') {
     const s = sessions.get(del[1]);
@@ -607,7 +719,7 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'GET') {
     if (VENDOR[url.pathname]) return serveFile(res, path.join(__dirname, VENDOR[url.pathname]));
-    const rel = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
+    const rel = url.pathname === '/' ? 'index.html' : url.pathname === '/m' ? 'm.html' : url.pathname.slice(1);
     const file = path.join(PUBLIC, rel);
     if (!file.startsWith(PUBLIC + path.sep)) return send(res, 403, { error: 'forbidden' });
     return serveFile(res, file);
@@ -617,26 +729,47 @@ const server = http.createServer(async (req, res) => {
 
 const wss = new WebSocketServer({ noServer: true });
 server.on('upgrade', (req, socket, head) => {
-  const ok = allowedHosts.has(req.headers.host || '') && allowedOrigins.has(req.headers.origin || '');
+  const access = requestAccess(req);
+  const ok = access && access.origins.has(req.headers.origin || '');
   const url = new URL(req.url, `http://${req.headers.host}`);
   const s = sessions.get(url.searchParams.get('id') || '');
   if (!ok || url.pathname !== '/ws' || !s) {
     socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
     return socket.destroy();
   }
+  // Another device (or the phone page) gets its own tmux client for the window instead of sharing the
+  // Mac's. tmux then sizes the window for whichever device typed last, rather than the two fighting.
+  const own = s.tmux && !s.exited && (access.remote || url.searchParams.get('own') === '1');
   wss.handleUpgrade(req, socket, head, (ws) => {
-    s.clients.add(ws);
-    if (s.buf) ws.send(s.buf);
+    let target = s.pty;
+    if (own) {
+      const size = (v, max, d) => Math.min(Math.max(Number(v) || d, 10), max);
+      try {
+        target = pty.spawn(TMUX, ['-L', TMUX_SOCKET, 'attach-session', '-t', SESSION_PREFIX + s.id], {
+          name: 'xterm-256color', cols: size(url.searchParams.get('cols'), 500, 80), rows: size(url.searchParams.get('rows'), 200, 24),
+          cwd: os.homedir(), env: cleanEnv({ TERM: 'xterm-256color', COLORTERM: 'truecolor', CORRAL_SESSION: s.id }),
+        });
+      } catch { return ws.close(); }
+      target.onData((d) => { if (ws.readyState === 1) ws.send(d); });
+      target.onExit(() => {
+        if (ws.readyState === 1) ws.send('\r\n\x1b[2m[window closed]\x1b[0m\r\n');
+        ws.close();
+      });
+    } else {
+      s.clients.add(ws);
+      if (s.buf) ws.send(s.buf);
+    }
     ws.on('message', (raw) => {
       let m;
       try { m = JSON.parse(raw.toString()); } catch { return; }
       if (s.exited) return;
-      if (m.t === 'in' && typeof m.d === 'string') s.pty.write(m.d);
+      if (m.t === 'in' && typeof m.d === 'string') target.write(m.d);
       else if (m.t === 'resize' && m.cols > 0 && m.rows > 0) {
-        try { s.pty.resize(Math.min(m.cols, 500), Math.min(m.rows, 200)); } catch {}
+        try { target.resize(Math.min(m.cols, 500), Math.min(m.rows, 200)); } catch {}
       }
     });
-    ws.on('close', () => s.clients.delete(ws));
+    // Killing a tmux attach client only detaches it; the window keeps running.
+    ws.on('close', () => { if (own) { try { target.kill(); } catch {} } else s.clients.delete(ws); });
   });
 });
 
@@ -649,6 +782,8 @@ loadCategories();
 if (!loadLedger()) seedFromSnapshots();
 herdrSnapshot(); // records the current spaces right away
 setInterval(herdrSnapshot, 30000).unref(); // notices closed spaces even with no page open
+detectTailnet();
+setInterval(detectTailnet, 60000).unref(); // picks up Tailscale starting, or a renamed Mac
 server.listen(PORT, HOST, () => console.log(`Corral listening on http://${HOST}:${PORT} (${TMUX ? 'tmux ' + TMUX_SOCKET : 'no tmux, plain shells'})`));
 
 // Killing a tmux attach client only detaches it; the tmux session keeps running.

@@ -198,6 +198,7 @@
       <label id="colslab" hidden>Columns <select id="cols"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
       <label id="rowslab" hidden>Rows <select id="rows"><option value="auto">Auto</option><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
       <span class="sp"></span>
+      <button id="phone" hidden title="Copy the link that opens Corral on your phone or another Tailscale device">On your phone</button>
       <span id="count" class="note"></span>
     </div>
     <div id="grid"></div>
@@ -210,6 +211,8 @@
 <script src="/vendor/addon-fit.js"></script>
 <script src="/vendor/addon-web-links.js"></script>
 <script>
+// A phone gets the phone page; ?desktop keeps this one.
+if (matchMedia('(pointer: coarse) and (max-width: 760px)').matches && !new URLSearchParams(location.search).has('desktop')) location.replace('/m');
 const $ = (s) => document.querySelector(s);
 const open = new Map(); // session id -> {term, fit, ws, el, info}
 let focusedId = null;
@@ -522,7 +525,7 @@ function attach(info) {
   });
   open.set(info.id, w);
   const connect = () => {
-    const ws = new WebSocket(`ws://${location.host}/ws?id=${info.id}`);
+    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?id=${info.id}`);
     w.ws = ws;
     let first = true;
     ws.onopen = () => { term.reset(); fit.fit(); ws.send(JSON.stringify({ t: 'resize', cols: term.cols, rows: term.rows })); };
@@ -1020,7 +1023,20 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#laymen
   ready = true;
   layout();
   checkRestore();
+  showPhoneLink();
 })();
+
+// When Tailscale serves Corral, offer the link that opens it on a phone or another of your devices.
+async function showPhoneLink() {
+  const r = await api('/api/remote').catch(() => null);
+  if (!r?.url || r.remote) return;
+  const b = $('#phone');
+  b.hidden = false;
+  b.title = `Copy ${r.url}m, the link that opens Corral on your phone or another Tailscale device`;
+  b.onclick = () => navigator.clipboard.writeText(`${r.url}m`)
+    .then(() => toast(`Copied ${r.url}m. Open it on any device signed in to your Tailscale.`))
+    .catch(() => toast(`Open ${r.url}m on any device signed in to your Tailscale.`));
+}
 </script>
 </body>
 </html>
