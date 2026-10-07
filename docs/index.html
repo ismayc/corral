@@ -50,16 +50,24 @@
   .lede { color:var(--muted); font-size:19px; max-width:680px; margin:14px 0 0; }
   section { padding:88px 0; border-top:1px solid var(--rail); }
 
-  /* Top bar */
-  .top { display:flex; align-items:center; gap:12px; padding:18px 0; }
-  .top img { width:32px; height:32px; }
+  /* Top bar: stays at the top while the page scrolls, over the hero's glow at first. */
+  .topbar { position:sticky; top:0; z-index:50; margin-bottom:-65px; height:65px;
+            background:rgba(27,24,35,.72); -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+            border-bottom:1px solid transparent; transition:border-color .2s, background .2s; }
+  .topbar.scrolled { background:rgba(27,24,35,.9); border-bottom-color:var(--rail); }
+  .top { display:flex; align-items:center; gap:12px; height:64px; }
+  .top > a.brand { display:flex; align-items:center; gap:10px; color:var(--text); text-decoration:none; flex:none; }
+  .top img { width:30px; height:30px; }
   .top b { font:800 20px var(--brand); letter-spacing:-.02em; }
-  .top nav { margin-left:auto; display:flex; gap:22px; font-size:15px; }
-  .top nav a { color:var(--muted); text-decoration:none; }
+  .top nav { margin-left:auto; display:flex; gap:6px; font-size:15px; overflow-x:auto; scrollbar-width:none; min-width:0; }
+  .top nav::-webkit-scrollbar { display:none; }
+  .top nav a { color:var(--muted); text-decoration:none; padding:6px 10px; border-radius:99px; white-space:nowrap; }
   .top nav a:hover { color:var(--text); }
+  .top nav a.on { color:var(--text); background:var(--raise); box-shadow:inset 0 0 0 1px var(--rail); }
+  section[id] { scroll-margin-top:64px; }
 
   /* Hero */
-  .hero { position:relative; overflow:hidden; padding:64px 0 0;
+  .hero { position:relative; overflow:hidden; padding:129px 0 0;
           background:radial-gradient(800px 460px at 10% 0%, rgba(139,124,246,.26), transparent 70%),
                      radial-gradient(700px 420px at 95% 40%, rgba(76,195,138,.08), transparent 70%); }
   .hero h1 { font-size:clamp(56px, 10vw, 112px); font-weight:800; letter-spacing:-.045em; }
@@ -168,7 +176,8 @@
   }
   @media (max-width:560px) {
     .wrap { padding:0 16px; }
-    .top nav { display:none; }
+    .top b { display:none; } /* the icon stays; the links scroll sideways */
+    .top nav a { padding:6px 8px; font-size:14px; }
     body { font-size:16px; }
     .shot { margin-top:40px; }
     .phones { gap:14px; }
@@ -180,21 +189,23 @@
 </head>
 <body>
 
+<header class="topbar">
+  <div class="wrap top">
+    <a class="brand" href="#"><img src="favicon.svg" alt=""><b>Corral</b></a>
+    <nav aria-label="Sections">
+      <a href="#why">Why</a>
+      <a href="#features">Features</a>
+      <a href="#phone">Remote control</a>
+      <a href="#how">How it works</a>
+      <a href="#install">Install</a>
+      <a href="#security">Security</a>
+      <a href="https://github.com/ismayc/corral">GitHub</a>
+    </nav>
+  </div>
+</header>
+
 <header class="hero">
   <div class="wrap">
-    <div class="top">
-      <img src="favicon.svg" alt="">
-      <b>Corral</b>
-      <nav aria-label="Sections">
-        <a href="#why">Why</a>
-        <a href="#features">Features</a>
-        <a href="#phone">Remote control</a>
-        <a href="#how">How it works</a>
-        <a href="#install">Install</a>
-        <a href="https://github.com/ismayc/corral">GitHub</a>
-      </nav>
-    </div>
-
     <h1>Corral</h1>
     <p class="tag">A pen for your herdr spaces</p>
     <p class="lede">A small local web app that runs beside <a href="https://github.com/herdrdev/herdr">herdr</a> and
@@ -544,5 +555,34 @@
       (<a href="fonts/OFL.txt">SIL Open Font License 1.1</a>). Screenshots show a demo setup with made-up projects.</p>
   </div>
 </footer>
+<script>
+// The top bar gets a solid edge once the page scrolls, and its link for the section in view is lit.
+(() => {
+  const bar = document.querySelector('.topbar');
+  const links = [...bar.querySelectorAll('nav a[href^="#"]')];
+  const sections = links.map((a) => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+  let lit = null;
+  function update() {
+    bar.classList.toggle('scrolled', scrollY > 8);
+    let current = null;
+    for (const s of sections) if (s.getBoundingClientRect().top <= 90) current = s.id;
+    if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) current = sections[sections.length - 1]?.id ?? current;
+    if (current === lit) return;
+    lit = current;
+    for (const a of links) {
+      const on = a.getAttribute('href') === `#${current}`;
+      a.classList.toggle('on', on);
+      if (on) { // on a phone the links scroll sideways; keep the lit one in view without moving the page
+        const nav = a.parentElement;
+        if (a.offsetLeft < nav.scrollLeft || a.offsetLeft + a.offsetWidth > nav.scrollLeft + nav.clientWidth) {
+          nav.scrollTo({ left: a.offsetLeft - 8, behavior: 'smooth' });
+        }
+      }
+    }
+  }
+  addEventListener('scroll', update, { passive: true });
+  update();
+})();
+</script>
 </body>
 </html>
