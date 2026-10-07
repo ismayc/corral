@@ -21,7 +21,9 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
 - **Click a space to start work there.** By default that starts Claude Code in
   the project folder; you can switch to "Claude Code, last session"
   (`claude --continue`) or a plain shell. The shell stays open after Claude
-  exits.
+  exits. A space has one window: clicking a space that already has one
+  brings that window forward (out of the bottom bar if it is there), and a
+  double-click never makes a second one.
 - **Layouts for your windows**, in the spirit of
   [Sash](https://github.com/ismayc/sash): Auto (picks a tiling from how many
   windows are open and the shape of the screen), Halves, Thirds, Quarters,

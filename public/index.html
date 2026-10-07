@@ -598,8 +598,24 @@ $('#restorex').onclick = async () => {
   toast('Forgot the windows from before the restart');
 };
 
+// Opens a window. A space keeps one window: if it already has one, that window comes forward instead
+// (out of the bottom bar if need be). The server enforces the same rule, which also stops a double-click.
 async function spawn(cwd, label, space, agent) {
-  attach(await api('/api/sessions', { method: 'POST', body: { cwd, label, space, agent: agent || null } }));
+  const mine = space && [...open.values()].find((w) => w.info.space === space);
+  if (mine) return bringForward(mine.info);
+  const r = await fetch('/api/sessions', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cwd, label, space, agent: agent || null }),
+  }).catch(() => null);
+  const j = r ? await r.json().catch(() => ({})) : {};
+  if (r?.status === 409 && j.existing) return bringForward(j.existing);
+  if (!r?.ok) return toast(j.error || 'Could not start the window.');
+  attach(j);
+}
+function bringForward(info) {
+  if (!open.has(info.id)) attach(info); // started on another device and not picked up yet
+  if (minimized.has(info.id) || tray.includes(info.id)) restore(info.id);
+  setFocus(info.id);
+  toast(`${info.label} is already open. Here it is.`);
 }
 
 let spaces = [];

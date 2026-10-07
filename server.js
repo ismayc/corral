@@ -1130,8 +1130,14 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/sessions' && req.method === 'POST') {
     const body = await readJson(req);
     if (!body) return send(res, 400, { error: 'bad json' });
+    const space = typeof body.space === 'string' && /^[\w-]+$/.test(body.space) ? body.space : null;
+    // One window per space. A second click on a space (a double-click, or a click while its window sits
+    // minimized) gets the window that is already open rather than a duplicate. Requests are handled one at
+    // a time, so two quick clicks cannot both get through.
+    const existing = space && [...sessions.values()].find((x) => !x.exited && (x.space === space || (!x.space && body.cwd && x.cwd === body.cwd)));
+    if (existing) return send(res, 409, { error: 'this space already has a window', existing: publicSession(existing) });
     try {
-      const s = createSession(body.cwd, body.label, typeof body.space === 'string' && /^[\w-]+$/.test(body.space) ? body.space : null, typeof body.agent === 'string' ? body.agent : null);
+      const s = createSession(body.cwd, body.label, space, typeof body.agent === 'string' ? body.agent : null);
       // Started from another device: the Mac's page puts it in the bottom bar rather than in a zone.
       if (access.remote) {
         s.remote = true;

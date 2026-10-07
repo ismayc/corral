@@ -686,8 +686,13 @@ async function start(p) {
     return;
   }
   try {
-    const s = await api('/api/sessions', { method: 'POST', body: { cwd: p.root, label: p.home ? 'shell' : p.label, space: p.space, agent: p.home ? '' : agent } });
-    openTerm(s);
+    const r = await fetch('/api/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cwd: p.root, label: p.home ? 'shell' : p.label, space: p.space, agent: p.home ? '' : agent }) });
+    const j = await r.json().catch(() => ({}));
+    // The Mac allows one window per space; if one opened meanwhile, go to it.
+    if (r.status === 409 && j.existing) { toast(`${p.label} is already open. Here it is.`); openTerm(j.existing); refresh(); return; }
+    if (!r.ok) throw new Error(j.error);
+    openTerm(j);
     refresh();
   } catch { toast('Could not start it on the Mac.'); }
 }
