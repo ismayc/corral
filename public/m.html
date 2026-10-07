@@ -94,6 +94,8 @@
   .proj .dot.blocked { background:var(--blocked); }
   .proj .n { flex:1; min-width:0; } .proj .n div { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .proj .n .p { color:var(--muted); font-size:12px; }
+  .proj .tag { flex:none; font-size:12px; font-weight:600; color:var(--lavender); border:1px solid var(--rail);
+               border-radius:99px; padding:2px 9px; }
 
   /* Terminal view */
   #termwrap { flex:1; min-height:0; background:var(--term); padding:4px 2px 0 4px; position:relative; }
@@ -308,14 +310,16 @@ async function openSheet() {
   $('#sheet').hidden = false;
   $('#q').value = '';
   $('#projects').replaceChildren(h('div', { class: 'empty' }, 'Loading projects…'));
-  const [hd, pj] = await Promise.all([api('/api/herdr').catch(() => ({ spaces: [] })), api('/api/projects').catch(() => ({ projects: [] }))]);
+  const [hd, pj, ss] = await Promise.all([api('/api/herdr').catch(() => ({ spaces: [] })),
+    api('/api/projects').catch(() => ({ projects: [] })), api('/api/sessions').catch(() => ({ sessions: [] }))]);
+  liveSessions = ss.sessions || [];
   const seen = new Set();
   projects = [];
   for (const s of hd.spaces || []) {
     const root = s.root || s.cwd;
     if (!root || seen.has(root)) continue;
     seen.add(root);
-    projects.push({ label: s.label, root, space: s.id, status: s.status, open: true });
+    projects.push({ label: s.label, root, cwd: s.cwd, space: s.id, status: s.status, open: true });
   }
   for (const p of pj.projects || []) {
     if (seen.has(p.root) || !p.exists) continue;
@@ -325,12 +329,21 @@ async function openSheet() {
   projects.push({ label: 'Home folder', root: null, space: null, status: null, open: false, home: true });
   renderProjects();
 }
+// A project that already has a window on the Mac (made from its space, or in its folder). The home
+// folder is exempt, since several plain shells there are normal.
+let liveSessions = [];
+function windowFor(p, list) {
+  if (p.home) return null;
+  return list.find((s) => !s.exited && ((p.space && s.space === p.space) || (s.cwd && (s.cwd === p.root || s.cwd === p.cwd)))) || null;
+}
+
 function renderProjects() {
   const q = $('#q').value.trim().toLowerCase();
   const match = projects.filter((p) => !q || p.label.toLowerCase().includes(q) || (p.root || '').toLowerCase().includes(q));
   const row = (p) => h('button', { class: 'proj', onclick: () => start(p) },
     h('span', { class: `dot ${p.status || ''}` }),
-    h('span', { class: 'n' }, h('div', {}, p.label), h('div', { class: 'p' }, p.home ? '~' : home(p.root))));
+    h('span', { class: 'n' }, h('div', {}, p.label), h('div', { class: 'p' }, p.home ? '~' : home(p.root))),
+    windowFor(p, liveSessions) ? h('span', { class: 'tag' }, 'Open') : null);
   const open = match.filter((p) => p.open), other = match.filter((p) => !p.open);
   $('#projects').replaceChildren(
     ...(open.length ? [h('div', { class: 'section' }, 'herdr spaces'), ...open.map(row)] : []),
@@ -344,6 +357,14 @@ $('#sheet').onclick = (e) => { if (e.target.id === 'sheet') $('#sheet').hidden =
 
 async function start(p) {
   $('#sheet').hidden = true;
+  // Never a second window for the same space: check what is running now, not what the sheet saw.
+  const now = await api('/api/sessions').catch(() => null);
+  const existing = windowFor(p, now?.sessions || liveSessions);
+  if (existing) {
+    toast(`${p.label} is already open on the Mac. Tap it in the list to continue there.`);
+    refresh();
+    return;
+  }
   try {
     const s = await api('/api/sessions', { method: 'POST', body: { cwd: p.root, label: p.home ? 'shell' : p.label, space: p.space, agent: p.home ? '' : agent } });
     openTerm(s);

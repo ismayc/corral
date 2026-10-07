@@ -138,7 +138,9 @@ network between your own devices.
   keyboard's microphone. A message with several lines goes in as one.
 - **Start something new.** Pick Claude Code, its last session, or a shell, then
   a herdr space or another project. The new window also shows up, minimized,
-  in the bottom bar of Corral on the Mac, so it is there when you sit down.
+  in the bottom bar of Corral on the Mac, so it is there when you sit down. A
+  space that already has a window is marked **Open**, and tapping it says so
+  instead of starting a second one.
 - **Read back.** History shows the window's scrollback as plain text you can
   select, or copy in one tap.
 - **Restore** the windows from before a Mac restart.
