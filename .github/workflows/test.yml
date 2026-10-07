@@ -1,0 +1,32 @@
+# Runs the whole test suite, which fails below 100% line, branch, and function coverage. macOS, because that is
+# where Corral runs; the tests fake tmux, herdr, and the macOS helpers, so none need to be installed.
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - name: Install
+        run: |
+          npm ci
+          python -m venv .venv
+          .venv/bin/pip install pytest pytest-cov
+      - name: Test
+        run: npm test

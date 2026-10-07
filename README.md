@@ -4,6 +4,8 @@
 
 # Corral
 
+[![Tests](https://github.com/ismayc/corral/actions/workflows/test.yml/badge.svg)](https://github.com/ismayc/corral/actions/workflows/test.yml)
+
 A pen for your [herdr](https://github.com/herdrdev/herdr) spaces. Corral is a
 small local web app that runs beside herdr and gives every space a real
 terminal in your browser: click a project and Claude Code (or a plain shell)
@@ -389,6 +391,8 @@ helpers replaced by fakes, and the two pages run in
 WebSocket, and push. `scripts/herdr-sort-spaces` is tested with pytest against
 a fake herdr socket; set it up once with
 `python3 -m venv .venv && .venv/bin/pip install pytest pytest-cov`.
+GitHub Actions runs the same `npm test` on macOS for every push to `main`
+and every pull request (`.github/workflows/test.yml`).
 Coverage spans `server.js`, `public/*.js`, and both scripts in `scripts/`;
 `scripts/render-assets.sh`, which renders the site's images, is the one file
 outside it.
