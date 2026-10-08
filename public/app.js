@@ -697,6 +697,8 @@ function arrange() {
     }
   }
   rows.forEach((wrap, id) => wrap.querySelector('.space').classList.toggle('has-win', openSpaces.some((s) => s.id === id)));
+  for (const s of spaces) if (catOf(s) !== null) fresh.delete(s.id);
+  rows.forEach((wrap, id) => wrap.querySelector('.space').classList.toggle('fresh', fresh.has(id)));
   if (!shown.length) { const n = document.createElement('div'); n.className = 'note'; n.textContent = 'No spaces.'; box.append(n); }
 
   lastShown = q ? shown : [];
@@ -831,12 +833,30 @@ async function fillTree(box, spaceId, rel) {
   }
   if (r.truncated) note('List cut off at 1000 entries.');
 }
-async function loadSpaces() {
+// Spaces made in herdr after the page loaded show up on ↻ and on a check every 10 seconds while the page
+// is showing. One that lands in Uncategorized while there are groups is announced and marked "new" until
+// it is filed. The automatic check rebuilds the rows only when a space came, went, or changed its name or
+// folder (a rebuild refetches open file trees); otherwise it just updates the status dots, and it leaves
+// the list alone when herdr does not answer.
+let known = null; // space ids from herdr's last answer; null until it first answers
+const fresh = new Set();
+const shape = (list) => JSON.stringify(list.map((s) => [s.id, s.label, s.root, s.cwd]));
+const andList = (a) => (a.length < 3 ? a.join(' and ') : `${a.slice(0, -1).join(', ')}, and ${a.at(-1)}`);
+async function loadSpaces(auto) {
   const r = await api('/api/herdr');
+  if (auto && (!r.available || shape(r.spaces) === shape(spaces))) {
+    if (r.available) for (const s of (spaces = r.spaces)) rows.get(s.id).querySelector('.dot').className = `dot ${s.status}`;
+    return;
+  }
   spaces = r.spaces;
-  if (!r.available) $('#spaces').textContent = `herdr not reachable: ${r.error}`;
-  else renderSpaces();
+  if (!r.available) { $('#spaces').textContent = `herdr not reachable: ${r.error}`; return loadProjects(); }
+  const added = known && cats.categories.length ? spaces.filter((s) => !known.has(s.id) && catOf(s) === null) : [];
+  known = new Set(spaces.map((s) => s.id));
+  for (const s of added) fresh.add(s.id);
+  renderSpaces();
   loadProjects();
+  if (added.length === 1) toast(`New herdr space ${added[0].label} is in Uncategorized. Drag it onto a group to file it.`);
+  else if (added.length) toast(`${added.length} new herdr spaces are in Uncategorized: ${andList(added.map((s) => s.label))}. Drag them onto a group to file them.`);
 }
 
 // Ledger of every project herdr has shown the server. "Inactive" means no space is open for it.
@@ -902,7 +922,7 @@ $('#expall').onclick = () => setAll(false);
 $('#colall').onclick = () => setAll(true);
 $('#hidden').checked = load('corral.hidden', false);
 $('#hidden').onchange = () => { store('corral.hidden', $('#hidden').checked); renderSpaces(); };
-$('#refresh').onclick = loadSpaces;
+$('#refresh').onclick = () => loadSpaces();
 $('#newshell').onclick = () => spawn(null, 'shell');
 $('#agent').value = load('corral.agent', 'claude');
 $('#agent').onchange = () => store('corral.agent', $('#agent').value);
@@ -942,6 +962,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#laymen
   document.addEventListener('visibilitychange', () => { if (!document.hidden) pickUpNewWindows(); });
   watchStatus();
   setInterval(watchStatus, 3000);
+  setInterval(() => { if (!document.hidden) loadSpaces(true).catch(() => {}); }, 10000);
 })();
 
 // Each window's Claude status, every few seconds: the Allow and Deny bar for a permission prompt, names

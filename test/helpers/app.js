@@ -64,7 +64,7 @@ function boot(opts = {}) {
   });
   // The page's own delays are recorded and run by tick(ms); any other timer (flush, jsdom's animation
   // frames) runs on its own.
-  const PAGE_DELAYS = [250, 600, 1500, 3000, 6000];
+  const PAGE_DELAYS = [250, 600, 1500, 3000, 6000, 10000];
   const timers = [];
   const realSet = globalThis.setTimeout;
   const realInterval = globalThis.setInterval;

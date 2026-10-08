@@ -5,6 +5,13 @@ in `package.json`.
 
 ## Development version
 
+- **New herdr spaces show up by themselves.** The Mac page checks herdr every
+  10 seconds while it is showing (and on ↻). A space made since the page
+  loaded that lands in Uncategorized while you have groups is announced,
+  with a note to drag it onto a group, and marked **new** until it is filed.
+  A check that finds nothing added, closed, or renamed only updates the
+  status dots, so open file trees are not reloaded.
+
 - **Drop a screenshot on a window** on the Mac page to give it to Claude Code,
   as you would in Positron or Terminal.app. The browser never sees a dropped
   file's path, so the image is uploaded to Corral's data folder (where the

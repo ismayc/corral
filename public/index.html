@@ -66,6 +66,8 @@
   .space:hover { background:var(--raise); }
   .space .name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .space.has-win .name { color:var(--lavender); font-weight:600; }
+  /* A space herdr made since the page loaded, not yet filed in a group. */
+  .space.fresh::after { content:'new'; font-size:10.5px; padding:0 6px; border-radius:8px; background:var(--fence); color:#fff; }
   .space .more { opacity:.35; padding:0 6px; color:var(--muted); cursor:pointer; flex:none; }
   .space:hover .more, .space .more:focus-visible { opacity:1; } .space .more:hover { color:var(--text); }
   .space.sel { background:#342b55; box-shadow:inset 3px 0 var(--fence); }
