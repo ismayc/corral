@@ -5,6 +5,12 @@ in `package.json`.
 
 ## Development version
 
+- **New repos get a space in one click.** A new **New in ~/repos** section
+  in the sidebar lists git repos made in the last 14 days that herdr has
+  never had a space for. **Add to herdr** makes the space, which then
+  arrives in Uncategorized marked new; **×** hides a folder from the section
+  for good. Set `CORRAL_REPOS` to watch a folder other than `~/repos`.
+
 - **New herdr spaces show up by themselves.** The Mac page checks herdr every
   10 seconds while it is showing (and on ↻). A space made since the page
   loaded that lands in Uncategorized while you have groups is announced,

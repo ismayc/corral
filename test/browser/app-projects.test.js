@@ -104,3 +104,60 @@ test('the x forgets a project and reloads the list', async () => {
   assert.deepEqual(p.api.called('POST', '/api/projects/forget')[0].body, { root: '/Users/me/old/one' });
   assert.deepEqual(rows(p).map((r) => r.split(' ')[0]), ['two']);
 });
+
+// ---- New repos: made in the repos folder lately, with no herdr space yet ----
+const repo = (label, extra = {}) => ({ root: `/Users/me/repos/${label}`, label, born: Date.now() - 3 * MIN, ...extra });
+const repoRows = (p) => p.$$('#inactive .newrepo').map((r) => `${r.querySelector('.name').textContent} | ${r.querySelector('.ago').textContent}`);
+
+test('new repos are listed above the inactive projects, with when they were made', async () => {
+  const p = await start({ routes: { 'GET /api/projects': { projects: [proj('one')], newRepos: [repo('dance'), repo('quiz', { born: Date.now() - 3 * 60 * MIN })], reposDir: '~/repos' } } });
+  assert.deepEqual(p.$$('#inactive .sec').map((h) => h.textContent), ['New in ~/repos (2)', '▾ Inactive projects (1)']);
+  assert.deepEqual(repoRows(p), ['dance | 3 min ago', 'quiz | 3 hr ago']);
+  const row = p.$('#inactive .newrepo');
+  assert.equal(row.title, '/Users/me/repos/dance');
+  assert.deepEqual([...row.querySelectorAll('button')].map((b) => [b.textContent, b.title]), [
+    ['Add to herdr', 'Create a herdr space for this folder'], ['×', 'Do not list this folder here again']]);
+});
+
+test('with no new repos the section is left out', async () => {
+  const p = await start({ routes: { 'GET /api/projects': { projects: [], newRepos: [], reposDir: '~/repos' } } });
+  assert.equal(p.$('#inactive').textContent, '');
+});
+
+test('Add to herdr makes the space, which then arrives in the sidebar', async () => {
+  const p = await start({ routes: { 'GET /api/projects': { projects: [], newRepos: [repo('dance')], reposDir: '~/repos' }, 'POST /api/projects/reopen': { ok: true } } });
+  p.api.routes['GET /api/herdr'] = { available: true, spaces: [space('dance')] };
+  p.api.routes['GET /api/projects'] = { projects: [proj('dance', { open: true })], newRepos: [], reposDir: '~/repos' };
+  const add = p.$('#inactive .newrepo button');
+  add.click();
+  assert.deepEqual([add.disabled, add.textContent], [true, '...']);
+  await flush();
+  assert.deepEqual(p.api.called('POST', '/api/projects/reopen')[0].body, { root: '/Users/me/repos/dance' });
+  assert.deepEqual(p.rowNames(), ['dance']);
+  assert.equal(p.$('#inactive').textContent, '');
+});
+
+test('a failed Add says Failed and gives the reason on hover', async () => {
+  const p = await start({ routes: { 'GET /api/projects': { projects: [], newRepos: [repo('dance')], reposDir: '~/repos' }, 'POST /api/projects/reopen': { __reply: true, status: 502, body: { error: 'herdr not reachable' } } } });
+  const add = p.$('#inactive .newrepo button');
+  add.click();
+  await flush();
+  assert.deepEqual([add.textContent, add.title], ['Failed', 'herdr not reachable']);
+});
+
+test('the x hides a new repo for good and reloads the list', async () => {
+  const p = await start({ routes: { 'GET /api/projects': { projects: [], newRepos: [repo('dance'), repo('quiz')], reposDir: '~/repos' }, 'POST /api/projects/hide': { ok: true } } });
+  p.api.routes['GET /api/projects'] = { projects: [], newRepos: [repo('quiz')], reposDir: '~/repos' };
+  p.$$('#inactive .newrepo button')[1].click();
+  await flush();
+  assert.deepEqual(p.api.called('POST', '/api/projects/hide')[0].body, { root: '/Users/me/repos/dance' });
+  assert.deepEqual(repoRows(p).map((r) => r.split(' ')[0]), ['quiz']);
+});
+
+test('the automatic check also picks up a repo made since the page loaded', async () => {
+  const p = await start({ routes: { 'GET /api/projects': { projects: [] } } });
+  p.api.routes['GET /api/projects'] = { projects: [], newRepos: [repo('dance')], reposDir: '~/repos' };
+  p.tick(10000);
+  await flush();
+  assert.deepEqual(repoRows(p), ['dance | 3 min ago']);
+});

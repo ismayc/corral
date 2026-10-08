@@ -319,6 +319,31 @@ function ledgerView() {
     .sort((a, b) => b.lastSeen - a.lastSeen);
 }
 
+// New repos: git repositories made in the repos folder in the last two weeks that herdr has never had a
+// space for (so they are not in the ledger either). The sidebar offers to make a space for each, or to
+// hide it for good. Older folders without a space are left out: those were most likely kept out on purpose.
+const REPOS_DIR = process.env.CORRAL_REPOS || path.join(os.homedir(), 'repos');
+const NEW_REPO_DAYS = 14;
+const HIDDEN_REPOS_FILE = path.join(DATA_DIR, 'hidden-repos.json');
+const hiddenRepos = () => new Set(readJsonFile(HIDDEN_REPOS_FILE)?.roots || []);
+function newRepos() {
+  let names = [];
+  try { names = fs.readdirSync(REPOS_DIR); } catch { return []; }
+  const cutoff = Date.now() - NEW_REPO_DAYS * 86400000;
+  const hidden = hiddenRepos();
+  const out = [];
+  for (const name of names) {
+    const root = path.join(REPOS_DIR, name);
+    if (ledger.has(root) || hidden.has(root) || !fs.existsSync(path.join(root, '.git'))) continue;
+    const born = fs.statSync(root).birthtimeMs;
+    if (born >= cutoff) out.push({ root, label: name, born });
+  }
+  return out.sort((a, b) => b.born - a.born);
+}
+function hideRepo(root) {
+  writeJson(HIDDEN_REPOS_FILE, { roots: [...hiddenRepos().add(root)] });
+}
+
 // Categories: the user's own groups for the sidebar. A space belongs to at most one, keyed by its
 // project folder so the grouping survives a space being closed and reopened.
 const CATEGORIES_FILE = path.join(DATA_DIR, 'categories.json');
@@ -956,8 +981,9 @@ function restoreWindows() {
 
 // Creates a herdr space for a ledger project, then re-sorts the spaces alphabetically with the
 // existing herdr-sort-spaces script (best effort; the new space is kept either way).
+// Makes a herdr space for a project in the ledger, or for one of the new repos.
 async function reopenProject(root) {
-  const e = ledger.get(root);
+  const e = ledger.get(root) || newRepos().find((r) => r.root === root);
   if (!e) return { status: 404, error: 'unknown project' };
   const snap = await herdrSnapshot();
   if (!snap.available) return { status: 502, error: 'herdr not reachable' };
@@ -1157,7 +1183,14 @@ const server = http.createServer(async (req, res) => {
   }
   if (url.pathname === '/api/projects' && req.method === 'GET') {
     await herdrSnapshot(); // keeps the open/inactive split current
-    return send(res, 200, { projects: ledgerView() });
+    return send(res, 200, { projects: ledgerView(), newRepos: newRepos(), reposDir: REPOS_DIR.replace(os.homedir(), '~') });
+  }
+  if (url.pathname === '/api/projects/hide' && req.method === 'POST') {
+    const body = await readJson(req);
+    if (!body || typeof body.root !== 'string') return send(res, 400, { error: 'bad json' });
+    if (!newRepos().some((r) => r.root === body.root)) return send(res, 404, { error: 'not a new repo' });
+    hideRepo(body.root);
+    return send(res, 200, { ok: true });
   }
   if (url.pathname === '/api/projects/reopen' && req.method === 'POST') {
     const body = await readJson(req);
@@ -1444,7 +1477,7 @@ module.exports = {
     get watchPrimed() { return watchPrimed; },
     set rootCache(v) { rootCache = v; },
   },
-  constants: { PORT, TMUX, TMUX_SOCKET, TS_BIN, HERDR, DATA_DIR, CLAUDE_DIR, SESSION_PREFIX, UPLOAD_DIR },
+  constants: { PORT, TMUX, TMUX_SOCKET, TS_BIN, HERDR, DATA_DIR, CLAUDE_DIR, SESSION_PREFIX, UPLOAD_DIR, REPOS_DIR },
   detectTailnet, requestAccess, legacyTmuxInUse, cleanEnv, tmux, scrubTmuxEnv, shq, programFor, startCommand,
   attachPty, register, createSession, adoptSessions, publicSession, skippedRoot, saveLedger, migrateLegacyData,
   loadLedger, seedFromSnapshots, updateLedger, ledgerView, cleanCategories, loadCategories, saveCategories,
@@ -1453,7 +1486,7 @@ module.exports = {
   permissionPrompt, promptKey, windowClaude, answerPrompt, git, windowChanges, saveUpload, loadPush, savePush,
   vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, pruneUploads,
   cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows,
-  reopenProject, identityRoots, herdrSnapshot, rootFor, listDir, loadOpenWith, saveOpenWith, fileKind, spaceFile,
+  reopenProject, newRepos, hideRepo, identityRoots, herdrSnapshot, rootFor, listDir, loadOpenWith, saveOpenWith, fileKind, spaceFile,
   appsFor, openChoices, openFile, appName, send, serveFile, readJson,
 };
 

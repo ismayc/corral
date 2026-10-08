@@ -846,7 +846,7 @@ async function loadSpaces(auto) {
   const r = await api('/api/herdr');
   if (auto && (!r.available || shape(r.spaces) === shape(spaces))) {
     if (r.available) for (const s of (spaces = r.spaces)) rows.get(s.id).querySelector('.dot').className = `dot ${s.status}`;
-    return;
+    return loadProjects(); // picks up a repo made since the last check
   }
   spaces = r.spaces;
   if (!r.available) { $('#spaces').textContent = `herdr not reachable: ${r.error}`; return loadProjects(); }
@@ -860,11 +860,42 @@ async function loadSpaces(auto) {
 }
 
 // Ledger of every project herdr has shown the server. "Inactive" means no space is open for it.
+// New repos are git folders made in the repos folder lately that herdr has never had a space for.
 let projects = [];
+let newRepos = [];
+let reposDir = '';
 let inactiveOpen = load('corral.inactiveOpen', true);
 async function loadProjects() {
-  try { projects = (await api('/api/projects')).projects; } catch { projects = []; }
+  try { ({ projects, newRepos = [], reposDir } = await api('/api/projects')); } catch { projects = []; newRepos = []; }
   renderInactive();
+}
+
+// Add makes the space, which then arrives in the sidebar like any new space (announced, marked new).
+function renderNewRepos(box) {
+  if (!newRepos.length) return;
+  const h = document.createElement('div');
+  h.className = 'sec';
+  h.textContent = `New in ${reposDir} (${newRepos.length})`;
+  box.append(h);
+  for (const p of newRepos) {
+    const r = document.createElement('div');
+    r.className = 'proj newrepo';
+    r.title = p.root;
+    const nm = document.createElement('span'); nm.className = 'name'; nm.textContent = p.label;
+    const when = document.createElement('span'); when.className = 'ago'; when.textContent = ago(p.born);
+    const add = document.createElement('button'); add.textContent = 'Add to herdr';
+    add.title = 'Create a herdr space for this folder';
+    add.onclick = async () => {
+      add.disabled = true; add.textContent = '...';
+      const res = await api('/api/projects/reopen', { method: 'POST', body: { root: p.root } });
+      if (res.error) { add.textContent = 'Failed'; add.title = res.error; return; }
+      loadSpaces();
+    };
+    const hide = document.createElement('button'); hide.textContent = '×'; hide.title = 'Do not list this folder here again';
+    hide.onclick = async () => { await api('/api/projects/hide', { method: 'POST', body: { root: p.root } }); loadProjects(); };
+    r.append(nm, when, add, hide);
+    box.append(r);
+  }
 }
 
 function ago(ms) {
@@ -879,6 +910,7 @@ function ago(ms) {
 function renderInactive() {
   const box = $('#inactive');
   box.textContent = '';
+  renderNewRepos(box);
   const q = $('#filter').value.toLowerCase();
   const list = projects.filter((p) => !p.open && (p.label.toLowerCase().includes(q) || p.root.toLowerCase().includes(q)));
   const all = projects.filter((p) => !p.open).length;
