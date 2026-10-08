@@ -183,12 +183,14 @@ test('a drag that is not a window is ignored by the zones', async () => {
   const p = await start({ storage: { 'corral.layout': '"halves"' }, routes: sessions('a', 'b') });
   const target = p.slotOf('a');
   const files = dt({ Files: 'x' });
-  assert.ok(!fire(target, 'dragover', { dataTransfer: files }).defaultPrevented);
+  // (The page itself catches a file drag, so the browser does not open the file; see app-drop.test.js.)
+  fire(target, 'dragover', { dataTransfer: files });
   assert.ok(!target.classList.contains('over'));
   assert.ok(!fire(target, 'dragover').defaultPrevented);
   target.classList.add('over');
-  assert.ok(!fire(target, 'drop', { dataTransfer: files }).defaultPrevented);
+  fire(target, 'drop', { dataTransfer: files });
   assert.ok(!target.classList.contains('over'));
+  assert.deepEqual(p.visible(), ['a', 'b']);
   // A window id that is no longer open changes nothing.
   fire(target, 'drop', { dataTransfer: dt({ 'text/x-corral': 'ghost' }) });
   assert.deepEqual(p.visible(), ['a', 'b']);

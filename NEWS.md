@@ -5,6 +5,14 @@ in `package.json`.
 
 ## Development version
 
+- **Drop a screenshot on a window** on the Mac page to give it to Claude Code,
+  as you would in Positron or Terminal.app. The browser never sees a dropped
+  file's path, so the image is uploaded to Corral's data folder (where the
+  phone's photos go) and that path is pasted into the window, which Claude
+  Code attaches as `[Image #n]`. PNG, JPEG, HEIC, WebP, and GIF files are
+  taken; other files are skipped with a note. A file dropped outside every
+  window no longer replaces Corral with the file.
+
 - The phone's **Chat** view shows Claude Code's status lines in full. Claude
   Code cuts each status line at the terminal's width, and the phone had sized
   the terminal to its own screen (about 50 columns), so long lines ended in

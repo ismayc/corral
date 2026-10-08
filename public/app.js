@@ -272,6 +272,34 @@ function setFocus(id) {
 }
 
 // quiet: a window started elsewhere goes straight to the bottom bar and does not take the keyboard.
+// ---- Images dropped on a window: the browser never sees a dropped file's path on the Mac, so each image is
+// uploaded to Corral's data folder (as the phone's photos are) and that path is pasted, which Claude Code
+// attaches as [Image #n], the same as dropping the file on a Positron or Terminal.app window.
+const filesIn = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/heic', 'image/webp', 'image/gif'];
+const base64 = (blob) => new Promise((resolve, reject) => {
+  const r = new FileReader();
+  r.onload = () => resolve(String(r.result).split(',')[1]);
+  r.onerror = reject;
+  r.readAsDataURL(blob);
+});
+async function addImages(w, files) {
+  setFocus(w.info.id);
+  const images = files.filter((f) => IMAGE_TYPES.includes(f.type));
+  const other = files.filter((f) => !images.includes(f));
+  if (other.length) toast(`Skipped ${other.length === 1 ? other[0].name : `${other.length} files`}: only images (PNG, JPEG, HEIC, WebP, or GIF) can be dropped.`);
+  for (const f of images) {
+    try {
+      const j = await api(`/api/sessions/${encodeURIComponent(w.info.id)}/upload`, { method: 'POST', body: { type: f.type, data: await base64(f) } });
+      if (!j.path) { toast(j.error || `Could not add ${f.name}.`); continue; }
+      w.term.paste(`${j.path} `);
+    } catch { toast(`Could not add ${f.name}.`); }
+  }
+}
+// A file dropped anywhere else would make the browser open it in place of Corral.
+document.addEventListener('dragover', (e) => { if (filesIn(e)) e.preventDefault(); });
+document.addEventListener('drop', (e) => { if (filesIn(e)) e.preventDefault(); });
+
 function attach(info, quiet) {
   // Already open: the status poll can pick up a window before its own POST answers, and puts it in the bottom
   // bar. The window you asked for comes out of it.
@@ -301,6 +329,15 @@ function attach(info, quiet) {
   term.open(el.querySelector('.term'));
 
   const w = { term, fit, el, slot, info, ws: null, muted: false };
+  // Drop a screenshot from Finder or the Desktop on the window to give it to Claude Code (see addImages).
+  el.addEventListener('dragover', (e) => { if (filesIn(e)) { e.preventDefault(); el.classList.add('filedrop'); } });
+  el.addEventListener('dragleave', () => el.classList.remove('filedrop'));
+  el.addEventListener('drop', (e) => {
+    el.classList.remove('filedrop');
+    if (!filesIn(e)) return;
+    e.preventDefault();
+    addImages(w, [...e.dataTransfer.files]);
+  });
   // With tmux's mouse on, a plain drag selects inside tmux, and on release tmux sends the text as an
   // OSC 52 escape. Put it on the clipboard. Writes only: a request to read the clipboard is ignored,
   // and so is any copy replayed from saved output while reconnecting.
