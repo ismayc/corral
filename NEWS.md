@@ -5,6 +5,11 @@ in `package.json`.
 
 ## Development version
 
+- The **focused window** on the Mac page now has a solid purple title bar
+  (and a purple border) in place of the thin lavender line across its top,
+  so the window your typing goes to is plain at a glance. The site's
+  workspace and layout screenshots are retaken to match.
+
 - **New repos get a space in one click.** A new **New in ~/repos** section
   in the sidebar lists git repos made in the last 14 days that herdr has
   never had a space for. **Add to herdr** makes the space, which then
