@@ -445,21 +445,33 @@ function openTerm(info, swiped) {
     if (ctrlArmed && d.length === 1) { d = String.fromCharCode(d.toUpperCase().charCodeAt(0) & 31); setCtrl(false); }
     sendRaw(d);
   });
-  term.onResize(({ cols, rows }) => current?.ws?.readyState === 1 && current.ws.send(JSON.stringify({ t: 'resize', cols, rows })));
-  connect();
+  term.onResize(() => sendSize(current));
   renderView();
+  connect();
+}
+
+// The size the Mac's terminal gets. In Chat the terminal is hidden, so it gets at least CHAT_COLS columns:
+// Claude Code cuts its status lines at the terminal's width, and a phone-wide terminal left only their start.
+const CHAT_COLS = 100;
+function ptySize(c) {
+  const { cols, rows } = c.term;
+  return { cols: c.chat ? Math.max(cols, CHAT_COLS) : cols, rows };
+}
+function sendSize(c) {
+  if (c?.ws?.readyState === 1) c.ws.send(JSON.stringify({ t: 'resize', ...ptySize(c) }));
 }
 
 function connect() {
   const c = current;
   const { term } = c;
-  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?id=${encodeURIComponent(c.info.id)}&own=1&cols=${term.cols}&rows=${term.rows}`);
+  const { cols, rows } = ptySize(c);
+  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?id=${encodeURIComponent(c.info.id)}&own=1&cols=${cols}&rows=${rows}`);
   c.ws = ws;
   ws.onopen = () => {
     $('#conn').hidden = true;
     term.reset();
     c.fit.fit();
-    ws.send(JSON.stringify({ t: 'resize', cols: term.cols, rows: term.rows }));
+    sendSize(c);
   };
   ws.onmessage = (e) => term.write(e.data);
   ws.onclose = () => {
@@ -571,6 +583,7 @@ function renderView() {
   $('#viewbtn').hidden = !claude;
   $('#viewbtn').textContent = chat ? 'Terminal' : 'Chat';
   $('#convo').hidden = !chat;
+  if (current.chat !== chat) { current.chat = chat; sendSize(current); }
   if (chat && !convo) {
     convo = { id: current.info.id, timer: setInterval(loadConvo, 3000), sig: '', drawn: false };
     $('#chat').replaceChildren(h('div', { class: 'note' }, 'Loading…'));

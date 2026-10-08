@@ -3,6 +3,14 @@
 What changed in each version of Corral, newest first. The version is the one
 in `package.json`.
 
+## Development version
+
+- The phone's **Chat** view shows Claude Code's status lines in full. Claude
+  Code cuts each status line at the terminal's width, and the phone had sized
+  the terminal to its own screen (about 50 columns), so long lines ended in
+  `…`. While Chat is showing, the terminal is now kept at least 100 columns
+  wide and the phone wraps the lines; **Terminal** still fits the phone.
+
 ## 0.4.0 (October 7, 2026)
 
 ### Chat or Terminal on the phone

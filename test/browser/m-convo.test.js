@@ -164,6 +164,23 @@ test('Terminal hides the conversation, stops reading it, and is remembered; Chat
   assert.equal(convoCalls(p), 2);
 });
 
+test('in Chat the Mac terminal is kept at least 100 columns wide, so Claude Code does not cut its status lines', async () => {
+  const p = await phone([A()], { routes: { 'GET /api/sessions/a/conversation': { items: [] } } });
+  const { ws, term } = await p.openWin('a');
+  assert.equal(ws.url, 'ws://127.0.0.1:18777/ws?id=a&own=1&cols=100&rows=24');
+  assert.deepEqual(p.sent(ws), [{ t: 'resize', cols: 100, rows: 24 }]);
+  // The phone's own width counts only when it is wider.
+  term.resize(120, 30);
+  assert.deepEqual(p.sent(ws).at(-1), { t: 'resize', cols: 120, rows: 30 });
+  term.resize(48, 30);
+  assert.deepEqual(p.sent(ws).at(-1), { t: 'resize', cols: 100, rows: 30 });
+  // Terminal shows the terminal, so it takes the phone's width; Chat widens it again.
+  p.$('#viewbtn').click();
+  assert.deepEqual(p.sent(ws).at(-1), { t: 'resize', cols: 48, rows: 30 });
+  p.$('#viewbtn').click();
+  assert.deepEqual(p.sent(ws).at(-1), { t: 'resize', cols: 100, rows: 30 });
+});
+
 test('a remembered Terminal choice opens Claude windows on the terminal', async () => {
   const p = await phone([A()], { storage: { 'corral.m.view': '"term"' } });
   await p.openWin('a');

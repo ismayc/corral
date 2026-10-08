@@ -16,7 +16,8 @@ test('opening a card shows its terminal with the status, mode, and folder, and c
   assert.equal(p.text('#ttitle'), 'a');
   assert.equal(p.text('#tsub'), 'Your turn · Auto mode · ~/repos/a');
   const ws = p.sockets[0];
-  assert.equal(ws.url, 'ws://127.0.0.1:18777/ws?id=a&own=1&cols=80&rows=24');
+  // A Claude window opens on Chat, which keeps the Mac terminal at least 100 columns wide.
+  assert.equal(ws.url, 'ws://127.0.0.1:18777/ws?id=a&own=1&cols=100&rows=24');
   const term = p.terms[0];
   assert.equal(term.options.fontSize, 12);
   assert.equal(term.textarea.getAttribute('inputmode'), 'none');
@@ -24,7 +25,7 @@ test('opening a card shows its terminal with the status, mode, and folder, and c
   ws.open();
   assert.equal(term.resets, 1);
   assert.equal(p.$('#conn').hidden, true);
-  assert.deepEqual(p.sent(ws), [{ t: 'resize', cols: 80, rows: 24 }]);
+  assert.deepEqual(p.sent(ws), [{ t: 'resize', cols: 100, rows: 24 }]);
   ws.message('hello');
   assert.deepEqual(term.written, ['hello']);
 });
