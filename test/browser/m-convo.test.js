@@ -252,3 +252,60 @@ test('the view button with no terminal open only changes the remembered choice',
   assert.equal(p.$('#convo').hidden, true);
   assert.equal(p.text('#viewbtn'), 'Chat');
 });
+
+// Claude's replies are drawn as Markdown; your prompts stay plain text.
+const md = (text) => phone([A()], { routes: { 'GET /api/sessions/a/conversation': () => ({ items: [{ who: 'you', text: '**not bold**' }, { who: 'claude', text }] }) } })
+  .then(async (p) => { await p.openWin('a'); await settle(); return p; });
+const replyHtml = (p) => p.$('#chat .msg.claude').innerHTML;
+
+test('a reply in Markdown is drawn with headings, emphasis, code, links, and rules; your prompt is not', async () => {
+  const p = await md([
+    '# Done', '### Summary',
+    'Fixed **the `m.js` bug**, *really* and _truly_.', 'See [the docs](https://example.com/a) or https://example.com/b.',
+    '', '---', '',
+    '```js', 'const a = 1 < 2;', '```',
+    '> quoted **text**', '> second',
+    'snake_case_name, 2 * 3 * 4, and [a local link](file.md) stay as typed.',
+    '<b>not markup</b>',
+  ].join('\n'));
+  assert.equal(p.$('#chat .msg.you').innerHTML, '**not bold**');
+  assert.equal(replyHtml(p), [
+    '<h1>Done</h1><h3>Summary</h3>',
+    '<p>Fixed <strong>the <code>m.js</code> bug</strong>, <em>really</em> and <em>truly</em>.\nSee ',
+    '<a href="https://example.com/a" target="_blank" rel="noopener">the docs</a> or ',
+    '<a href="https://example.com/b" target="_blank" rel="noopener">https://example.com/b</a>.</p>',
+    '<hr>',
+    '<pre><code>const a = 1 &lt; 2;</code></pre>',
+    '<blockquote><p>quoted <strong>text</strong>\nsecond</p></blockquote>',
+    '<p>snake_case_name, 2 * 3 * 4, and [a local link](file.md) stay as typed.\n&lt;b&gt;not markup&lt;/b&gt;</p>',
+  ].join(''));
+});
+
+test('lists nest by indent, numbered lists keep their first number, and a code fence left open runs to the end', async () => {
+  const p = await md([
+    'Steps:', '3. First', '   more of first', '4. Second', '   - a', '   - b', '',
+    '     still b', '', '- after', '+ plus', '1. new numbered list', '', '~~~', '# not a heading',
+  ].join('\n'));
+  assert.equal(replyHtml(p), [
+    '<p>Steps:</p>',
+    '<ol start="3"><li><p>First\nmore of first</p></li>',
+    '<li><p>Second</p><ul><li><p>a</p></li><li><p>b</p><p>still b</p></li></ul></li></ol>',
+    '<ul><li><p>after</p></li><li><p>plus</p></li></ul>',
+    '<ol start="1"><li><p>new numbered list</p></li></ol>',
+    '<pre><code># not a heading</code></pre>',
+  ].join(''));
+});
+
+test('a table scrolls inside the bubble; a line with a bar but no rule under it is text', async () => {
+  const p = await md(['| Rule | Check |', '|:--|--:|', '| `a` | yes |', 'b | no', '', 'x | y'].join('\n'));
+  assert.equal(replyHtml(p), [
+    '<div class="table"><table><thead><tr><th>Rule</th><th>Check</th></tr></thead>',
+    '<tbody><tr><td><code>a</code></td><td>yes</td></tr><tr><td>b</td><td>no</td></tr></tbody></table></div>',
+    '<p>x | y</p>',
+  ].join(''));
+});
+
+test('a reply can end in a list and a blank line', async () => {
+  const p = await md('- last\n');
+  assert.equal(replyHtml(p), '<ul><li><p>last</p></li></ul>');
+});

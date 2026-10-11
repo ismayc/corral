@@ -1000,6 +1000,26 @@ async function reopenProject(root) {
   return { status: 200, ok: true, label };
 }
 
+// Makes a new project from the phone's Start sheet: a folder in the repos folder, a git repo in it (so it
+// counts as a new repo), and a herdr space for it. A herdr that cannot make the space still leaves the
+// folder, and the phone starts a plain window there.
+const PROJECT_NAME = /^[A-Za-z0-9][\w.-]{0,99}$/;
+async function createProject(name) {
+  if (typeof name !== 'string' || !PROJECT_NAME.test(name)) return { status: 400, error: 'A folder name can use letters, digits, dots, dashes, and underscores.' };
+  const root = path.join(REPOS_DIR, name);
+  const shown = root.replace(os.homedir(), '~');
+  if (fs.existsSync(root)) return { status: 409, error: `${shown} already exists.` };
+  try { fs.mkdirSync(root, { recursive: true }); } catch { return { status: 500, error: `Could not make ${shown}.` }; }
+  const git = await new Promise((resolve) => cp.execFile('git', ['init', '-q'], { cwd: root, timeout: 10000 }, (err) => resolve(!err)));
+  if (!git) {
+    fs.rmSync(root, { recursive: true, force: true });
+    return { status: 500, error: `Could not start a git repo in ${shown}.` };
+  }
+  const made = await reopenProject(root);
+  const space = made.ok ? (await herdrSnapshot()).spaces.find((s) => s.root === root)?.id || null : null;
+  return { status: 201, root, label: made.label || name, space, ...(made.ok ? {} : { warning: made.error }) };
+}
+
 // herdr stores each space's project folder as identity_cwd in session.json. A pane's own cwd
 // drifts when the user cd's, so the file tree roots at the identity folder when it is known.
 function identityRoots() {
@@ -1197,6 +1217,12 @@ const server = http.createServer(async (req, res) => {
     if (!body || typeof body.root !== 'string') return send(res, 400, { error: 'bad json' });
     const r = await reopenProject(body.root);
     return send(res, r.status, r);
+  }
+  if (url.pathname === '/api/projects/create' && req.method === 'POST') {
+    const body = await readJson(req);
+    if (!body) return send(res, 400, { error: 'bad json' });
+    const { status, ...r } = await createProject(body.name);
+    return send(res, status, r);
   }
   if (url.pathname === '/api/projects/forget' && req.method === 'POST') {
     const body = await readJson(req);

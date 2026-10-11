@@ -75,13 +75,86 @@ test('search matches a project by name or folder, and says when nothing matches'
   const q = p.$('#q');
   q.value = 'WEB';
   fire(q, 'input');
-  assert.deepEqual(rows(p).map((r) => (Array.isArray(r) ? r[0] : r)), ['Other projects', 'Website']);
+  assert.deepEqual(rows(p).map((r) => (Array.isArray(r) ? r[0] : r)), ['Other projects', 'Website', 'New project', 'New folder WEB']);
   q.value = 'notes';
   fire(q, 'input');
-  assert.deepEqual(rows(p).map((r) => (Array.isArray(r) ? r[0] : r)), ['herdr spaces', 'No root']);
+  assert.deepEqual(rows(p).map((r) => (Array.isArray(r) ? r[0] : r)), ['herdr spaces', 'No root', 'New project', 'New folder notes']);
   q.value = 'zzz';
   fire(q, 'input');
-  assert.deepEqual(rows(p), ['No project matches.']);
+  assert.deepEqual(rows(p).slice(0, 1), ['No project matches.']);
+});
+
+// ---- A new folder in the repos folder, named in the search box ----
+const typeName = (p, v) => { p.$('#q').value = v; fire(p.$('#q'), 'input'); };
+const CREATED = { root: '/Users/chester/repos/fresh-idea', label: 'fresh-idea', space: 'sp9' };
+
+test('a name that is not a project yet offers a new folder in the repos folder; a project name or a bad name does not', async () => {
+  const p = await phone([], { routes: { 'GET /api/herdr': HERDR, 'GET /api/projects': { ...PROJECTS, reposDir: '~/code' } } });
+  p.$('#fab').click();
+  await settle();
+  assert.equal(p.$('#q').placeholder, 'Search projects, or name a new one');
+  typeName(p, '  fresh  idea ');
+  assert.deepEqual(rows(p), ['No project matches.', 'New project', ['New folder fresh-idea', '~/code/fresh-idea', 'dot plus', '']]);
+  typeName(p, 'website');
+  assert.deepEqual(rows(p), ['Other projects', ['Website', '~/site', 'dot ', '']]);
+  typeName(p, 'a/b');
+  assert.deepEqual(rows(p), ['No project matches.', 'A new folder name can use letters, digits, dots, dashes, and underscores.']);
+});
+
+test('the repos folder defaults to ~/repos when the Mac does not say', async () => {
+  const p = await phone([], { routes: { 'GET /api/projects': new Error('x') } });
+  p.$('#fab').click();
+  await settle();
+  typeName(p, 'x');
+  assert.equal(rows(p)[2][1], '~/repos/x');
+});
+
+test('a new folder is made on the Mac, then the chosen kind starts in its space', async () => {
+  const p = await phone([], { routes: {
+    'POST /api/projects/create': { __reply: true, status: 201, body: CREATED },
+    'POST /api/sessions': (r) => ({ __reply: true, status: 201, body: win('new1', { label: r.body.label, cwd: r.body.cwd }) }),
+  } });
+  p.$('#fab').click();
+  await settle();
+  typeName(p, 'fresh-idea');
+  p.button('+New folder fresh-idea~/repos/fresh-idea').click();
+  assert.equal(p.$('#sheet').hidden, true);
+  await settle();
+  assert.deepEqual(p.api.called('POST', '/api/projects/create')[0].body, { name: 'fresh-idea' });
+  assert.deepEqual(p.api.called('POST', '/api/sessions')[0].body, { cwd: CREATED.root, label: 'fresh-idea', space: 'sp9', agent: 'claude' });
+  assert.equal(p.text('#ttitle'), 'fresh-idea');
+});
+
+test('a new folder herdr made no space for still starts there, and says why', async () => {
+  const p = await phone([], { routes: {
+    'POST /api/projects/create': { __reply: true, status: 201, body: { ...CREATED, space: null, warning: 'herdr not reachable' } },
+    'POST /api/sessions': (r) => ({ __reply: true, status: 201, body: win('new1', { label: r.body.label }) }),
+  } });
+  p.$('#fab').click();
+  await settle();
+  typeName(p, 'fresh-idea');
+  p.button('+New folder fresh-idea~/repos/fresh-idea').click();
+  await settle();
+  assert.equal(p.toast(), 'Made ~/repos/fresh-idea, but herdr has no space for it: herdr not reachable');
+  assert.equal(p.api.called('POST', '/api/sessions')[0].body.space, null);
+});
+
+test('a new folder the Mac refuses, cannot parse, or cannot get is reported and starts nothing', async () => {
+  for (const [reply, said] of [
+    [{ __reply: true, status: 409, body: { error: '~/repos/x already exists.' } }, '~/repos/x already exists.'],
+    [{ __reply: true, status: 500, body: 'oops', type: 'text/plain' }, 'Could not make the folder.'],
+    [new Error('offline'), 'Could not reach the Mac.'],
+  ]) {
+    const p = await phone([], { routes: { 'POST /api/projects/create': reply } });
+    p.$('#fab').click();
+    await settle();
+    typeName(p, 'x');
+    p.button('+New folder x~/repos/x').click();
+    await settle();
+    assert.equal(p.toast(), said);
+    assert.equal(p.api.called('POST', '/api/sessions').length, 0);
+    unloadPage();
+  }
 });
 
 test('the sheet closes with its × or a tap outside it', async () => {

@@ -366,6 +366,7 @@ async function openSheet() {
     projects.push({ label: p.label, root: p.root, space: null, status: null, open: false });
   }
   projects.push({ label: 'Home folder', root: null, space: null, status: null, open: false, home: true });
+  reposDir = pj.reposDir || '~/repos';
   renderProjects();
 }
 // A project that already has a window on the Mac (made from its space, or in its folder). The home
@@ -376,8 +377,22 @@ function windowFor(p, list) {
   return list.find((s) => !s.exited && ((p.space && s.space === p.space) || (s.cwd && (s.cwd === p.root || s.cwd === p.cwd)))) || null;
 }
 
+// A name typed in the search box that is not a project yet can become one: a new folder in the repos folder.
+let reposDir = '~/repos';
+const NEW_NAME = /^[A-Za-z0-9][\w.-]{0,99}$/;
+function newRow(typed) {
+  const name = typed.replace(/\s+/g, '-');
+  if (projects.some((p) => p.label.toLowerCase() === name.toLowerCase())) return [];
+  if (!NEW_NAME.test(name)) return [h('div', { class: 'empty' }, 'A new folder name can use letters, digits, dots, dashes, and underscores.')];
+  return [h('div', { class: 'section' }, 'New project'),
+    h('button', { class: 'proj', onclick: () => startNew(name) },
+      h('span', { class: 'dot plus' }, '+'),
+      h('span', { class: 'n' }, h('div', {}, `New folder ${name}`), h('div', { class: 'p' }, `${reposDir}/${name}`)))];
+}
+
 function renderProjects() {
-  const q = $('#q').value.trim().toLowerCase();
+  const typed = $('#q').value.trim();
+  const q = typed.toLowerCase();
   const match = projects.filter((p) => !q || p.label.toLowerCase().includes(q) || (p.root || '').toLowerCase().includes(q));
   const row = (p) => h('button', { class: 'proj', onclick: () => start(p) },
     h('span', { class: `dot ${p.status || ''}` }),
@@ -387,7 +402,8 @@ function renderProjects() {
   $('#projects').replaceChildren(
     ...(open.length ? [h('div', { class: 'section' }, 'herdr spaces'), ...open.map(row)] : []),
     ...(other.length ? [h('div', { class: 'section' }, 'Other projects'), ...other.map(row)] : []),
-    ...(!match.length ? [h('div', { class: 'empty' }, 'No project matches.')] : []));
+    ...(!match.length ? [h('div', { class: 'empty' }, 'No project matches.')] : []),
+    ...(typed ? newRow(typed) : []));
 }
 $('#q').oninput = renderProjects;
 $('#fab').onclick = openSheet;
@@ -414,6 +430,19 @@ async function start(p) {
     openTerm(j);
     refresh();
   } catch { toast('Could not start it on the Mac.'); }
+}
+
+// Makes the folder (a git repo with a herdr space) on the Mac, then starts the chosen agent in it.
+async function startNew(name) {
+  $('#sheet').hidden = true;
+  let r, j;
+  try {
+    r = await fetch('/api/projects/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+    j = await r.json().catch(() => ({}));
+  } catch { return toast('Could not reach the Mac.'); }
+  if (!r.ok) return toast(j.error || 'Could not make the folder.');
+  if (!j.space) toast(`Made ${home(j.root)}, but herdr has no space for it: ${j.warning}`);
+  return start({ label: j.label, root: j.root, space: j.space });
 }
 
 // ---- Terminal view ----
@@ -626,6 +655,94 @@ $('#morebtn').onclick = () => {
   sheet(current.info.label, h('div', { class: 'menu' }, item('Changes not yet committed', showChanges), item('Scrollback as text', showHistory)));
 };
 
+// ---- Markdown: Claude's replies drawn as headings, lists, tables, code, and links ----
+// Built as elements, never as HTML, so text in a reply cannot add markup or run script. Links go out only
+// for http(s) addresses.
+const INLINE = /`([^`]+)`|\*\*(.+?)\*\*|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(?<![\w*])\*(?![\s*])(.+?)(?<!\s)\*(?!\w)|(?<!\w)_(?![\s_])(.+?)(?<!\s)_(?!\w)|(https?:\/\/[^\s<>()]*[^\s<>().,;:!?'"])/g;
+function mdInline(s) {
+  const out = [];
+  let at = 0;
+  for (const m of s.matchAll(INLINE)) {
+    if (m.index > at) out.push(s.slice(at, m.index));
+    if (m[1]) out.push(h('code', {}, m[1]));
+    else if (m[2]) out.push(h('strong', {}, mdInline(m[2])));
+    else if (m[3]) out.push(h('a', { href: m[4], target: '_blank', rel: 'noopener' }, mdInline(m[3])));
+    else if (m[7]) out.push(h('a', { href: m[7], target: '_blank', rel: 'noopener' }, m[7]));
+    else out.push(h('em', {}, mdInline(m[5] || m[6])));
+    at = m.index + m[0].length;
+  }
+  if (at < s.length) out.push(s.slice(at));
+  return out;
+}
+
+const LIST_ITEM = /^( *)([-*+]|\d+[.)]) +(.*)$/;
+const TABLE_RULE = /^ *\|? *:?-+:? *(\| *:?-+:? *)*\|? *$/;
+const cells = (line) => line.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+function markdown(text) {
+  const lines = text.split('\n');
+  const out = [];
+  let para = [];
+  const flush = () => { if (para.length) out.push(h('p', {}, mdInline(para.join('\n')))); para = []; };
+  for (let i = 0; i < lines.length;) {
+    const line = lines[i];
+    let m;
+    if ((m = line.match(/^ *(```|~~~)/))) {
+      flush();
+      const code = [];
+      for (i++; i < lines.length && !lines[i].trim().startsWith(m[1]); i++) code.push(lines[i]);
+      out.push(h('pre', {}, h('code', {}, code.join('\n'))));
+      i++;
+    } else if ((m = line.match(/^(#{1,6}) +(.*)$/))) {
+      flush();
+      out.push(h(`h${m[1].length}`, {}, mdInline(m[2])));
+      i++;
+    } else if (/^ *([-*_])( *\1){2,} *$/.test(line)) {
+      flush();
+      out.push(h('hr'));
+      i++;
+    } else if (/^ *>/.test(line)) {
+      flush();
+      const quote = [];
+      for (; i < lines.length && /^ *>/.test(lines[i]); i++) quote.push(lines[i].replace(/^ *> ?/, ''));
+      out.push(h('blockquote', {}, markdown(quote.join('\n'))));
+    } else if (line.includes('|') && TABLE_RULE.test(lines[i + 1] || '')) {
+      flush();
+      const head = h('tr', {}, cells(line).map((c) => h('th', {}, mdInline(c))));
+      const rows = [];
+      for (i += 2; i < lines.length && lines[i].includes('|'); i++) rows.push(h('tr', {}, cells(lines[i]).map((c) => h('td', {}, mdInline(c)))));
+      out.push(h('div', { class: 'table' }, h('table', {}, h('thead', {}, head), h('tbody', {}, rows))));
+    } else if ((m = line.match(LIST_ITEM))) {
+      flush();
+      // An item runs until the next marker at its own depth; deeper lines are its contents, nested lists included.
+      const depth = m[1].length;
+      const ordered = /\d/.test(m[2]);
+      const items = [];
+      while (i < lines.length) {
+        const it = lines[i].match(LIST_ITEM);
+        if (!it || it[1].length !== depth || /\d/.test(it[2]) !== ordered) break;
+        const body = [it[3]];
+        for (i++; i < lines.length; i++) {
+          const next = lines[i];
+          const indent = next.match(/^ */)[0].length;
+          if (next.trim() && indent <= depth) break;
+          if (!next.trim() && !(lines[i + 1] || '').match(/^ +\S/)) break;
+          body.push(next.slice(Math.min(indent, depth + it[2].length + 1)));
+        }
+        items.push(h('li', {}, markdown(body.join('\n'))));
+      }
+      out.push(ordered ? h('ol', { start: parseInt(m[2], 10) }, items) : h('ul', {}, items));
+    } else if (!line.trim()) {
+      flush();
+      i++;
+    } else {
+      para.push(line);
+      i++;
+    }
+  }
+  flush();
+  return out;
+}
+
 function chatItems(r) {
   const note = (t) => h('div', { class: 'note' }, t);
   if (r.failed) return [note('Could not read the conversation. Tap Terminal to see the window.')];
@@ -640,7 +757,7 @@ function chatItems(r) {
       els.push(h('div', { class: 'when' }, day === lastDay ? time : `${at.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}, ${time}`));
       lastDay = day;
     }
-    els.push(h('div', { class: `msg ${it.who}` }, it.text));
+    els.push(h('div', { class: `msg ${it.who}` }, it.who === 'claude' ? markdown(it.text) : it.text));
   }
   if (r.claude === 'busy') els.push(h('div', { class: 'working' }, 'Claude is working…'));
   return els;

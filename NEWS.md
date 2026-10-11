@@ -5,6 +5,21 @@ in `package.json`.
 
 ## Development version
 
+- **Start something can make a new project.** Type a name in its search box
+  that is not a project yet, and a **New folder** row appears at the bottom.
+  Tapping it makes the folder in `~/repos` (or `CORRAL_REPOS`), starts a git
+  repo there, and gives it a herdr space, then starts the kind you picked
+  (Claude Code, Last session, or Shell) in it. Spaces in the name become dashes; a
+  name that is taken, or has other characters, is refused. If herdr cannot
+  make the space, the folder is kept and the window starts there anyway.
+
+- **Claude's replies in phone Chat are drawn as Markdown**: headings, bold
+  and italic text, inline code and code blocks, lists (nested ones too),
+  quotes, rules, links, and tables. A wide table or code block scrolls
+  sideways inside its bubble. Your own prompts stay as you typed them. The
+  reply is built as page elements, never as HTML, so nothing in it can add
+  markup or run a script.
+
 - The **focused window** on the Mac page now has a solid purple title bar
   (and a purple border) in place of the thin lavender line across its top,
   so the window your typing goes to is plain at a glance. The site's

@@ -97,3 +97,68 @@ test('POST /api/projects/hide hides a new repo and refuses anything else', async
   assert.deepEqual([ok.status, ok.json], [200, { ok: true }]);
   assert.deepEqual((await req('GET', '/api/projects')).json.newRepos, []);
 });
+
+// A herdr whose snapshot lists every space made with `workspace create`, as the real one does.
+function makesSpaces(herdr) {
+  herdr.other = (args) => {
+    if (args[0] === 'workspace') {
+      const id = `w${herdr.snap.workspaces.length + 1}`;
+      herdr.snap.workspaces.push({ workspace_id: id, number: 1, label: args[5], agent_status: 'idle', pane_count: 1, focused: false });
+      herdr.snap.panes.push({ workspace_id: id, cwd: args[3] });
+    }
+    return '';
+  };
+}
+
+test('POST /api/projects/create makes a git repo in the repos folder with a herdr space', async (t) => {
+  const { req, herdr, home } = await world(t);
+  makesSpaces(herdr);
+  const r = await req('POST', '/api/projects/create', { body: { name: 'fresh-idea' } });
+  const root = path.join(home, 'repos', 'fresh-idea');
+  assert.deepEqual([r.status, r.json], [201, { root, label: 'fresh-idea', space: 'w1' }]);
+  assert.ok(fs.statSync(path.join(root, '.git')).isDirectory());
+  assert.deepEqual(herdr.calls.find((c) => c[0] === 'workspace'), ['workspace', 'create', '--cwd', root, '--label', 'fresh-idea', '--no-focus']);
+  const again = await req('POST', '/api/projects/create', { body: { name: 'fresh-idea' } });
+  assert.deepEqual([again.status, again.json], [409, { error: '~/repos/fresh-idea already exists.' }]);
+});
+
+test('a space whose folder herdr reports elsewhere still makes the project, with no space to join', async (t) => {
+  const { req, herdr } = await world(t);
+  herdr.other = (args) => {
+    if (args[0] === 'workspace') herdr.snap.workspaces.push({ workspace_id: 'w9', label: 'x' });
+    return '';
+  };
+  const r = await req('POST', '/api/projects/create', { body: { name: 'elsewhere' } });
+  assert.deepEqual([r.status, r.json.space, r.json.warning], [201, null, undefined]);
+});
+
+test('a project is still made when herdr cannot make its space, with the reason', async (t) => {
+  const { req, herdr, home } = await world(t);
+  herdr.fail = true;
+  const r = await req('POST', '/api/projects/create', { body: { name: 'offline' } });
+  assert.deepEqual([r.status, r.json], [201, { root: path.join(home, 'repos', 'offline'), label: 'offline', space: null, warning: 'herdr not reachable' }]);
+});
+
+test('POST /api/projects/create refuses bad names and cleans up when git or the folder fails', async (t) => {
+  const { req, home } = await world(t);
+  assert.equal((await req('POST', '/api/projects/create', { raw: '{nope' })).status, 400);
+  for (const name of [5, '', '../escape', '.hidden', 'a/b', 'has space', 'x'.repeat(101)]) {
+    const r = await req('POST', '/api/projects/create', { body: { name } });
+    assert.deepEqual([r.status, r.json.error], [400, 'A folder name can use letters, digits, dots, dashes, and underscores.'], String(name));
+  }
+  assert.equal(fs.existsSync(path.join(home, 'escape')), false);
+  // The repos folder is a file, so no folder can be made in it.
+  fs.writeFileSync(path.join(home, 'repos'), '');
+  const blocked = await req('POST', '/api/projects/create', { body: { name: 'p' } });
+  assert.deepEqual([blocked.status, blocked.json], [500, { error: 'Could not make ~/repos/p.' }]);
+});
+
+test('a git that fails leaves no folder behind', async (t) => {
+  const herdr = { calls: [], snap: { workspaces: [], panes: [] } };
+  const h = loadServer({ exec: { herdr: fakeHerdr(herdr), git: () => { throw new Error('no git'); } } });
+  const http = await listen(h.srv);
+  t.after(() => http.close());
+  const r = await http.request('POST', '/api/projects/create', { body: { name: 'nogit' } });
+  assert.deepEqual([r.status, r.json], [500, { error: 'Could not start a git repo in ~/repos/nogit.' }]);
+  assert.equal(fs.existsSync(path.join(h.home, 'repos', 'nogit')), false);
+});
