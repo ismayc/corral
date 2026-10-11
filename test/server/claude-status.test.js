@@ -149,7 +149,7 @@ test('overview lists a window with no Claude as a shell with no ask key or promp
   const c = setup();
   const s = c.open('shell');
   const [row] = c.srv.overview();
-  assert.deepEqual(row, { id: s.id, cwd: c.home, label: 'shell', space: null, exited: false, created: s.created, persistent: true, remote: false, activity: 1791390100000, claude: null, askKey: null, prompt: null, muted: false });
+  assert.deepEqual(row, { id: s.id, cwd: c.home, label: 'shell', space: null, exited: false, created: s.created, persistent: true, remote: false, summoned: 0, activity: 1791390100000, claude: null, askKey: null, prompt: null, muted: false });
 });
 
 test('overview reports the Claude status, mode, and since-time of a window', () => {

@@ -74,6 +74,19 @@ test('a window started on another device while the page was closed waits in the 
   assert.equal(p.$('#tray').hidden, false);
 });
 
+test('a window handed a task just before the page opened is in view; an older one stays where it was', async () => {
+  const p = await start({
+    storage: { 'corral.open': ['a', 'b', 'c'], 'corral.minimized': ['a', 'b', 'c'], 'corral.slots': { slots: [], tray: ['a', 'b', 'c'] } },
+    routes: { 'GET /api/sessions': { sessions: [session('a', { summoned: Date.now() - 5000 }), session('b', { summoned: Date.now() - 60000 }), session('c')] } },
+  });
+  assert.deepEqual(p.visible(), ['a']);
+  assert.deepEqual(p.chips().sort(), ['b', 'c']);
+  // The poll does not act on them again.
+  p.tick(3000);
+  await flush();
+  assert.deepEqual(p.chips().sort(), ['b', 'c']);
+});
+
 test('settings saved under the old webterm names still apply', async () => {
   const p = await start({ storage: { 'webterm.layout': '"halves"', 'webterm.agent': '"claude-continue"' } });
   assert.equal(p.$('#laybtn').textContent, 'Layout: Halves ▾');

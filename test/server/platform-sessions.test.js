@@ -139,7 +139,7 @@ test('publicSession shows only the fields the page needs', () => {
   const { srv } = loadServer();
   const s = srv.register('p1', os.tmpdir(), 'lbl', 5, true, 'sp');
   s.remote = true;
-  assert.deepEqual(srv.publicSession(s), { id: 'p1', cwd: os.tmpdir(), label: 'lbl', space: 'sp', exited: false, created: 5, persistent: true, remote: true });
+  assert.deepEqual(srv.publicSession(s), { id: 'p1', cwd: os.tmpdir(), label: 'lbl', space: 'sp', exited: false, created: 5, persistent: true, remote: true, summoned: 0 });
   assert.equal(srv.publicSession(srv.register('p2', os.tmpdir(), 'x', 5, false)).remote, false);
 });
 

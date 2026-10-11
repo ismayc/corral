@@ -291,6 +291,43 @@ test('several windows started elsewhere are announced together, and local ones s
   assert.deepEqual(p.chips().sort(), ['x', 'y', 'z']);
 });
 
+test('a window started with a task from another app comes into view on the first poll that sees it, with the keyboard', async () => {
+  const p = await two();
+  p.api.routes['GET /api/sessions'].sessions.push(session('m', { label: 'mail job', summoned: 100 }));
+  p.now.sessions.push(status('m', { label: 'mail job' }));
+  await p.poll();
+  assert.deepEqual(p.wins(), ['a', 'b', 'mail job']);
+  assert.deepEqual(p.chips(), []);
+  assert.equal(p.slotOf('mail job').hidden, false);
+  assert.ok(p.terms[2].focused);
+  assert.equal(p.toast(), 'mail job was started with a task from another app. Here it is.');
+});
+
+test('a minimized window given a new task comes out of the bottom bar, once per task', async () => {
+  const p = await two();
+  const list = p.api.routes['GET /api/sessions'].sessions;
+  p.slotOf('a').querySelector('.min').click();
+  assert.deepEqual(p.chips(), ['a']);
+  list[0] = session('a', { summoned: 200 });
+  await p.poll();
+  assert.deepEqual(p.chips(), []);
+  assert.ok(p.terms[0].focused);
+  assert.equal(p.toast(), 'a was given a task from another app. Here it is.');
+  // The same task does not pull it back out after it is minimized again; a new one does.
+  p.slotOf('a').querySelector('.min').click();
+  await p.poll();
+  assert.deepEqual(p.chips(), ['a']);
+  list[0] = session('a', { summoned: 300 });
+  await p.poll();
+  assert.deepEqual(p.chips(), []);
+  // One already in a zone takes the keyboard.
+  p.terms.forEach((t) => t.blur());
+  list[1] = session('b', { summoned: 400 });
+  await p.poll();
+  assert.deepEqual(p.terms.map((t) => Boolean(t.focused)), [false, true]);
+  assert.deepEqual(p.visible().sort(), ['a', 'b']);
+});
+
 test('a hidden page does not check for new windows, and a failed check changes nothing', async () => {
   const p = await two();
   const calls = () => p.api.called('GET', '/api/sessions').length;

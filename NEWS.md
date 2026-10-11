@@ -14,6 +14,12 @@ in `package.json`.
   as mail-triager's "Open in Corral with Claude" Mail action; the page itself
   still starts windows with no prompt.
 
+- **A window handed a task comes into view.** A window started with a
+  prompt, or one whose Claude Code had a prompt typed into it, opens in a
+  zone on the Mac's page and takes the keyboard, coming out of the bottom bar
+  if it was there. Windows started elsewhere with no prompt still wait in the
+  bottom bar. A note says which window got the task.
+
 - **Start something can make a new project.** Type a name in its search box
   that is not a project yet, and a **New folder** row appears at the bottom.
   Tapping it makes the folder in `~/repos` (or `CORRAL_REPOS`), starts a git

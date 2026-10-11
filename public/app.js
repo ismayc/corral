@@ -421,6 +421,11 @@ async function spawn(cwd, label, space, agent) {
   if (!r?.ok) return toast(j.error || 'Could not start the window.');
   attach(j);
 }
+// Into a zone with the keyboard: opened if this page does not have it yet, out of the bottom bar if it is there.
+function showSummoned(info) {
+  if (!open.has(info.id)) return attach(info);
+  if (minimized.has(info.id) || tray.includes(info.id)) restore(info.id); else setFocus(info.id);
+}
 function bringForward(info) {
   if (!open.has(info.id)) attach(info); // started on another device and not picked up yet
   if (minimized.has(info.id) || tray.includes(info.id)) restore(info.id);
@@ -988,6 +993,13 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#laymen
   layout();
   // Started on another device while this page was closed: into the bottom bar, like the ones that start while it is open.
   for (const s of sessions) if (s.remote && !s.exited && !wanted.includes(s.id) && open.has(s.id)) minimize(s.id);
+  // Handed a task just before this page opened (mail-triager opens Corral after sending one): in view.
+  // Older ones are already dealt with.
+  for (const s of sessions) {
+    if (!s.summoned || s.exited) continue;
+    summonSeen.set(s.id, s.summoned);
+    if (Date.now() - s.summoned < SUMMON_FRESH_MS) showSummoned(s);
+  }
   checkRestore();
   showPhoneLink();
   setInterval(pickUpNewWindows, 3000);
@@ -1089,15 +1101,27 @@ function askBar(s) {
 // Windows started somewhere else (the phone page, another browser) show up here in the bottom bar.
 // A window counts only once it has been seen twice without this page attaching it, so one this page
 // is in the middle of creating is never picked up a second time.
+// A window handed a task by another app (mail-triager's Mail action) is the exception: the server marks it
+// `summoned`, and it comes into view at once, in a zone with the keyboard, since the task was sent to be
+// worked on now. This page never sends a task itself, so such a window cannot be one it is creating.
 let unclaimed = new Set();
+const SUMMON_FRESH_MS = 30000;
+const summonSeen = new Map(); // window id -> the `summoned` time already acted on
 async function pickUpNewWindows() {
   const r = await api('/api/sessions').catch(() => null);
   if (!r?.sessions) return;
   const fresh = r.sessions.filter((s) => !s.exited && !open.has(s.id));
-  const added = fresh.filter((s) => unclaimed.has(s.id));
+  const summoned = r.sessions.filter((s) => !s.exited && s.summoned && s.summoned !== summonSeen.get(s.id));
+  const added = fresh.filter((s) => unclaimed.has(s.id) && !summoned.includes(s));
   for (const s of added) attach(s, true);
   if (added.length === 1) toast(`${added[0].label} was started ${added[0].remote ? 'on another device' : 'elsewhere'}. It is in the bottom bar.`);
   else if (added.length > 1) toast(`${added.length} windows were started elsewhere. They are in the bottom bar.`);
+  for (const s of summoned) {
+    summonSeen.set(s.id, s.summoned);
+    const isNew = !open.has(s.id);
+    showSummoned(s);
+    toast(`${s.label} ${isNew ? 'was started with' : 'was given'} a task from another app. Here it is.`);
+  }
   unclaimed = new Set(fresh.filter((s) => !open.has(s.id)).map((s) => s.id));
 }
 

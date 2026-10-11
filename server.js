@@ -248,7 +248,7 @@ function adoptSessions() {
 }
 
 function publicSession(s) {
-  return { id: s.id, cwd: s.cwd, label: s.label, space: s.space, exited: s.exited, created: s.created, persistent: s.tmux, remote: Boolean(s.remote) };
+  return { id: s.id, cwd: s.cwd, label: s.label, space: s.space, exited: s.exited, created: s.created, persistent: s.tmux, remote: Boolean(s.remote), summoned: s.summoned || 0 };
 }
 
 // Project ledger: every project folder herdr has ever shown this server, so a closed space
@@ -1303,14 +1303,18 @@ const server = http.createServer(async (req, res) => {
     // a time, so two quick clicks cannot both get through.
     const existing = space && [...sessions.values()].find((x) => !x.exited && (x.space === space || (!x.space && body.cwd && x.cwd === body.cwd)));
     // With an opening prompt, the window that is already open gets the prompt typed into its Claude Code.
+    // A window handed a task is marked `summoned` (when), and the Mac's page brings it into view at once
+    // rather than leaving it in the bottom bar, since the task was sent there to be worked on now.
     const prompt = cleanPrompt(body.prompt);
     if (existing && prompt) {
       const { status, ...r } = typePrompt(existing, prompt);
+      if (r.typed) existing.summoned = Date.now();
       return send(res, status, { ...r, existing: publicSession(existing) });
     }
     if (existing) return send(res, 409, { error: 'this space already has a window', existing: publicSession(existing) });
     try {
       const s = createSession(body.cwd, body.label, space, typeof body.agent === 'string' ? body.agent : null, null, prompt);
+      if (prompt) s.summoned = Date.now();
       // Started from another device: the Mac's page puts it in the bottom bar rather than in a zone.
       if (access.remote) {
         s.remote = true;

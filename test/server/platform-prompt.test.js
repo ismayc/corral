@@ -66,3 +66,18 @@ test('POST /api/sessions with a prompt is 409 when the space\'s window has no tm
   const r = await req('POST', '/api/sessions', { body: { cwd: c.home, space: 'sp-1', prompt: 'hi' } });
   assert.deepEqual([r.status, r.json.error, r.json.existing.id], [409, 'this window has no tmux session', s.id]);
 }));
+
+test('a window handed a prompt is marked summoned, new or typed into, and a refused or plain request is not', () => withServer({}, async (c, req) => {
+  const before = Date.now();
+  let r = await req('POST', '/api/sessions', { body: { cwd: c.home, space: 'sp-1', agent: 'claude', prompt: 'go' } });
+  assert.ok(r.json.summoned >= before);
+  assert.equal((await req('POST', '/api/sessions', { body: { cwd: c.home, space: 'sp-2' } })).json.summoned, 0);
+  const s = c.srv.createSession(c.home, 'proj', 'sp-3');
+  const body = { cwd: c.home, space: 'sp-3', prompt: 'go' };
+  r = await req('POST', '/api/sessions', { body });
+  assert.deepEqual([r.status, r.json.existing.summoned], [409, 0]);
+  c.claude(s, { status: 'idle' });
+  r = await req('POST', '/api/sessions', { body });
+  assert.equal(r.status, 200);
+  assert.ok(r.json.existing.summoned >= before);
+}));
