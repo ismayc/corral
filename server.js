@@ -139,33 +139,57 @@ function scrubTmuxEnv() {
 const AGENTS = { claude: 'claude', 'claude-continue': 'claude --continue' };
 const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 // `resume` comes only from Corral's own restore file, after resumableId() has checked it.
-function programFor(agent, resume) {
-  return resume ? `claude --resume ${resume}` : AGENTS[agent] || null;
+// `prompt` is an opening message for Claude Code, given on its command line (a tool such as
+// mail-triager starts a window with the task already stated).
+function programFor(agent, resume, prompt) {
+  const program = resume ? `claude --resume ${resume}` : AGENTS[agent] || null;
+  return program && prompt ? `${program} ${shq(prompt)}` : program;
 }
-function startCommand(agent, resume) {
+function startCommand(agent, resume, prompt) {
   const shell = process.env.SHELL || '/bin/zsh';
-  const program = programFor(agent, resume);
+  const program = programFor(agent, resume, prompt);
   if (!program) return { shell, command: null };
   return { shell, command: `${shell} -lc ${shq(`${program}; exec ${shell} -l`)}` };
 }
 
+// An opening prompt from a request: one line of printable text, at most PROMPT_MAX characters.
+const PROMPT_MAX = 4000;
+function cleanPrompt(v) {
+  if (typeof v !== 'string') return null;
+  const text = v.replace(/[\x00-\x1f\x7f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return text ? text.slice(0, PROMPT_MAX) : null;
+}
+
+// Types a prompt into the Claude Code already running in a window, as if at the keyboard. Refused
+// when the window has no Claude Code (a shell would run the text as a command) or Claude is waiting
+// on a prompt or dialog of its own, where typed text would answer that instead.
+function typePrompt(s, prompt) {
+  if (!s.tmux) return { status: 409, error: 'this window has no tmux session' };
+  const c = windowClaude(s);
+  if (!c) return { status: 409, error: 'no Claude Code is running in that window' };
+  if (c.waitingFor) return { status: 409, error: `Claude is waiting on a ${c.waitingFor} in that window; answer it first` };
+  tmux('send-keys', '-t', SESSION_PREFIX + s.id, '-l', prompt);
+  tmux('send-keys', '-t', SESSION_PREFIX + s.id, 'Enter');
+  return { status: 200, typed: true };
+}
+
 // Starts the process that feeds the browser: a plain login shell, or a tmux attach client.
-function attachPty(id, dir, useTmux, agent, resume) {
+function attachPty(id, dir, useTmux, agent, resume, prompt) {
   const env = cleanEnv({ TERM: 'xterm-256color', COLORTERM: 'truecolor', CORRAL_SESSION: id });
   const shell = process.env.SHELL || '/bin/zsh';
-  const program = programFor(agent, resume);
+  const program = programFor(agent, resume, prompt);
   const [file, args] = useTmux
     ? [TMUX, ['-L', TMUX_SOCKET, 'attach-session', '-t', SESSION_PREFIX + id]]
     : program ? [shell, ['-lc', `${program}; exec ${shell} -l`]] : [shell, ['-l']];
   return pty.spawn(file, args, { name: 'xterm-256color', cols: 100, rows: 30, cwd: dir, env });
 }
 
-function register(id, dir, label, created, useTmux, space, agent, resume) {
+function register(id, dir, label, created, useTmux, space, agent, resume, prompt) {
   const s = {
     id, pty: null, buf: '', clients: new Set(), cwd: dir, space: space || null,
     label: label || path.basename(dir) || dir, exited: false, created, tmux: useTmux,
   };
-  s.pty = attachPty(id, dir, useTmux, agent, resume);
+  s.pty = attachPty(id, dir, useTmux, agent, resume, prompt);
   s.pty.onData((d) => {
     s.buf += d;
     if (s.buf.length > SCROLLBACK_BYTES) s.buf = s.buf.slice(-SCROLLBACK_BYTES);
@@ -182,12 +206,12 @@ function register(id, dir, label, created, useTmux, space, agent, resume) {
   return s;
 }
 
-function createSession(cwd, label, space, agent, resume) {
+function createSession(cwd, label, space, agent, resume, prompt) {
   const dir = cwd && fs.existsSync(cwd) && fs.statSync(cwd).isDirectory() ? cwd : os.homedir();
   const id = `s${Date.now().toString(36)}${(counter++).toString(36)}`;
   const name = label || path.basename(dir) || dir;
   if (TMUX) {
-    const { shell, command } = startCommand(agent, resume);
+    const { shell, command } = startCommand(agent, resume, prompt);
     // tmux 3.7c ignores -c when its server's own working folder has been deleted: the pane starts in the
     // deleted folder and every command there fails. So the pane also changes into the folder itself,
     // falling back to home, before starting the shell. zsh -f (no startup files) is used where it exists
@@ -200,7 +224,7 @@ function createSession(cwd, label, space, agent, resume) {
     tmux('set-option', '-t', SESSION_PREFIX + id, '@corral_label', name);
     if (space) tmux('set-option', '-t', SESSION_PREFIX + id, '@corral_space', String(space));
   }
-  const s = register(id, dir, name, Date.now(), Boolean(TMUX), space, agent, resume);
+  const s = register(id, dir, name, Date.now(), Boolean(TMUX), space, agent, resume, prompt);
   saveBackupSoon();
   setTimeout(saveBackupSoon, 8000).unref(); // by then Claude Code has written its session file
   return s;
@@ -1278,9 +1302,15 @@ const server = http.createServer(async (req, res) => {
     // minimized) gets the window that is already open rather than a duplicate. Requests are handled one at
     // a time, so two quick clicks cannot both get through.
     const existing = space && [...sessions.values()].find((x) => !x.exited && (x.space === space || (!x.space && body.cwd && x.cwd === body.cwd)));
+    // With an opening prompt, the window that is already open gets the prompt typed into its Claude Code.
+    const prompt = cleanPrompt(body.prompt);
+    if (existing && prompt) {
+      const { status, ...r } = typePrompt(existing, prompt);
+      return send(res, status, { ...r, existing: publicSession(existing) });
+    }
     if (existing) return send(res, 409, { error: 'this space already has a window', existing: publicSession(existing) });
     try {
-      const s = createSession(body.cwd, body.label, space, typeof body.agent === 'string' ? body.agent : null);
+      const s = createSession(body.cwd, body.label, space, typeof body.agent === 'string' ? body.agent : null, null, prompt);
       // Started from another device: the Mac's page puts it in the bottom bar rather than in a zone.
       if (access.remote) {
         s.remote = true;

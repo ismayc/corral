@@ -5,6 +5,15 @@ in `package.json`.
 
 ## Development version
 
+- **A window can start with an opening prompt.** `POST /api/sessions` takes
+  a `prompt` (one line, up to 4000 characters) and starts Claude Code with it
+  on its command line. When the space already has a window, the prompt is
+  typed into the Claude Code running there instead, unless that window has
+  no Claude Code or Claude is waiting on a prompt or dialog of its own, which
+  answers 409 and says why. This is for tools that hand Corral a task, such
+  as mail-triager's "Open in Corral with Claude" Mail action; the page itself
+  still starts windows with no prompt.
+
 - **Start something can make a new project.** Type a name in its search box
   that is not a project yet, and a **New folder** row appears at the bottom.
   Tapping it makes the folder in `~/repos` (or `CORRAL_REPOS`), starts a git
