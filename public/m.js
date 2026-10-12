@@ -78,15 +78,58 @@ function askBlock(w, showText = true) {
 }
 // The same prompt, under the terminal of the window that asks.
 let askShown = '';
+let askWindow = null;
 function renderAskbar(w) {
+  askWindow = w;
   const bar = $('#askbar');
-  const key = w?.prompt ? JSON.stringify(w.prompt) : '';
+  const trust = !w?.prompt && current?.trust;
+  const key = w?.prompt ? JSON.stringify(w.prompt) : trust ? 'trust' : '';
   if (key === askShown) return;
   askShown = key;
   bar.hidden = !key;
   // The terminal above already shows what Claude asks, so the bar has only the answers.
-  if (key) bar.replaceChildren(h('div', { class: 'head' }, 'Claude is asking for permission. Answer:'), askBlock(w, false));
+  if (w?.prompt) bar.replaceChildren(h('div', { class: 'head' }, 'Claude is asking for permission. Answer:'), askBlock(w, false));
+  else if (trust) {
+    bar.replaceChildren(h('div', { class: 'head' }, 'Claude Code asks whether to trust this folder.'),
+      h('div', { class: 'ask' }, h('div', { class: 'answers' },
+        h('button', { class: 'primary', onclick: (e) => answerTrust(e.currentTarget) }, 'Yes, I trust this folder'))));
+  }
   requestAnimationFrame(() => current?.fit.fit());
+}
+
+// Claude Code's folder trust dialog ("❯ No, exit / Yes, I trust this folder"), read from the terminal's
+// screen. Claude Code writes no session file until the folder is trusted, so the Mac cannot report the
+// dialog; the screen is the only sign. Returns null, or whether ❯ is on Yes.
+function trustDialog(term) {
+  const b = term.buffer.active;
+  const lines = [];
+  for (let i = b.baseY; i < b.baseY + term.rows; i++) lines.push(b.getLine(i)?.translateToString(true) ?? '');
+  const tail = lines.filter((l) => l.trim()).slice(-8);
+  // The dialog must be the last thing drawn: once Claude Code exits, a shell prompt follows it.
+  if (!/Esc to cancel\s*$/.test(tail.at(-1) || '')) return null;
+  const yes = tail.find((l) => l.includes('Yes, I trust this folder'));
+  return yes ? { onYes: yes.includes('❯') } : null;
+}
+// Looks again at most every 200 ms while output arrives.
+function checkTrust(c) {
+  if (c.trustTimer) return;
+  c.trustTimer = setTimeout(() => {
+    c.trustTimer = null;
+    if (current !== c) return;
+    const t = Boolean(trustDialog(c.term));
+    if (t !== c.trust) { c.trust = t; renderAskbar(askWindow); }
+  }, 200);
+}
+// ↓ wraps between the two answers and number keys do nothing in this dialog (Claude Code 2.1.296), so
+// Enter is sent only once the screen shows ❯ on Yes.
+async function answerTrust(btn) {
+  const c = current;
+  btn.disabled = true;
+  if (!trustDialog(c.term)?.onYes) sendRaw('\x1b[B');
+  for (let i = 0; i < 15 && !trustDialog(c.term)?.onYes; i++) await new Promise((r) => setTimeout(r, 100));
+  if (current === c && trustDialog(c.term)?.onYes) return sendRaw('\r');
+  btn.disabled = false;
+  toast('Could not move to Yes. Use ↓, then ⏎.');
 }
 
 // How long Claude has been working, from the session file's statusUpdatedAt.
@@ -467,7 +510,7 @@ function openTerm(info, swiped) {
   term.open($('#term'));
   // Tapping the terminal should not pop up the keyboard; typing goes through the box below, or the Type key.
   term.textarea.setAttribute('inputmode', 'none');
-  current = { info, term, fit, ws: null, alive: true };
+  current = { info, term, fit, ws: null, alive: true, trust: false };
   if (swiped) history.replaceState({ term: info.id }, ''); else history.pushState({ term: info.id }, '');
   fit.fit();
   term.onData((d) => {
@@ -502,7 +545,7 @@ function connect() {
     c.fit.fit();
     sendSize(c);
   };
-  ws.onmessage = (e) => term.write(e.data);
+  ws.onmessage = (e) => { term.write(e.data); checkTrust(c); };
   ws.onclose = () => {
     if (current !== c || !c.alive) return;
     $('#conn').hidden = false;

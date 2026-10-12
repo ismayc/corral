@@ -28,6 +28,11 @@ class FakeTerminal {
   type(d) { for (const cb of this.dataCbs) cb(d); }
   resize(cols, rows) { this.cols = cols; this.rows = rows; for (const cb of this.resizeCbs) cb({ cols, rows }); }
   write(d) { this.written.push(d); }
+  // What the terminal shows: a test sets `screen` to its lines, top to bottom.
+  get buffer() {
+    const lines = this.screen || [];
+    return { active: { baseY: 0, getLine: (i) => (i < lines.length ? { translateToString: () => lines[i] } : undefined) } };
+  }
   paste(d) { this.pasted.push(d); }
   reset() { this.resets++; }
   focus() { this.focused = true; }

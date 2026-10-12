@@ -5,6 +5,14 @@ in `package.json`.
 
 ## Development version
 
+- **Trusting a folder takes one tap on the phone.** When Claude Code opens in
+  a folder it has not seen, it asks whether to trust it, with "No, exit"
+  selected. The phone terminal now shows a "Yes, I trust this folder" button
+  above the keys. It presses ↓ only when ❯ is on No (↓ wraps, and number keys
+  do nothing in this dialog), and Enter only once the screen shows ❯ on Yes.
+  The phone reads the dialog from its own terminal, since Claude Code writes
+  no session file until the folder is trusted.
+
 - **A window can start with an opening prompt.** `POST /api/sessions` takes
   a `prompt` (one line, up to 4000 characters) and starts Claude Code with it
   on its command line. When the space already has a window, the prompt is
