@@ -57,6 +57,26 @@ test('the search box filters spaces by name, ignoring case', async () => {
   assert.equal(p.$('#spaces .note').textContent, 'No spaces.');
 });
 
+test('the x in the search box, or Esc, clears the search', async () => {
+  const p = await start({ routes: herdr('alpha', 'beta') });
+  assert.equal(p.$('#clearfilter').hidden, true);
+  typeFilter(p, 'alp');
+  assert.equal(p.$('#clearfilter').hidden, false);
+  assert.deepEqual(p.rowNames(), ['alpha']);
+  fire(p.$('#clearfilter'), 'click');
+  assert.equal(p.$('#filter').value, '');
+  assert.equal(p.$('#clearfilter').hidden, true);
+  assert.deepEqual(p.rowNames(), ['alpha', 'beta']);
+  typeFilter(p, 'bet');
+  fire(p.$('#filter'), 'keydown', { key: 'Enter' });
+  assert.equal(p.$('#filter').value, 'bet');
+  fire(p.$('#filter'), 'keydown', { key: 'Escape' });
+  assert.equal(p.$('#filter').value, '');
+  assert.deepEqual(p.rowNames(), ['alpha', 'beta']);
+  fire(p.$('#filter'), 'keydown', { key: 'Escape' });
+  assert.equal(p.$('#filter').value, '');
+});
+
 test('when herdr cannot be reached the sidebar says why', async () => {
   const p = await start({ routes: { 'GET /api/herdr': { available: false, spaces: [], error: 'connection refused' } } });
   assert.equal(p.$('#spaces').textContent, 'herdr not reachable: connection refused');

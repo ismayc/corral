@@ -39,6 +39,12 @@
   .brandmark p { margin:4px 0 0; color:var(--muted); font-size:12px; }
   .brandmark svg { display:block; width:272px; height:26px; margin:12px 0 14px; }
   #side .row { padding:0 16px 8px; display:flex; gap:6px; }
+  .findbox { flex:1; min-width:0; position:relative; display:flex; }
+  .findbox input { padding-right:26px; }
+  #clearfilter { position:absolute; right:3px; top:50%; transform:translateY(-50%); border:0; background:transparent;
+                 color:var(--muted); padding:0 6px; font-size:16px; line-height:1; }
+  #clearfilter:hover { color:var(--text); }
+  #clearfilter[hidden] { display:none; }
   #side .tools button { font-size:11.5px; padding:2px 9px; background:transparent; color:var(--muted); }
   #side .tools button:hover { color:var(--text); }
   #bulk select { flex:1; min-width:0; }
@@ -194,7 +200,7 @@
         <g fill="#c9c1ff"><rect x="0" y="11" width="272" height="3.5" rx="1.75"/><rect x="0" y="19" width="272" height="3.5" rx="1.75"/></g>
       </svg>
     </div>
-    <div class="row"><input id="filter" placeholder="Find a space" autocomplete="off"><button id="refresh" title="Reload from herdr">&#8635;</button></div>
+    <div class="row"><span class="findbox"><input id="filter" placeholder="Find a space" autocomplete="off"><button id="clearfilter" title="Clear the search" aria-label="Clear the search" hidden>&times;</button></span><button id="refresh" title="Reload from herdr">&#8635;</button></div>
     <div class="row tools">
       <button id="newcat" title="Create a category">+ Category</button>
       <button id="expall" title="Expand every category">Expand all</button>

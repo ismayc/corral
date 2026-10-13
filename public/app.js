@@ -948,7 +948,11 @@ function renderInactive() {
   if (!list.length) { const n = document.createElement('div'); n.className = 'note'; n.textContent = 'No match.'; box.append(n); }
 }
 
-$('#filter').oninput = () => { arrange(); renderInactive(); };
+$('#filter').oninput = () => { $('#clearfilter').hidden = !$('#filter').value; arrange(); renderInactive(); };
+// The x in the search box, or Escape while typing in it, empties the search.
+const clearFilter = () => { $('#filter').value = ''; $('#filter').oninput(); $('#filter').focus(); };
+$('#clearfilter').onclick = clearFilter;
+$('#filter').onkeydown = (e) => { if (e.key === 'Escape' && e.target.value) clearFilter(); };
 $('#newcat').onclick = () => { $('#newcatrow').hidden = !$('#newcatrow').hidden; if (!$('#newcatrow').hidden) $('#newcatname').focus(); };
 $('#newcatname').onkeydown = (e) => {
   if (e.key === 'Enter') { addCategory(e.target.value); e.target.value = ''; $('#newcatrow').hidden = true; arrange(); }
