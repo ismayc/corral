@@ -51,6 +51,15 @@ function statusOf(w) {
   return { cls: '', text: 'Claude', rank: 1 };
 }
 const needsYou = (w) => w.claude?.status === 'idle' || w.claude?.status === 'waiting';
+// The color for a status, as on the Mac's page: yellow working, green your turn (asking included), none for a shell.
+const colorOf = (st) => (st.cls === 'need' ? 'idle' : st.cls === 'busy' ? 'working' : st.cls);
+
+// The dot by the open terminal's name: its status color, or red while its connection is down. Called only
+// while a terminal is open.
+function paintTerm() {
+  const w = windows.find((x) => x.id === current.info.id);
+  $('#tdot').className = `dot ${current.down ? 'blocked' : w ? colorOf(statusOf(w)) : ''}`;
+}
 
 // What a permission prompt asks, with a button per answer. Esc denies; Claude Code's own "No" answer is
 // left out because Deny does the same and is always there.
@@ -253,7 +262,12 @@ let lastStatus = new Map();
 
 async function refresh() {
   let o;
-  try { o = await api('/api/overview'); } catch { return; }
+  try { o = await api('/api/overview'); } catch {
+    $('#home').classList.add('offline');
+    $('#machine').textContent = 'Cannot reach the Mac. Retrying…';
+    return;
+  }
+  $('#home').classList.remove('offline');
   $('#machine').textContent = `on ${o.machine}`;
   windows = o.sessions.filter((s) => !s.exited);
   // A window whose Claude finishes while you look elsewhere gets a notice.
@@ -271,6 +285,7 @@ async function refresh() {
   if (current) {
     const w = windows.find((x) => x.id === current.info.id);
     if (w) $('#tsub').textContent = termSub(w);
+    paintTerm();
     renderAskbar(w);
     renderView();
   }
@@ -303,7 +318,7 @@ function renderList() {
       w.claude?.mode ? h('span', { class: 'tag' }, modeName(w.claude.mode)) : null,
       w.muted ? h('span', { class: 'tag' }, 'Muted') : null,
     ].filter(Boolean);
-    kids.push(h('div', { class: `card ${st.cls === 'need' ? 'need' : ''}`, role: 'button', tabindex: '0', 'data-id': w.id,
+    kids.push(h('div', { class: `card ${st.cls === 'need' ? 'need' : ''}`, role: 'button', tabindex: '0', 'data-id': w.id, 'data-state': colorOf(st),
       onclick: (e) => { if (!longPressed(e)) openTerm(w); },
       onkeydown: (e) => { if (e.key === 'Enter' && e.target === e.currentTarget) openTerm(w); } },
       h('div', { class: 'top' }, h('span', { class: 'name' }, w.label),
@@ -437,8 +452,10 @@ function renderProjects() {
   const typed = $('#q').value.trim();
   const q = typed.toLowerCase();
   const match = projects.filter((p) => !q || p.label.toLowerCase().includes(q) || (p.root || '').toLowerCase().includes(q));
+  // The dot is the open window's color, as on the Mac's sidebar; herdr reports "unknown" for Corral's windows.
+  const dotOf = (p) => { const w = windowFor(p, windows); return (w && colorOf(statusOf(w))) || p.status || ''; };
   const row = (p) => h('button', { class: 'proj', onclick: () => start(p) },
-    h('span', { class: `dot ${p.status || ''}` }),
+    h('span', { class: `dot ${dotOf(p)}` }),
     h('span', { class: 'n' }, h('div', {}, p.label), h('div', { class: 'p' }, p.home ? '~' : home(p.root))),
     windowFor(p, liveSessions) ? h('span', { class: 'tag' }, 'Open') : null);
   const open = match.filter((p) => p.open), other = match.filter((p) => !p.open);
@@ -510,7 +527,8 @@ function openTerm(info, swiped) {
   term.open($('#term'));
   // Tapping the terminal should not pop up the keyboard; typing goes through the box below, or the Type key.
   term.textarea.setAttribute('inputmode', 'none');
-  current = { info, term, fit, ws: null, alive: true, trust: false };
+  current = { info, term, fit, ws: null, alive: true, trust: false, down: false };
+  paintTerm();
   if (swiped) history.replaceState({ term: info.id }, ''); else history.pushState({ term: info.id }, '');
   fit.fit();
   term.onData((d) => {
@@ -541,6 +559,7 @@ function connect() {
   c.ws = ws;
   ws.onopen = () => {
     $('#conn').hidden = true;
+    c.down = false; paintTerm();
     term.reset();
     c.fit.fit();
     sendSize(c);
@@ -549,6 +568,7 @@ function connect() {
   ws.onclose = () => {
     if (current !== c || !c.alive) return;
     $('#conn').hidden = false;
+    c.down = true; paintTerm();
     setTimeout(() => { if (current === c && c.ws === ws) connect(); }, 1500);
   };
 }

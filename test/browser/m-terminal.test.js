@@ -67,17 +67,34 @@ test('a resize of the terminal is sent while connected', async () => {
 
 test('a dropped connection shows Reconnecting and tries again after a second and a half', async () => {
   mock.timers.enable({ apis: ['setTimeout'] });
-  const p = await phone([win('a')]);
+  const p = await phone([win('a', { claude: claude('busy') })]);
   p.card('a').click();
+  assert.equal(p.$('#tdot').className, 'dot working');
   p.sockets[0].open();
   p.sockets[0].drop();
   assert.equal(p.$('#conn').hidden, false);
+  assert.equal(p.$('#tdot').className, 'dot blocked');
   mock.timers.tick(1499);
   assert.equal(p.sockets.length, 1);
   mock.timers.tick(1);
   assert.equal(p.sockets.length, 2);
   p.sockets[1].open();
   assert.equal(p.$('#conn').hidden, true);
+  assert.equal(p.$('#tdot').className, 'dot working');
+});
+
+test('the dot by the terminal name follows the window status, and has no color once the window leaves the list', async () => {
+  const p = await phone([win('a', { claude: claude('waiting', { waitingFor: 'permission prompt' }) })]);
+  p.card('a').click();
+  assert.equal(p.$('#tdot').className, 'dot idle');
+  p.api.routes['GET /api/overview'] = overview(win('a'));
+  visible(p);
+  await settle();
+  assert.equal(p.$('#tdot').className, 'dot ');
+  p.api.routes['GET /api/overview'] = overview();
+  visible(p);
+  await settle();
+  assert.equal(p.$('#tdot').className, 'dot ');
 });
 
 test('a retry is skipped when a newer connection or another window took over', async () => {

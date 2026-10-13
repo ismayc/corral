@@ -442,13 +442,18 @@ const rows = new Map(); // space id -> wrapper element, built once per load and 
 
 // A space counts as open when a terminal window in this page belongs to it. Windows made from
 // a space row carry its id; older adopted shells fall back to a matching folder.
-function hasWindow(s) {
+function windowOf(s) {
   for (const w of open.values()) {
     const i = w.info;
-    if (i.space === s.id || (!i.space && i.cwd && (i.cwd === s.cwd || i.cwd === s.root))) return true;
+    if (i.space === s.id || (!i.space && i.cwd && (i.cwd === s.cwd || i.cwd === s.root))) return w;
   }
-  return false;
+  return null;
 }
+const hasWindow = (s) => Boolean(windowOf(s));
+// A space's dot: its open window's color (stateOf) when it has one, since Claude runs in Corral's windows
+// and herdr reports "unknown" for them; otherwise herdr's own status for the space.
+const spaceDot = (s) => (windowOf(s) && stateOf(windowOf(s))[0]) || s.status;
+function paintDots() { for (const s of spaces) rows.get(s.id).querySelector('.dot').className = `dot ${spaceDot(s)}`; }
 
 function renderSpaces() { buildRows(); arrange(); }
 
@@ -706,6 +711,7 @@ function arrange() {
     }
   }
   rows.forEach((wrap, id) => wrap.querySelector('.space').classList.toggle('has-win', openSpaces.some((s) => s.id === id)));
+  paintDots();
   for (const s of spaces) if (catOf(s) !== null) fresh.delete(s.id);
   rows.forEach((wrap, id) => wrap.querySelector('.space').classList.toggle('fresh', fresh.has(id)));
   if (!shown.length) { const n = document.createElement('div'); n.className = 'note'; n.textContent = 'No spaces.'; box.append(n); }
@@ -748,7 +754,7 @@ function buildRows() {
     d.className = 'space';
     d.dataset.id = s.id;
     d.title = `${s.root || s.cwd || ''}\nClick to open. Cmd-click or Shift-click to select several.\nRight-click, or drag onto a group, to move.`;
-    d.innerHTML = `<span class="chev" title="Show files"></span><span class="dot ${s.status}"></span><span class="name"></span><span class="more" title="Move to a category">⋯</span>`;
+    d.innerHTML = `<span class="chev" title="Show files"></span><span class="dot ${spaceDot(s)}"></span><span class="name"></span><span class="more" title="Move to a category">⋯</span>`;
     d.querySelector('.name').textContent = s.label;
     d.onclick = (e) => {
       if (e.metaKey || e.ctrlKey) {
@@ -854,7 +860,7 @@ const andList = (a) => (a.length < 3 ? a.join(' and ') : `${a.slice(0, -1).join(
 async function loadSpaces(auto) {
   const r = await api('/api/herdr');
   if (auto && (!r.available || shape(r.spaces) === shape(spaces))) {
-    if (r.available) for (const s of (spaces = r.spaces)) rows.get(s.id).querySelector('.dot').className = `dot ${s.status}`;
+    if (r.available) { spaces = r.spaces; paintDots(); }
     return loadProjects(); // picks up a repo made since the last check
   }
   spaces = r.spaces;
@@ -1088,6 +1094,7 @@ function paint(w) {
   dot.title = says;
   const chip = document.querySelector(`#tray .chip[data-id="${w.info.id}"] .dot`);
   if (chip) chip.className = `dot ${state}`;
+  paintDots();
 }
 
 function notify(title, body, id) {

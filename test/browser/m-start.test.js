@@ -44,6 +44,22 @@ test('the start sheet lists herdr spaces, then other projects, then the home fol
   ]);
 });
 
+test("a project with an open window takes the window's color for its dot, not herdr's", async () => {
+  const p = await phone([win('w1', { space: 'sp1', claude: claude('busy') }), win('w2', { cwd: '/Users/chester/site', claude: claude('waiting') }),
+    win('w3', { space: 'sp3' })], { routes: {
+    'GET /api/herdr': { available: true, spaces: [
+      { id: 'sp1', label: 'Corral', root: '/Users/chester/repos/corral', status: 'unknown' },
+      { id: 'sp3', label: 'Notes', root: '/Users/chester/notes', status: 'unknown' }] },
+    'GET /api/projects': PROJECTS,
+  } });
+  p.$('#fab').click();
+  await settle();
+  const dots = Object.fromEntries(rows(p).filter(Array.isArray).map((r) => [r[0], r[2]]));
+  assert.equal(dots.Corral, 'dot working');
+  assert.equal(dots.Website, 'dot idle');
+  assert.equal(dots.Notes, 'dot unknown', 'a plain shell keeps herdr\'s status');
+});
+
 test('a space whose window sits in its working folder counts as open', async () => {
   const p = await phone([], { routes: {
     'GET /api/herdr': { spaces: [{ id: 'sp1', label: 'Corral', root: '/r', cwd: '/r/sub' }] },

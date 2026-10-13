@@ -184,9 +184,26 @@ test('no banner shows when the restore list is missing or cannot be read', async
   assert.equal(p.text('#list .empty'), 'Nothing is running on the Mac. Start something below.');
 });
 
-test('when the Mac cannot be reached the list stays as it was', async () => {
-  const p = await phone([], { routes: { 'GET /api/overview': new Error('offline') } });
-  assert.equal(p.text('#machine'), '');
+test('when the Mac cannot be reached the list stays as it was, marked red, until it answers again', async () => {
+  const p = await phone([win('a')]);
+  assert.equal(p.$('#home').classList.contains('offline'), false);
+  p.api.routes['GET /api/overview'] = new Error('offline');
+  p.window.document.dispatchEvent(new p.window.Event('visibilitychange'));
+  await settle();
+  assert.equal(p.text('#machine'), 'Cannot reach the Mac. Retrying…');
+  assert.equal(p.$('#home').classList.contains('offline'), true);
+  assert.ok(p.card('a'), 'the list stays');
+  p.api.routes['GET /api/overview'] = overview(win('a'));
+  p.window.document.dispatchEvent(new p.window.Event('visibilitychange'));
+  await settle();
+  assert.equal(p.$('#home').classList.contains('offline'), false);
+  assert.notEqual(p.text('#machine'), 'Cannot reach the Mac. Retrying…');
+});
+
+test('each card carries its status color: yellow working, green your turn or asking, none for a shell', async () => {
+  const p = await phone([win('w', { claude: claude('busy') }), win('i', { claude: claude('idle') }),
+    win('n', { claude: claude('waiting', { waitingFor: 'permission prompt' }) }), win('s')]);
+  assert.deepEqual(['w', 'i', 'n', 's'].map((id) => p.card(id).dataset.state), ['working', 'idle', 'idle', '']);
 });
 
 test('a window that finishes or starts asking while you look elsewhere gets a notice', async () => {

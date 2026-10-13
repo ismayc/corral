@@ -45,6 +45,37 @@ test('a window closed on another device disappears here', async () => {
   assert.deepEqual(p.secs(), []);
 });
 
+test("a space's dot in the sidebar takes its open window's color, and herdr's status without one", async () => {
+  const p = await two({ routes: { 'GET /api/herdr': { available: true, spaces: [
+    space('a', { cwd: '/Users/me/repos/a', status: 'unknown' }), space('z', { cwd: '/Users/me/repos/z', status: 'working' })] } } });
+  const dot = (id) => p.$(`#spaces .space[data-id="${id}"] .dot`).className;
+  assert.equal(dot('z'), 'dot working', 'no window: herdr says');
+  p.set('a', { claude: { status: 'busy' } });
+  await p.poll();
+  assert.equal(dot('a'), 'dot working');
+  p.set('a', { claude: { status: 'idle' } });
+  await p.poll();
+  assert.equal(dot('a'), 'dot idle');
+  p.sockets[0].open();
+  p.sockets[0].drop();
+  assert.equal(dot('a'), 'dot blocked');
+  p.set('a', { claude: null });
+  p.tick(1500);
+  p.sockets.at(-1).open();
+  await p.poll();
+  assert.equal(dot('a'), 'dot unknown', 'a plain shell falls back to herdr');
+  // The 10-second herdr check keeps the window's color.
+  p.set('a', { claude: { status: 'busy' } });
+  await p.poll();
+  p.tick(10000);
+  await flush();
+  assert.equal(dot('a'), 'dot working');
+  // Closing the window hands the dot back to herdr.
+  p.slotOf('a').querySelector('.close').click();
+  await flush();
+  assert.equal(dot('a'), 'dot unknown');
+});
+
 test('a window whose shell exited stays until it is closed here', async () => {
   const p = await two();
   p.set('a', { exited: true });
