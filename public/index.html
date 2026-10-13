@@ -156,15 +156,22 @@
   .title button { padding:0 7px; line-height:18px; background:transparent; border-color:transparent; color:var(--muted); }
   .title button:hover { color:var(--text); border-color:var(--rail); }
   .term { flex:1; min-height:0; padding:5px 0 0 8px; }
-  /* A permission prompt in this window: its answers, under the title bar. */
-  .win .ask { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:6px 8px; background:#3a1d1f;
-              border-bottom:1px solid var(--blocked, #e5584d); font-size:12.5px; }
-  .win .ask b { color:#ffb4ad; margin-right:4px; }
+  /* What the window is doing (stateOf in app.js), in the sidebar's dot colors: a dot by the name, and a
+     doubled border that wins over the focused window's purple one. The purple title bar still marks focus. */
+  .title .dot { margin-right:-2px; }
+  .win.focus .title .dot { box-shadow:0 0 0 1.5px #fff; }
+  .win[data-state=working] { border-color:var(--working); box-shadow:0 0 0 1px var(--working); }
+  .win[data-state=idle] { border-color:var(--idle); box-shadow:0 0 0 1px var(--idle); }
+  .win[data-state=blocked] { border-color:var(--blocked); box-shadow:0 0 0 1px var(--blocked); }
+  /* A permission prompt in this window: its answers, under the title bar, in the green of "your turn". */
+  .win .ask { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:6px 8px; background:#16301f;
+              border-bottom:1px solid var(--idle); font-size:12.5px; }
+  .win .ask b { color:#a6e9c4; margin-right:4px; }
   .win .ask button { padding:2px 10px; }
   .win .ask button.allow { background:var(--fence); border-color:var(--fence); color:#fff; }
   .win .ask button.deny { border-color:#e5584d; color:#ffb4ad; }
-  .win.asking { border-color:#e5584d; }
-  #tray .chip.asking { border-color:#e5584d; color:#ffb4ad; }
+  #tray .chip .dot { display:inline-block; margin-right:6px; vertical-align:middle; }
+  #tray .chip.asking { border-color:var(--idle); color:#a6e9c4; }
   .zone-empty > div { height:100%; border:1px dashed var(--rail); border-radius:8px; display:flex; align-items:center;
                       justify-content:center; text-align:center; padding:12px; color:var(--muted); font-size:12.5px; }
   .zone-empty.over > div, .slot.over .win { border-color:var(--fence); border-style:solid; }

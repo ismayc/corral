@@ -85,10 +85,46 @@ test('a permission prompt shows Allow and Deny buttons, and goes away once answe
 test('a minimized window that is asking shows a marked chip', async () => {
   const p = await two();
   p.slotOf('b').querySelector('.min').click();
-  p.set('b', { prompt: PROMPT });
+  p.set('b', { prompt: PROMPT, claude: { status: 'waiting', waitingFor: 'permission prompt' } });
   await p.poll();
-  assert.deepEqual(p.chips(), ['● b']);
+  assert.deepEqual(p.chips(), ['b']);
   assert.equal(p.$('#tray .chip').className, 'chip min asking');
+  assert.equal(p.$('#tray .chip .dot').className, 'dot idle');
+});
+
+test('each window is colored by what it is doing: working, your turn, or cut off', async () => {
+  const p = await two();
+  const win = p.slotOf('a').querySelector('.win');
+  const dot = win.querySelector('.title .dot');
+  const seen = () => [win.dataset.state, dot.className, dot.title];
+  p.set('a', { claude: null });
+  await p.poll();
+  assert.deepEqual(seen(), [undefined, 'dot ', ''], 'a plain shell has no color');
+  p.set('a', { claude: { status: 'busy' } });
+  await p.poll();
+  assert.deepEqual(seen(), ['working', 'dot working', 'Claude is working.']);
+  p.set('a', { claude: { status: 'idle' } });
+  await p.poll();
+  assert.deepEqual(seen(), ['idle', 'dot idle', 'Your turn: Claude finished.']);
+  p.set('a', { claude: { status: 'waiting', waitingFor: 'permission prompt' } });
+  await p.poll();
+  assert.deepEqual(seen(), ['idle', 'dot idle', 'Claude is asking for permission.']);
+  p.set('a', { claude: { status: 'waiting', waitingFor: 'input' } });
+  await p.poll();
+  assert.deepEqual(seen(), ['idle', 'dot idle', 'Claude is waiting on a prompt.']);
+  // A dropped connection is red until it reconnects, minimized or not.
+  p.slotOf('a').querySelector('.min').click();
+  p.sockets[0].open();
+  p.sockets[0].drop();
+  assert.deepEqual(seen(), ['blocked', 'dot blocked', 'Disconnected from Corral. Reconnecting…']);
+  assert.equal(p.$('#tray .chip .dot').className, 'dot blocked');
+  p.tick(1500);
+  p.sockets.at(-1).open();
+  assert.deepEqual(seen(), ['idle', 'dot idle', 'Claude is waiting on a prompt.']);
+  assert.equal(p.$('#tray .chip .dot').className, 'dot idle');
+  p.set('a', { exited: true, claude: null });
+  await p.poll();
+  assert.deepEqual(seen(), ['blocked', 'dot blocked', 'The shell ended. Close this window.']);
 });
 
 test('Allow sends the option number with the prompt key and checks again soon after', async () => {

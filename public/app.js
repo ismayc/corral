@@ -221,7 +221,10 @@ function layout() {
     for (const id of ids) {
       const c = document.createElement('button');
       c.className = `chip${minimized.has(id) ? ' min' : ''}${open.get(id).asking ? ' asking' : ''}`;
-      c.textContent = `${open.get(id).asking ? '● ' : ''}${open.get(id).info.label}`;
+      c.dataset.id = id;
+      const dot = document.createElement('span');
+      dot.className = `dot ${stateOf(open.get(id))[0]}`;
+      c.append(dot, open.get(id).info.label);
       c.title = tip;
       c.draggable = true;
       c.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/x-corral', id); e.dataTransfer.effectAllowed = 'move'; });
@@ -306,7 +309,7 @@ function attach(info, quiet) {
   if (open.has(info.id)) return minimized.has(info.id) || tray.includes(info.id) ? restore(info.id) : setFocus(info.id);
   const el = document.createElement('div');
   el.className = 'win';
-  el.innerHTML = `<div class="title"><span class="t"></span><span class="cwd"></span><button class="min" title="Minimize to the bottom bar (keeps running)">&#8211;</button><button class="close" title="Close and kill shell">&times;</button></div><div class="term"></div>`;
+  el.innerHTML = `<div class="title"><span class="dot"></span><span class="t"></span><span class="cwd"></span><button class="min" title="Minimize to the bottom bar (keeps running)">&#8211;</button><button class="close" title="Close and kill shell">&times;</button></div><div class="term"></div>`;
   el.querySelector('.t').textContent = info.label;
   el.querySelector('.cwd').textContent = info.cwd.replace(/^\/Users\/[^/]+/, '~');
   const slot = document.createElement('div');
@@ -355,7 +358,7 @@ function attach(info, quiet) {
     const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?id=${info.id}`);
     w.ws = ws;
     let first = true;
-    ws.onopen = () => { term.reset(); fit.fit(); ws.send(JSON.stringify({ t: 'resize', cols: term.cols, rows: term.rows })); };
+    ws.onopen = () => { w.down = false; paint(w); term.reset(); fit.fit(); ws.send(JSON.stringify({ t: 'resize', cols: term.cols, rows: term.rows })); };
     // The first message replays saved output, which can hold old terminal queries (device attributes and
     // the like). xterm answers those as it draws them; the answers must not reach the shell as typed text.
     ws.onmessage = (e) => {
@@ -364,8 +367,9 @@ function attach(info, quiet) {
       w.muted = true;
       term.write(e.data, () => { w.muted = false; });
     };
-    ws.onclose = () => { if (open.has(info.id)) setTimeout(connect, 1500); };
+    ws.onclose = () => { if (open.has(info.id)) { w.down = true; paint(w); setTimeout(connect, 1500); } };
   };
+  paint(w);
   connect();
   term.onData((d) => !w.muted && w.ws?.readyState === 1 && w.ws.send(JSON.stringify({ t: 'in', d })));
   term.onResize(({ cols, rows }) => w.ws?.readyState === 1 && w.ws.send(JSON.stringify({ t: 'resize', cols, rows })));
@@ -1037,10 +1041,11 @@ async function watchStatus() {
   let relayout = false;
   for (const [id, w] of [...open]) {
     const s = byId.get(id);
-    if (!s || s.exited) { // closed on another device
-      if (!s) { open.delete(id); w.ws?.close(); w.term.dispose(); w.slot.remove(); persist(); relayout = true; }
-      continue;
-    }
+    if (!s) { open.delete(id); w.ws?.close(); w.term.dispose(); w.slot.remove(); persist(); relayout = true; continue; } // closed on another device
+    w.exited = s.exited;
+    w.claude = s.claude;
+    paint(w);
+    if (s.exited) continue;
     if (s.label !== w.info.label) { w.info.label = s.label; w.el.querySelector('.t').textContent = s.label; relayout = true; }
     const key = s.prompt?.key || null;
     if (key !== (w.askKey || null)) {
@@ -1062,6 +1067,27 @@ async function watchStatus() {
     }
   }
   if (relayout) { layout(); arrange(); }
+}
+
+// What a window is doing, as a color and a line to hover: yellow while Claude works, green when it is your
+// turn (finished, or asking), red when the window lost its connection or its shell ended. A plain shell has none.
+function stateOf(w) {
+  if (w.exited) return ['blocked', 'The shell ended. Close this window.'];
+  if (w.down) return ['blocked', 'Disconnected from Corral. Reconnecting…'];
+  const st = w.claude?.status;
+  if (st === 'busy') return ['working', 'Claude is working.'];
+  if (st === 'waiting') return ['idle', w.claude.waitingFor === 'permission prompt' ? 'Claude is asking for permission.' : 'Claude is waiting on a prompt.'];
+  if (st === 'idle') return ['idle', 'Your turn: Claude finished.'];
+  return ['', ''];
+}
+function paint(w) {
+  const [state, says] = stateOf(w);
+  if (state) w.el.dataset.state = state; else delete w.el.dataset.state;
+  const dot = w.el.querySelector('.title .dot');
+  dot.className = `dot ${state}`;
+  dot.title = says;
+  const chip = document.querySelector(`#tray .chip[data-id="${w.info.id}"] .dot`);
+  if (chip) chip.className = `dot ${state}`;
 }
 
 function notify(title, body, id) {
