@@ -122,6 +122,18 @@ Settings, all optional, by environment variable:
 
 To use Corral from your phone or another computer, see the next section.
 
+### Start it from the Dock (macOS)
+
+Corral has no login item, so after a restart the server is gone and the page
+cannot connect. `scripts/install-launcher.sh` builds `~/Applications/Corral.app`,
+a Dock launcher that starts the herdr server (`herdr server`, headless) and the
+Corral server when they are not running, waits for Corral, and then opens the page (the Chrome web app for `http://127.0.0.1:8777`
+if you have one, otherwise the URL in your browser). It takes the Chrome app's
+icon and its place in the Dock; `--no-dock` builds the app without touching
+the Dock. The app only calls `scripts/corral-launcher.sh`, so re-run the
+installer after moving the repo, and start the launcher's log from
+`~/.local/share/corral/server.log` if the page still does not open.
+
 ## Remote control from your phone, with Tailscale
 
 <p align="center">

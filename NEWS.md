@@ -5,6 +5,13 @@ in `package.json`.
 
 ## Development version
 
+- **A Dock icon that starts the server.** `scripts/install-launcher.sh`
+  builds `~/Applications/Corral.app`, which starts the herdr server and the
+  Corral server when they are not running, waits for Corral, and opens the
+  page. It replaces the
+  Chrome web app's icon in the Dock (same icon, same position), so a click
+  after a Mac restart works instead of showing a page that cannot connect.
+
 - **Trusting a folder takes one tap on the phone.** When Claude Code opens in
   a folder it has not seen, it asks whether to trust it, with "No, exit"
   selected. The phone terminal now shows a "Yes, I trust this folder" button
