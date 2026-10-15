@@ -96,6 +96,20 @@ test('the list puts windows waiting on you first, then working ones, then shells
   assert.equal(p.$('#jump').hidden, false);
 });
 
+test('windows last cleared with /clear go in a Parked group after the shells, and do not count as waiting', async () => {
+  const p = await phone([
+    win('shell', { activity: 5 }),
+    win('cleared-old', { claude: claude('idle', { since: 1, cleared: true }) }),
+    win('turn', { claude: claude('idle', { since: 2 }) }),
+    win('cleared-new', { claude: claude('idle', { since: 9, cleared: true }) }),
+  ]);
+  assert.deepEqual(p.$$('.card').map((c) => c.dataset.id), ['turn', 'shell', 'cleared-new', 'cleared-old']);
+  assert.deepEqual(p.$$('#list .section').map((s) => s.textContent), ['Waiting for you1', 'Shells1', 'Parked windows2']);
+  assert.equal(p.$('.card[data-id="cleared-new"] .pill').textContent, 'Parked');
+  assert.equal(p.window.document.title, '(1) Corral');
+  assert.deepEqual(p.$$('#jump button').map((b) => b.textContent), ['Your turn 1', 'Shells 1', 'Parked 2']);
+});
+
 test('the Your turn chip is green when nothing is asking for permission', async () => {
   const p = await phone([win('a', { claude: claude('idle') })]);
   assert.deepEqual(p.$$('#jump button').map((b) => b.className), ['idle on']);

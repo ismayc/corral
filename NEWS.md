@@ -5,12 +5,14 @@ in `package.json`.
 
 ## Development version
 
-- **Cleared windows get their own section.** On the Mac, a window whose last
-  typed command was `/clear` moves from Open windows to a Cleared windows
-  section below it, so the windows still holding work stand out. The server
-  reads this from Claude Code's transcript, where a cleared conversation
-  starts with the `/clear` command, and rereads a transcript only when its
-  size or time changes. Typing in the window moves it back up.
+- **`/clear` parks a window.** A window whose last typed command was `/clear`
+  moves to a Parked windows section: below Open windows on the Mac, and last
+  on the phone, after Shells, with its own chip and no count in the page
+  title. It stays easy to find for coming back to, without mixing in with the
+  windows still holding work. The server reads this from Claude Code's
+  transcript, where a cleared conversation starts with the `/clear` command,
+  and rereads a transcript only when its size or time changes. Typing in the
+  window moves it back.
 
 - **Windows that need you most recently come first.** On the phone, each
   group of the list (Waiting for you, Working, Shells) and the herdr spaces

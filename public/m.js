@@ -47,10 +47,12 @@ function statusOf(w) {
   if (!w.claude) return { cls: '', text: 'Shell', rank: 2 };
   if (w.claude.status === 'waiting') return { cls: 'need', text: w.claude.waitingFor === 'permission prompt' ? 'Needs permission' : 'Waiting on a prompt', rank: 0 };
   if (w.claude.status === 'busy') return { cls: 'busy', text: 'Working', rank: 1 };
+  // Parked: idle after /clear, with nothing typed since. No work waits there, so it sits in its own group last.
+  if (w.claude.status === 'idle' && w.claude.cleared) return { cls: 'idle', text: 'Parked', rank: 3 };
   if (w.claude.status === 'idle') return { cls: 'idle', text: 'Your turn', rank: 0 };
   return { cls: '', text: 'Claude', rank: 1 };
 }
-const needsYou = (w) => w.claude?.status === 'idle' || w.claude?.status === 'waiting';
+const needsYou = (w) => statusOf(w).rank === 0;
 // The color for a status, as on the Mac's page: yellow working, green your turn (asking included), none for a shell.
 const colorOf = (st) => (st.cls === 'need' ? 'idle' : st.cls === 'busy' ? 'working' : st.cls);
 
@@ -302,7 +304,7 @@ function renderList() {
   }
   if (!windows.length) kids.push(h('div', { class: 'empty' }, 'Nothing is running on the Mac. Start something below.'));
   const sorted = listOrder();
-  const count = [0, 0, 0];
+  const count = GROUPS.map(() => 0);
   for (const w of sorted) count[statusOf(w).rank]++;
   let lastRank = -1;
   for (const w of sorted) {
@@ -354,11 +356,12 @@ function renderList() {
 const lastChange = (w) => w.claude?.since || w.activity || 0;
 const listOrder = () => [...windows].sort((a, b) => statusOf(a).rank - statusOf(b).rank || lastChange(b) - lastChange(a));
 
-// The three groups, in list order.
+// The groups, in list order.
 const GROUPS = [
   { title: 'Waiting for you', chip: 'Your turn', cls: 'idle' },
   { title: 'Working', chip: 'Working', cls: 'busy' },
   { title: 'Shells', chip: 'Shells', cls: '' },
+  { title: 'Parked windows', chip: 'Parked', cls: '' },
 ];
 // Where an element sits in the list's own scroll position. A stuck header reports where it is stuck,
 // so jumping measures the first window under the header, which never sticks.

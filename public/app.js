@@ -457,7 +457,7 @@ const lastChange = (s) => { const w = windowOf(s); return w.claude?.since || w.a
 // The spaces a filter lets through, and those of them with a window, latest change first.
 const shownSpaces = (q) => spaces.filter((s) => s.label.toLowerCase().includes(q));
 const openFirst = (shown) => shown.filter(hasWindow).sort((a, b) => lastChange(b) - lastChange(a));
-// A window whose last typed command was /clear, listed under Cleared windows instead of Open windows.
+// A window whose last typed command was /clear, listed under Parked windows instead of Open windows.
 const isCleared = (s) => Boolean(windowOf(s).claude?.cleared);
 const orderKey = (open) => open.map((s) => (isCleared(s) ? `c${s.id}` : s.id)).join();
 // The filter and Open windows order last drawn, so the status check redraws only when the order changes.
@@ -705,7 +705,7 @@ function arrange() {
 
   const working = openSpaces.filter((s) => !isCleared(s)), cleared = openSpaces.filter(isCleared);
   if (working.length) { sec(`Open windows (${working.length})`); put(working); }
-  if (cleared.length) { sec(`Cleared windows (${cleared.length})`); put(cleared); }
+  if (cleared.length) { sec(`Parked windows (${cleared.length})`); put(cleared); }
   if (!cats.categories.length) {
     if (openSpaces.length && rest.length) sec(`All spaces (${rest.length})`);
     put(rest);
