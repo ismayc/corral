@@ -301,3 +301,51 @@ test('conversation has no status lines when the screen cannot be read', () => {
   c.tmux.fail.add('capture-pane');
   assert.deepEqual(c.srv.conversation(s).statusLines, []);
 });
+
+const CLEAR = user('<command-name>/clear</command-name>\n            <command-message>clear</command-message>\n            <command-args></command-args>');
+
+test('wasCleared is false for a conversation with no transcript yet', () => {
+  const { c, sessionId } = withClaude();
+  assert.equal(c.srv.wasCleared({ sessionId }), false);
+});
+
+test('wasCleared is true when /clear is the last thing typed, past Claude Code bookkeeping and stray lines', () => {
+  const { c, sessionId } = withClaude();
+  c.transcript(sessionId, [
+    { type: 'mode', mode: 'normal' },
+    user('<local-command-caveat>The command below was run directly</local-command-caveat>', { isMeta: true }),
+    CLEAR,
+    { type: 'system', subtype: 'local_command', content: '<local-command-stdout></local-command-stdout>' },
+    user('a side task', { isSidechain: true }),
+    toolResult,
+    '{"type":"user", not json',
+    user('<system-reminder>noted</system-reminder>'),
+  ]);
+  assert.equal(c.srv.wasCleared({ sessionId }), true);
+});
+
+test('wasCleared is false once something is typed after /clear, or when nothing was typed at all', () => {
+  const { c, sessionId } = withClaude();
+  c.transcript(sessionId, [CLEAR, user('what next?')]);
+  assert.equal(c.srv.wasCleared({ sessionId }), false);
+  c.transcript(sessionId, [assistant([text('hello')])]);
+  assert.equal(c.srv.wasCleared({ sessionId }), false);
+});
+
+test('wasCleared reads a transcript again only when its size or time changes', () => {
+  const { c, sessionId } = withClaude();
+  const file = c.transcript(sessionId, [CLEAR, user('abc')]);
+  fs.utimesSync(file, 1791390000, 1791390000); // whole seconds, so setting the time again gives the same time
+  assert.equal(c.srv.wasCleared({ sessionId }), false);
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('"abc"', '"   "'));
+  fs.utimesSync(file, 1791390000, 1791390000);
+  assert.equal(c.srv.wasCleared({ sessionId }), false, 'same size and time: the cached answer');
+  fs.utimesSync(file, 1791390000, 1791390005);
+  assert.equal(c.srv.wasCleared({ sessionId }), true);
+});
+
+test('wasCleared is false when the transcript cannot be read', () => {
+  const { c, sessionId } = withClaude();
+  fs.mkdirSync(path.join(c.home, '.claude', 'projects', 'proj', `${sessionId}.jsonl`), { recursive: true });
+  assert.equal(c.srv.wasCleared({ sessionId }), false);
+});

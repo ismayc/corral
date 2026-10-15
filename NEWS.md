@@ -5,6 +5,13 @@ in `package.json`.
 
 ## Development version
 
+- **Cleared windows get their own section.** On the Mac, a window whose last
+  typed command was `/clear` moves from Open windows to a Cleared windows
+  section below it, so the windows still holding work stand out. The server
+  reads this from Claude Code's transcript, where a cleared conversation
+  starts with the `/clear` command, and rereads a transcript only when its
+  size or time changes. Typing in the window moves it back up.
+
 - **Windows that need you most recently come first.** On the phone, each
   group of the list (Waiting for you, Working, Shells) and the herdr spaces
   in the Start sheet are ordered by when the window's Claude last changed

@@ -435,3 +435,25 @@ test('Open windows lists the latest change first: a Claude status change, or a s
   assert.deepEqual(p.rowNames(), ['a', 'b', 'c', 'd']);
   assert.deepEqual(p.secs(), ['Open windows (3)', 'All spaces (1)']);
 });
+
+test('windows last cleared with /clear sit under Cleared windows, below Open windows, and move back when used', async () => {
+  const now = { sessions: [status('a', { claude: { status: 'idle', since: 9000, cleared: true } }), status('b', { claude: { status: 'idle', since: 1000 } }),
+    status('c', { claude: { status: 'idle', since: 3000, cleared: true } })] };
+  const p = await start({ routes: {
+    'GET /api/herdr': { available: true, spaces: [space('a'), space('b'), space('c'), space('d')] },
+    'GET /api/sessions': { sessions: [session('a'), session('b'), session('c')] },
+    'GET /api/overview': () => now,
+  } });
+  const poll = async () => { p.tick(3000); await flush(); };
+  await poll();
+  assert.deepEqual(p.secs(), ['Open windows (1)', 'Cleared windows (2)', 'All spaces (1)']);
+  assert.deepEqual(p.rowNames(), ['b', 'a', 'c', 'd']);
+  // Typing in a cleared window moves it back under Open windows, by its latest change.
+  now.sessions[2] = status('c', { claude: { status: 'busy', since: 3000 } });
+  await poll();
+  assert.deepEqual(p.secs(), ['Open windows (2)', 'Cleared windows (1)', 'All spaces (1)']);
+  assert.deepEqual(p.rowNames(), ['c', 'b', 'a', 'd']);
+  now.sessions[0] = status('a', { claude: { status: 'busy', since: 9500 } });
+  await poll();
+  assert.deepEqual(p.secs(), ['Open windows (3)', 'All spaces (1)']);
+});

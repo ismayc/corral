@@ -493,7 +493,8 @@ function overview({ screens = true } = {}) {
     return {
       ...publicSession(s),
       activity: p ? p.activity : null,
-      claude: claude ? { status: claude.status, waitingFor: claude.waitingFor, since: claude.since, mode: screen ? screenMode(screen) : null } : null,
+      claude: claude ? { status: claude.status, waitingFor: claude.waitingFor, since: claude.since, mode: screen ? screenMode(screen) : null,
+        cleared: screens && wasCleared(claude) } : null,
       askKey: claude?.waitingFor === 'permission prompt' ? promptKey(claude) : null,
       prompt: screen && claude.waitingFor === 'permission prompt' ? withKey(permissionPrompt(s.id, screen), claude) : null,
       muted: Boolean(push.muted[s.id]),
@@ -557,6 +558,32 @@ function transcriptFile(c) {
     }
   } catch {}
   return null;
+}
+
+// Whether the last thing typed in a window's conversation was /clear. Claude Code starts a new transcript
+// that holds the /clear command, so a cleared window has nothing typed after it. Cached by the file's size
+// and time, since the pages ask every few seconds.
+const clearedCache = new Map();
+function wasCleared(c) {
+  try {
+    const file = transcriptFile(c);
+    if (!file) return false;
+    const { size, mtimeMs } = fs.statSync(file);
+    const hit = clearedCache.get(file);
+    if (hit?.size === size && hit.mtimeMs === mtimeMs) return hit.cleared;
+    let cleared = false;
+    const lines = tailLines(file, 256 * 1024);
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (!/"type":\s*"user"/.test(lines[i]) || lines[i].includes('"tool_use_id"')) continue;
+      let d;
+      try { d = JSON.parse(lines[i]); } catch { continue; }
+      if (d.isSidechain || d.isMeta) continue;
+      const t = typedText(d.message?.content);
+      if (t) { cleared = t === '/clear'; break; }
+    }
+    clearedCache.set(file, { size, mtimeMs, cleared });
+    return cleared;
+  } catch { return false; }
 }
 
 // The last `max` bytes of a file as whole lines.
@@ -1542,7 +1569,7 @@ module.exports = {
   attachPty, register, createSession, adoptSessions, publicSession, skippedRoot, saveLedger, migrateLegacyData,
   loadLedger, seedFromSnapshots, updateLedger, ledgerView, cleanCategories, loadCategories, saveCategories,
   writeJson, readJsonFile, claudeUnder, processChildren, openWindows, overview, withKey, screenLines, screenMode, screenStatus,
-  sendCardKey, renameWindow, transcriptFile, tailLines, lastReply, typedText, conversation, windowHistory, rejoin,
+  sendCardKey, renameWindow, transcriptFile, wasCleared, tailLines, lastReply, typedText, conversation, windowHistory, rejoin,
   permissionPrompt, promptKey, windowClaude, answerPrompt, git, windowChanges, saveUpload, loadPush, savePush,
   vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, pruneUploads,
   cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows,
