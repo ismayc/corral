@@ -450,6 +450,15 @@ function windowOf(s) {
   return null;
 }
 const hasWindow = (s) => Boolean(windowOf(s));
+// When a space's window last did something: its Claude's latest status change (finished, asking, or started
+// working), or for a plain shell tmux's last output. An idle Claude still redraws its screen, so tmux's time
+// would put every Claude window near the top.
+const lastChange = (s) => { const w = windowOf(s); return w.claude?.since || w.activity || 0; };
+// The spaces a filter lets through, and those of them with a window, latest change first.
+const shownSpaces = (q) => spaces.filter((s) => s.label.toLowerCase().includes(q));
+const openFirst = (shown) => shown.filter(hasWindow).sort((a, b) => lastChange(b) - lastChange(a));
+// The filter and Open windows order last drawn, so the status check redraws only when the order changes.
+let drawn = { q: '', order: '' };
 // A space's dot: its open window's color (stateOf) when it has one, since Claude runs in Corral's windows
 // and herdr reports "unknown" for them; otherwise herdr's own status for the space.
 const spaceDot = (s) => (windowOf(s) && stateOf(windowOf(s))[0]) || s.status;
@@ -457,7 +466,7 @@ function paintDots() { for (const s of spaces) rows.get(s.id).querySelector('.do
 
 function renderSpaces() { buildRows(); arrange(); }
 
-// Puts spaces with an open window first, then the rest, each group alphabetical (herdr's own
+// Puts spaces with an open window first, latest change on top, then the rest alphabetical (herdr's own
 // order). Moves the existing elements, so expanded file trees survive.
 // ---- Categories: the user's own groups. Saved on the server, keyed by project folder. ----
 let cats = { categories: [], uncatCollapsed: false, assign: {} };
@@ -682,8 +691,9 @@ function groupHeader(c, count, forceOpen) {
 function arrange() {
   const box = $('#spaces');
   const q = $('#filter').value.trim().toLowerCase();
-  const shown = spaces.filter((s) => s.label.toLowerCase().includes(q));
-  const openSpaces = shown.filter(hasWindow);
+  const shown = shownSpaces(q);
+  const openSpaces = openFirst(shown);
+  drawn = { q, order: openSpaces.map((s) => s.id).join() };
   const rest = shown.filter((s) => !openSpaces.includes(s));
   rows.forEach((wrap) => wrap.remove());
   box.querySelectorAll('.sec, .note').forEach((n) => n.remove());
@@ -1050,6 +1060,7 @@ async function watchStatus() {
     if (!s) { open.delete(id); w.ws?.close(); w.term.dispose(); w.slot.remove(); persist(); relayout = true; continue; } // closed on another device
     w.exited = s.exited;
     w.claude = s.claude;
+    w.activity = s.activity;
     paint(w);
     if (s.exited) continue;
     if (s.label !== w.info.label) { w.info.label = s.label; w.el.querySelector('.t').textContent = s.label; relayout = true; }
@@ -1072,7 +1083,7 @@ async function watchStatus() {
       else if (was === 'busy' && now === 'idle') notify(`${s.label}: your turn`, 'Claude finished and is waiting for you.', id);
     }
   }
-  if (relayout) { layout(); arrange(); }
+  if (relayout) { layout(); arrange(); } else if (openFirst(shownSpaces(drawn.q)).map((s) => s.id).join() !== drawn.order) arrange(); // a window moved up the list
 }
 
 // What a window is doing, as a color and a line to hover: yellow while Claude works, green when it is your

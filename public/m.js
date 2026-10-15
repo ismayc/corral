@@ -45,7 +45,7 @@ function ago(ms) {
 // "Waiting" is a prompt Claude cannot get past without you: a permission prompt, or another dialog.
 function statusOf(w) {
   if (!w.claude) return { cls: '', text: 'Shell', rank: 2 };
-  if (w.claude.status === 'waiting') return { cls: 'need', text: w.claude.waitingFor === 'permission prompt' ? 'Needs permission' : 'Waiting on a prompt', rank: 0, first: true };
+  if (w.claude.status === 'waiting') return { cls: 'need', text: w.claude.waitingFor === 'permission prompt' ? 'Needs permission' : 'Waiting on a prompt', rank: 0 };
   if (w.claude.status === 'busy') return { cls: 'busy', text: 'Working', rank: 1 };
   if (w.claude.status === 'idle') return { cls: 'idle', text: 'Your turn', rank: 0 };
   return { cls: '', text: 'Claude', rank: 1 };
@@ -348,8 +348,11 @@ function renderList() {
 }
 
 // The order of the list, which swiping in a terminal also follows.
-const listOrder = () => [...windows].sort((a, b) => statusOf(a).rank - statusOf(b).rank
-  || Number(Boolean(statusOf(b).first)) - Number(Boolean(statusOf(a).first)) || (b.activity || 0) - (a.activity || 0));
+// Within a group, the window whose Claude changed status last comes first: for Waiting for you, the one that
+// started waiting on you most recently. tmux's activity time is no use for that, since an idle Claude still
+// redraws its screen; it orders only the shells, which have no Claude status.
+const lastChange = (w) => w.claude?.since || w.activity || 0;
+const listOrder = () => [...windows].sort((a, b) => statusOf(a).rank - statusOf(b).rank || lastChange(b) - lastChange(a));
 
 // The three groups, in list order.
 const GROUPS = [
@@ -458,7 +461,9 @@ function renderProjects() {
     h('span', { class: `dot ${dotOf(p)}` }),
     h('span', { class: 'n' }, h('div', {}, p.label), h('div', { class: 'p' }, p.home ? '~' : home(p.root))),
     windowFor(p, liveSessions) ? h('span', { class: 'tag' }, 'Open') : null);
-  const open = match.filter((p) => p.open), other = match.filter((p) => !p.open);
+  // Spaces whose window changed status last come first, as in the list; spaces with no window keep herdr's order after them.
+  const changeOf = (p) => { const w = windowFor(p, windows); return w ? lastChange(w) : 0; };
+  const open = match.filter((p) => p.open).sort((a, b) => changeOf(b) - changeOf(a)), other = match.filter((p) => !p.open);
   $('#projects').replaceChildren(
     ...(open.length ? [h('div', { class: 'section' }, 'herdr spaces'), ...open.map(row)] : []),
     ...(other.length ? [h('div', { class: 'section' }, 'Other projects'), ...other.map(row)] : []),

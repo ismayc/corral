@@ -60,6 +60,19 @@ test("a project with an open window takes the window's color for its dot, not he
   assert.equal(dots.Notes, 'dot unknown', 'a plain shell keeps herdr\'s status');
 });
 
+test('herdr spaces are ordered by their window\'s latest status change, and spaces with no window keep herdr\'s order after them', async () => {
+  const p = await phone([win('w1', { space: 'sp2', claude: claude('idle', { since: 5000 }), activity: 1 }), win('w2', { space: 'sp4', claude: claude('busy', { since: 1000 }), activity: 9000 }),
+    win('w3', { space: 'sp3' }), win('w4', { space: 'sp5', activity: 3000 })], { routes: {
+    'GET /api/herdr': { available: true, spaces: [
+      { id: 'sp1', label: 'Alpha', root: '/a' }, { id: 'sp2', label: 'Bravo', root: '/b' }, { id: 'sp3', label: 'Charlie', root: '/c' },
+      { id: 'sp4', label: 'Delta', root: '/d' }, { id: 'sp5', label: 'Echo', root: '/e' }] },
+    'GET /api/projects': { projects: [] },
+  } });
+  p.$('#fab').click();
+  await settle();
+  assert.deepEqual(rows(p).map((r) => (Array.isArray(r) ? r[0] : r)).slice(0, 6), ['herdr spaces', 'Bravo', 'Echo', 'Delta', 'Alpha', 'Charlie']);
+});
+
 test('a space whose window sits in its working folder counts as open', async () => {
   const p = await phone([], { routes: {
     'GET /api/herdr': { spaces: [{ id: 'sp1', label: 'Corral', root: '/r', cwd: '/r/sub' }] },

@@ -407,3 +407,31 @@ test('a hidden page does not check for new windows, and a failed check changes n
   await p.poll();
   assert.deepEqual(p.wins(), ['a', 'b']);
 });
+
+test('Open windows lists the latest change first: a Claude status change, or a shell\'s last output', async () => {
+  const now = { sessions: [status('a'), status('b'), status('c')] };
+  const p = await start({ routes: {
+    'GET /api/herdr': { available: true, spaces: [space('a'), space('b'), space('c'), space('d')] },
+    'GET /api/sessions': { sessions: [session('a'), session('b'), session('c')] },
+    'GET /api/overview': () => now,
+  } });
+  const set = (id, fields) => { const i = now.sessions.findIndex((s) => s.id === id); now.sessions[i] = { ...now.sessions[i], ...fields }; };
+  const poll = async () => { p.tick(3000); await flush(); };
+  await poll();
+  assert.deepEqual(p.rowNames(), ['a', 'b', 'c', 'd'], 'no times yet: alphabetical');
+  // An idle Claude's screen redraws keep tmux's time fresh, so a Claude window goes by its status change.
+  set('a', { claude: { status: 'idle', since: 1000 }, activity: 9000 });
+  set('b', { claude: { status: 'idle', since: 5000 }, activity: 2000 });
+  set('c', { claude: null, activity: 3000 });
+  await poll();
+  assert.deepEqual(p.rowNames(), ['b', 'c', 'a', 'd']);
+  let moved = 0;
+  new p.window.MutationObserver((m) => { moved += m.length; }).observe(p.$('#spaces'), { childList: true });
+  await poll();
+  await flush();
+  assert.equal(moved, 0, 'the same order is not redrawn');
+  set('a', { claude: { status: 'busy', since: 8000 } });
+  await poll();
+  assert.deepEqual(p.rowNames(), ['a', 'b', 'c', 'd']);
+  assert.deepEqual(p.secs(), ['Open windows (3)', 'All spaces (1)']);
+});

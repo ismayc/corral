@@ -79,17 +79,17 @@ test('tags show Stop on a working window, its mode, and Muted', async () => {
   assert.equal(p.card('plain').querySelector('.tags'), null);
 });
 
-test('the list puts windows waiting on you first, then working ones, then shells, newest first', async () => {
+test('the list puts windows waiting on you first, then working ones, then shells, each by its latest status change', async () => {
   const p = await phone([
     win('shell-old', { activity: 1 }),
     win('shell-new', { activity: 5 }),
     win('busy'),
-    win('idle-new', { claude: claude('idle'), activity: 9 }),
-    win('idle-old', { claude: claude('idle') }),
-    win('waiting', { claude: claude('waiting'), activity: 2 }),
+    win('idle-new', { claude: claude('idle', { since: 9 }), activity: 1 }),
+    win('idle-old', { claude: claude('idle', { since: 1 }), activity: 9 }),
+    win('waiting', { claude: claude('waiting', { since: 5 }), activity: 2 }),
     win('gone', { exited: true }),
   ].map((w) => (w.id === 'busy' ? { ...w, claude: claude('busy') } : w)));
-  assert.deepEqual(p.$$('.card').map((c) => c.dataset.id), ['waiting', 'idle-new', 'idle-old', 'busy', 'shell-new', 'shell-old']);
+  assert.deepEqual(p.$$('.card').map((c) => c.dataset.id), ['idle-new', 'waiting', 'idle-old', 'busy', 'shell-new', 'shell-old']);
   assert.deepEqual(p.$$('#list .section').map((s) => s.textContent), ['Waiting for you3', 'Working1', 'Shells2']);
   assert.equal(p.window.document.title, '(3) Corral');
   assert.deepEqual(p.$$('#jump button').map((b) => [b.textContent, [...b.classList].filter((c) => c !== 'on').join(' ')]), [['Your turn 3', 'need'], ['Working 1', 'busy'], ['Shells 2', '']]);

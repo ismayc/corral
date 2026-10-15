@@ -5,6 +5,15 @@ in `package.json`.
 
 ## Development version
 
+- **Windows that need you most recently come first.** On the phone, each
+  group of the list (Waiting for you, Working, Shells) and the herdr spaces
+  in the Start sheet are ordered by when the window's Claude last changed
+  status, newest on top; on the Mac, the sidebar's Open windows section is.
+  tmux's activity time was no use for this: an idle Claude still redraws its
+  screen, so every Claude window looked active within the last minute. Plain
+  shells, which have no Claude status, go by their last output. A window
+  asking for permission no longer jumps ahead of newer "Your turn" windows.
+
 - **A Dock icon that starts the server.** `scripts/install-launcher.sh`
   builds `~/Applications/Corral.app`, which starts the herdr server and the
   Corral server when they are not running, waits for Corral, and opens the
