@@ -34,6 +34,20 @@ test('a request through the tailnet is accepted only for an allowed login, with 
   assert.equal((await req('GET', '/api/sessions', { headers: { host: null } })).status, 403);
 });
 
+test('a refused tailnet request says why: a page for the browser, a readable error for the API', async (t) => {
+  const { srv, req } = await world(t);
+  srv.state.tailnet = TAILNET;
+  srv.state.tailnetTrouble = 'logged-out';
+  const page = await req('GET', '/m', { headers: remote({ 'tailscale-user-login': 'other@example.com', accept: 'text/html,application/xhtml+xml' }) });
+  assert.deepEqual([page.status, page.headers['content-type']], [403, 'text/html; charset=utf-8']);
+  assert.match(page.text, /<h1>Tailscale on mac is logged out<\/h1>/);
+  const api = await req('GET', '/api/sessions', { headers: remote({ 'tailscale-user-login': 'other@example.com' }) });
+  assert.equal(api.status, 403);
+  assert.match(api.json.error, /^Tailscale on mac is logged out\. Click the Tailscale icon/);
+  const other = await req('GET', '/m', { headers: { host: 'evil.example', accept: 'text/html' } });
+  assert.deepEqual([other.status, other.json], [403, { error: 'bad host' }]);
+});
+
 test('a mutating request with no content type is refused', async (t) => {
   const { req } = await world(t);
   const r = await req('POST', '/api/sessions', { body: {}, headers: { 'content-type': null } });

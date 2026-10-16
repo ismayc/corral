@@ -53,15 +53,30 @@ const TS_PORT = Number(process.env.CORRAL_TAILSCALE_PORT || 8443);
 const TS_BIN = ['/usr/local/bin/tailscale', '/opt/homebrew/bin/tailscale', '/Applications/Tailscale.app/Contents/MacOS/Tailscale']
   .find((p) => fs.existsSync(p)) || null;
 let tailnet = null; // {host, origin, url, logins:Set, machine}
+// Why Tailscale on this Mac cannot carry the tailnet right now ('off', 'stopped', or 'logged-out'), or
+// null. The refusal page names it, so the phone says what to fix on the Mac instead of "bad host".
+let tailnetTrouble = null;
+const TROUBLE_LOG = {
+  off: 'Tailscale is not running on this Mac',
+  stopped: 'Tailscale is turned off on this Mac',
+  'logged-out': 'Tailscale on this Mac is logged out; sign in from its menu bar icon',
+};
+
+function noteTrouble(next) {
+  if (next && next !== tailnetTrouble) console.log(`tailnet access: ${TROUBLE_LOG[next]}`);
+  tailnetTrouble = next;
+}
 
 function detectTailnet() {
   if (process.env.CORRAL_TAILSCALE === '0' || !TS_BIN) return;
   cp.execFile(TS_BIN, ['status', '--json'], { timeout: 5000, maxBuffer: 4 * 1024 * 1024 }, (err, out) => {
-    if (err) return;
+    if (err) return noteTrouble('off');
     try {
       const d = JSON.parse(out);
       const name = String(d.Self?.DNSName || '').replace(/\.$/, '');
       const owner = d.User?.[d.Self?.UserID]?.LoginName;
+      // A logged-out Tailscale can still report BackendState "Running"; its status then has no users.
+      noteTrouble(d.BackendState === 'Stopped' ? 'stopped' : d.BackendState === 'NeedsLogin' || !owner ? 'logged-out' : null);
       const extra = (process.env.CORRAL_TAILSCALE_USERS || '').split(',').map((s) => s.trim()).filter(Boolean);
       const logins = new Set(extra.length ? extra : owner ? [owner] : []);
       if (!/^[a-z0-9.-]+\.ts\.net$/i.test(name) || !logins.size) return;
@@ -89,6 +104,34 @@ function requestAccess(req) {
   const login = String(req.headers['tailscale-user-login'] || '');
   if (tailnet && host === tailnet.host && tailnet.logins.has(login)) return { remote: true, login, origins: new Set([tailnet.origin]) };
   return null;
+}
+
+// For a refused request that came in through a tailnet name, what went wrong and how to fix it, as
+// {title, fix, link?}. Any other host (a rebinding attempt, say) gets null and a bare "bad host".
+function refusalReason(req) {
+  const host = (req.headers.host || '').toLowerCase();
+  if (!/^[a-z0-9.-]+\.ts\.net(:\d+)?$/.test(host)) return null;
+  const mac = tailnet?.machine || 'the Mac';
+  const back = 'Corral checks again every minute, and this page reloads itself until it opens.';
+  if (tailnetTrouble === 'off') return { title: `Tailscale is not running on ${mac}`, fix: `Open the Tailscale app on the Mac and connect. ${back}` };
+  if (tailnetTrouble === 'stopped') return { title: `Tailscale is turned off on ${mac}`, fix: `Click the Tailscale icon in the Mac's menu bar and connect. ${back}` };
+  if (tailnetTrouble === 'logged-out') return { title: `Tailscale on ${mac} is logged out`, fix: `Click the Tailscale icon in the Mac's menu bar and log in. ${back}` };
+  if (!tailnet) return { title: "Corral has not found this Mac's Tailscale address yet", fix: `If this page stays, look for a "tailnet access" line in ~/.local/share/corral/server.log on the Mac. ${back}` };
+  if (host !== tailnet.host) return { title: 'Corral answers at a different address', fix: `Open ${tailnet.url} instead.`, link: tailnet.url };
+  const login = String(req.headers['tailscale-user-login'] || '');
+  if (!login) return { title: 'Corral opens only from devices signed in to your tailnet', fix: 'This request had no Tailscale login (a Tailscale Funnel request has none). Open Corral from a device signed in to Tailscale.' };
+  return { title: `${login} is not allowed to open Corral`, fix: 'Sign in to Tailscale on this device as the Mac\'s owner, or add this login to CORRAL_TAILSCALE_USERS on the Mac and restart Corral.' };
+}
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+function refusalPage(why) {
+  const link = why.link ? `<p><a href="${esc(why.link)}">${esc(why.link)}</a></p>` : '';
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+${why.link ? '' : '<meta http-equiv="refresh" content="30">'}<title>Corral: ${esc(why.title)}</title>
+<style>:root{color-scheme:light dark;--bg:#fafaf7;--fg:#1d1d1b;--muted:#5d5d58}@media (prefers-color-scheme:dark){:root{--bg:#161615;--fg:#ecece6;--muted:#a3a39b}}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.5 -apple-system,system-ui,sans-serif}main{max-width:32rem;padding:3rem 16px}h1{font-size:1.3rem;line-height:1.3}p{color:var(--muted)}a{color:inherit}</style>
+</head><body><main><h1>${esc(why.title)}</h1><p>${esc(why.fix)}</p>${link}</main></body></html>`;
 }
 
 const TMUX = ['/opt/homebrew/bin/tmux', '/usr/local/bin/tmux', '/usr/bin/tmux'].find((p) => fs.existsSync(p)) || null;
@@ -1236,7 +1279,12 @@ function readJson(req, max = 64 * 1024) {
 
 const server = http.createServer(async (req, res) => {
   const access = requestAccess(req);
-  if (!access) return send(res, 403, { error: 'bad host' });
+  if (!access) {
+    const why = refusalReason(req);
+    if (!why) return send(res, 403, { error: 'bad host' });
+    if ((req.headers.accept || '').includes('text/html')) return send(res, 403, refusalPage(why), 'text/html; charset=utf-8');
+    return send(res, 403, { error: `${why.title}. ${why.fix}` });
+  }
   const url = new URL(req.url, `http://${req.headers.host}`);
   const mutating = req.method !== 'GET' && req.method !== 'HEAD';
   if (mutating) {
@@ -1557,6 +1605,7 @@ module.exports = {
   // Module state the tests read and set.
   state: {
     get tailnet() { return tailnet; }, set tailnet(v) { tailnet = v; },
+    get tailnetTrouble() { return tailnetTrouble; }, set tailnetTrouble(v) { tailnetTrouble = v; },
     get push() { return push; }, set push(v) { push = v; },
     get categories() { return categories; },
     get openRoots() { return openRoots; },
@@ -1565,7 +1614,7 @@ module.exports = {
     set rootCache(v) { rootCache = v; },
   },
   constants: { PORT, TMUX, TMUX_SOCKET, TS_BIN, HERDR, DATA_DIR, CLAUDE_DIR, SESSION_PREFIX, UPLOAD_DIR, REPOS_DIR },
-  detectTailnet, requestAccess, legacyTmuxInUse, cleanEnv, tmux, scrubTmuxEnv, shq, programFor, startCommand,
+  detectTailnet, requestAccess, refusalReason, refusalPage, legacyTmuxInUse, cleanEnv, tmux, scrubTmuxEnv, shq, programFor, startCommand,
   attachPty, register, createSession, adoptSessions, publicSession, skippedRoot, saveLedger, migrateLegacyData,
   loadLedger, seedFromSnapshots, updateLedger, ledgerView, cleanCategories, loadCategories, saveCategories,
   writeJson, readJsonFile, claudeUnder, processChildren, openWindows, overview, withKey, screenLines, screenMode, screenStatus,

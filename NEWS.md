@@ -5,6 +5,17 @@ in `package.json`.
 
 ## Development version
 
+- **The phone says why it cannot open Corral.** A request that comes in
+  through the tailnet address but is refused now gets a page saying what is
+  wrong and what to do, instead of a bare `{"error":"bad host"}`: Tailscale on
+  the Mac is logged out, turned off, or not running; Corral has not found its
+  tailnet address yet; the address is out of date (with a link to the right
+  one); or the request had no allowed Tailscale login. While the fix is on the
+  Mac, the page reloads itself every 30 seconds, so it opens once Tailscale is
+  back. API calls get the same explanation as their error, and the server log
+  notes each change in Tailscale's state. Requests for any other host still
+  get only "bad host".
+
 - **`/clear` parks a window.** A window whose last typed command was `/clear`
   moves to a Parked windows section: below Open windows on the Mac, and last
   on the phone, after Shells, with its own chip and no count in the page

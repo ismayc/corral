@@ -86,7 +86,61 @@ test('detectTailnet uses the allowed logins and port from the environment', asyn
   assert.equal(h.srv.state.tailnet.served, false); // serve status printed nothing
 });
 
-test('detectTailnet ignores a missing tailscale, an opt-out, errors, and statuses that name no usable Mac', async () => {
+test('detectTailnet notes when Tailscale is not running, turned off, or logged out, and clears it when it is back', async (t) => {
+  const out = quiet(t);
+  let reply = new Error('tailscale is not running');
+  const { srv } = tailscale({ get status() { if (reply instanceof Error) throw reply; return reply; }, serve: () => '' });
+  const step = async (next) => { reply = next; srv.detectTailnet(); await tick(30); return srv.state.tailnetTrouble; };
+  assert.equal(await step(reply), 'off');
+  assert.equal(await step(reply), 'off'); // the same trouble again is not logged twice
+  assert.equal(await step(status({ BackendState: 'Stopped', User: null })), 'stopped');
+  assert.equal(await step(status({ BackendState: 'NeedsLogin', User: null })), 'logged-out');
+  assert.equal(await step(status({ BackendState: 'Running', User: null })), 'logged-out'); // what a logged-out Mac reported on 2026-10-15
+  assert.equal(await step('not json'), 'logged-out'); // an unreadable status changes nothing
+  assert.equal(await step(status({ BackendState: 'Running' })), null);
+  assert.deepEqual(out.logs.slice(0, 3), [
+    'tailnet access: Tailscale is not running on this Mac',
+    'tailnet access: Tailscale is turned off on this Mac',
+    'tailnet access: Tailscale on this Mac is logged out; sign in from its menu bar icon',
+  ]);
+  assert.match(out.logs[3], /^tailnet access: https:/);
+});
+
+test('refusalReason explains a refused tailnet request, and says nothing for any other host', () => {
+  const { srv } = loadServer();
+  const why = (headers) => srv.refusalReason({ headers });
+  const host = 'mac.tail1234.ts.net:8443';
+  assert.equal(why({ host: 'evil.example' }), null);
+  assert.equal(why({}), null);
+  assert.match(why({ host }).title, /not found this Mac's Tailscale address/);
+  srv.state.tailnetTrouble = 'off';
+  assert.deepEqual(why({ host }).title, 'Tailscale is not running on the Mac');
+  srv.state.tailnetTrouble = 'stopped';
+  assert.deepEqual(why({ host }).title, 'Tailscale is turned off on the Mac');
+  srv.state.tailnetTrouble = 'logged-out';
+  srv.state.tailnet = { host, url: `https://${host}/`, machine: 'Studio', logins: new Set(['me@example.com']) };
+  const out = why({ host });
+  assert.equal(out.title, 'Tailscale on Studio is logged out');
+  assert.match(out.fix, /menu bar and log in\. Corral checks again every minute/);
+  srv.state.tailnetTrouble = null;
+  assert.deepEqual(why({ host: 'old.tail1234.ts.net:8443' }), { title: 'Corral answers at a different address', fix: `Open https://${host}/ instead.`, link: `https://${host}/` });
+  assert.match(why({ host }).title, /only from devices signed in/);
+  assert.equal(why({ host, 'tailscale-user-login': 'x@example.com' }).title, 'x@example.com is not allowed to open Corral');
+});
+
+test('refusalPage escapes what it shows, and reloads itself unless it offers a link', () => {
+  const { srv } = loadServer();
+  const page = srv.refusalPage({ title: '<b>x</b> is not allowed', fix: 'Fix "it" & retry' });
+  assert.match(page, /<h1>&#60;b&#62;x&#60;\/b&#62; is not allowed<\/h1>/);
+  assert.match(page, /Fix &#34;it&#34; &#38; retry/);
+  assert.match(page, /http-equiv="refresh" content="30"/);
+  const linked = srv.refusalPage({ title: 't', fix: 'f', link: 'https://mac.tail1234.ts.net:8443/' });
+  assert.doesNotMatch(linked, /http-equiv="refresh"/);
+  assert.match(linked, /<a href="https:\/\/mac\.tail1234\.ts\.net:8443\/">/);
+});
+
+test('detectTailnet ignores a missing tailscale, an opt-out, errors, and statuses that name no usable Mac', async (t) => {
+  quiet(t);
   const none = loadServer();
   none.srv.detectTailnet();
   await tick(10);
