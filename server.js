@@ -938,6 +938,25 @@ function saveUpload(body) {
   return { status: 201, path: file };
 }
 
+// A file dropped on a Mac window from Finder: the browser knows only its name, size, and modified time,
+// never its path. This finds it: the usual folders first, then Spotlight. Only a file whose size and time
+// both match counts, so a different file with the same name is never pasted in its place.
+const LOCATE_DIRS = ['Downloads', 'Desktop', 'Documents', ''];
+function locateFile(name, size, modified) {
+  return new Promise((resolve) => {
+    if (!name || name.includes('/') || !Number.isFinite(size) || !Number.isFinite(modified)) return resolve(null);
+    const fits = (p) => {
+      try { const st = fs.statSync(p); return st.isFile() && st.size === size && Math.abs(st.mtimeMs - modified) < 2000; } catch { return false; }
+    };
+    const home = os.homedir();
+    const near = LOCATE_DIRS.map((d) => path.join(home, d, name)).find(fits);
+    if (near) return resolve(near);
+    cp.execFile('/usr/bin/mdfind', ['-onlyin', home, '-name', name], { timeout: 5000, maxBuffer: 4 * 1024 * 1024 }, (err, out) => {
+      resolve((!err && String(out).split('\n').find((p) => path.basename(p) === name && fits(p))) || null);
+    });
+  });
+}
+
 // Web Push: tells the phone when a window becomes your turn or asks for permission, even with the page
 // closed. On an iPhone this works only for Corral added to the Home Screen (iOS 16.4 or later). The
 // message is encrypted for the phone (RFC 8291) and signed with this server's own key (VAPID, RFC 8292),
@@ -1490,6 +1509,13 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/overview' && req.method === 'GET') {
     return send(res, 200, { machine: tailnet?.machine || os.hostname().replace(/\.local$/, ''), sessions: overview() });
   }
+  if (url.pathname === '/api/locate' && req.method === 'GET') {
+    // Says where files are on the Mac, so only the Mac's own page may ask.
+    if (!access.local) return send(res, 403, { error: 'only from this Mac' });
+    const q = url.searchParams;
+    const found = await locateFile(q.get('name'), Number(q.get('size')), Number(q.get('modified')));
+    return found ? send(res, 200, { path: found }) : send(res, 404, { error: 'not found on this Mac' });
+  }
   if (url.pathname === '/api/remote' && req.method === 'GET') {
     return send(res, 200, { url: tailnet?.served ? tailnet.url : null, machine: tailnet?.machine || null, remote: Boolean(access.remote) });
   }
@@ -1711,7 +1737,7 @@ module.exports = {
   sendCardKey, renameWindow, transcriptFile, wasCleared, tailLines, lastReply, typedText, conversation, windowHistory, rejoin,
   permissionPrompt, promptKey, windowClaude, answerPrompt, frontMatter, slashCommands, git, windowChanges, saveUpload, loadPush, savePush,
   vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, pruneUploads,
-  cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows,
+  locateFile, cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows,
   reopenProject, newRepos, hideRepo, identityRoots, herdrSnapshot, rootFor, listDir, loadOpenWith, saveOpenWith, fileKind, spaceFile,
   appsFor, openChoices, openFile, appName, send, serveFile, readJson,
 };

@@ -8,6 +8,10 @@ const { UUID1, quiet, fakeHerdr, writeFile } = require('../helpers/platform');
 
 const data = (home, f) => path.join(home, '.local/share/corral', f);
 
+// The fake tailscale answers through setImmediate, and detectTailnet chains two calls, so a few turns
+// of the event loop settle it however busy the machine is (a fixed 30 ms did not, under load).
+const turns = async (n = 5) => { for (let i = 0; i < n; i++) await new Promise((r) => setImmediate(r)); };
+
 // A tailscale status document for a Mac named "mac" owned by me@example.com.
 const status = (over = {}) => JSON.stringify({
   Self: { DNSName: 'mac.tail1234.ts.net.', UserID: 7, HostName: 'Mac' },
@@ -29,7 +33,7 @@ test('detectTailnet records the tailnet name, the owner login, and whether tails
   const out = quiet(t);
   const { srv, calls } = tailscale({ status: status(), serve: () => serveStatus('mac.tail1234.ts.net:8443', `http://127.0.0.1:${PORT}`) });
   srv.detectTailnet();
-  await tick(30);
+  await turns();
   const tn = srv.state.tailnet;
   assert.equal(tn.host, 'mac.tail1234.ts.net:8443');
   assert.equal(tn.origin, 'https://mac.tail1234.ts.net:8443');
@@ -41,7 +45,7 @@ test('detectTailnet records the tailnet name, the owner login, and whether tails
 
   // The same answer again is not announced twice.
   srv.detectTailnet();
-  await tick(30);
+  await turns();
   assert.equal(out.logs.length, 1);
 });
 
@@ -54,25 +58,25 @@ test('detectTailnet announces a change of name or of serve state, and tells how 
     serve: () => serveStatus(`${name.replace(/\.$/, '')}:8443`, proxy),
   });
   srv.detectTailnet();
-  await tick(30);
+  await turns();
   assert.equal(srv.state.tailnet.served, false); // wrong port
   assert.equal(srv.state.tailnet.machine, 'mac.tail1234.ts.net'); // no HostName: the DNS name
   assert.match(out.logs[0], /\(not served yet: tailscale serve --bg --https=8443 http:\/\/127\.0\.0\.1:18777\)$/);
 
   proxy = `127.0.0.1:${PORT}/`; // another accepted spelling
   srv.detectTailnet();
-  await tick(30);
+  await turns();
   assert.equal(srv.state.tailnet.served, true);
   assert.equal(out.logs.length, 2);
 
   name = 'renamed.tail1234.ts.net.';
   srv.detectTailnet();
-  await tick(30);
+  await turns();
   assert.equal(srv.state.tailnet.host, 'renamed.tail1234.ts.net:8443');
   assert.equal(out.logs.length, 3);
   proxy = 'https://example.com'; // not loopback
   srv.detectTailnet();
-  await tick(30);
+  await turns();
   assert.equal(srv.state.tailnet.served, false);
 });
 
@@ -80,7 +84,7 @@ test('detectTailnet uses the allowed logins and port from the environment', asyn
   quiet(t);
   const h = loadServer({ tailscale: true, env: { CORRAL_TAILSCALE_USERS: ' a@x.com, b@x.com ,', CORRAL_TAILSCALE_PORT: '9443' }, exec: { tailscale: (args) => (args[0] === 'status' ? status({ User: {} }) : '') } });
   h.srv.detectTailnet();
-  await tick(30);
+  await turns();
   assert.deepEqual([...h.srv.state.tailnet.logins], ['a@x.com', 'b@x.com']);
   assert.equal(h.srv.state.tailnet.host, 'mac.tail1234.ts.net:9443');
   assert.equal(h.srv.state.tailnet.served, false); // serve status printed nothing
@@ -90,7 +94,7 @@ test('detectTailnet notes when Tailscale is not running, turned off, or logged o
   const out = quiet(t);
   let reply = new Error('tailscale is not running');
   const { srv } = tailscale({ get status() { if (reply instanceof Error) throw reply; return reply; }, serve: () => '' });
-  const step = async (next) => { reply = next; srv.detectTailnet(); await tick(30); return srv.state.tailnetTrouble; };
+  const step = async (next) => { reply = next; srv.detectTailnet(); await turns(); return srv.state.tailnetTrouble; };
   assert.equal(await step(reply), 'off');
   assert.equal(await step(reply), 'off'); // the same trouble again is not logged twice
   assert.equal(await step(status({ BackendState: 'Stopped', User: null })), 'stopped');
@@ -143,12 +147,12 @@ test('detectTailnet ignores a missing tailscale, an opt-out, errors, and statuse
   quiet(t);
   const none = loadServer();
   none.srv.detectTailnet();
-  await tick(10);
+  await turns();
   assert.equal(none.srv.state.tailnet, null);
 
   const off = loadServer({ tailscale: true, env: { CORRAL_TAILSCALE: '0' }, exec: { tailscale: () => { throw new Error('should not run'); } } });
   off.srv.detectTailnet();
-  await tick(10);
+  await turns();
   assert.equal(off.srv.state.tailnet, null);
 
   const bad = [
@@ -161,7 +165,7 @@ test('detectTailnet ignores a missing tailscale, an opt-out, errors, and statuse
   for (const s of bad) {
     const h = loadServer({ tailscale: true, exec: { tailscale: () => { if (s instanceof Error) throw s; return s; } } });
     h.srv.detectTailnet();
-    await tick(20);
+    await turns();
     assert.equal(h.srv.state.tailnet, null, String(s).slice(0, 40));
   }
 });
@@ -173,7 +177,7 @@ test('detectTailnet treats a serve status without a matching forward as not serv
   for (const doc of docs) {
     const { srv } = tailscale({ status: status(), serve: () => doc });
     srv.detectTailnet();
-    await tick(30);
+    await turns();
     assert.equal(srv.state.tailnet.served, false, doc);
   }
 });

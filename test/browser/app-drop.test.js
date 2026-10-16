@@ -1,4 +1,5 @@
-// Images dropped on a Mac window: uploaded to the Mac's data folder and their paths pasted for Claude Code.
+// Files dropped on a Mac window: found on the Mac and their paths pasted for Claude Code, or, for an image
+// that cannot be found, uploaded to the Mac's data folder and that copy's path pasted.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { start, stop, session, dt, flush, fire } = require('../helpers/app');
@@ -45,16 +46,30 @@ test('a dropped screenshot is uploaded and its path pasted into that window, whi
   assert.equal(p.toast(), null);
 });
 
-test('files that are not images are skipped and named; the images among them still go', async () => {
+test('a dropped file found on the Mac has its own path pasted, escaped as Terminal.app pastes it', async () => {
+  const where = { 'notes.txt': '/Users/me/Downloads/my notes (1).txt', 'shot.png': '/Users/me/Desktop/shot.png' };
+  const p = await start({ routes: { ...routes(), 'GET /api/locate': (req) => (where[req.query.name] ? { path: where[req.query.name] } : p.api.reply(404, { error: 'not found on this Mac' })) } });
+  const win = p.slotOf('a').querySelector('.win');
+  const f = file(p, 'notes.txt', 'text/plain');
+  fire(win, 'drop', { dataTransfer: files([f, file(p, 'shot.png', 'image/png')]) });
+  await until(() => p.terms[0].pasted.length === 2);
+  assert.deepEqual(p.terms[0].pasted, ['/Users/me/Downloads/my\\ notes\\ \\(1\\).txt ', '/Users/me/Desktop/shot.png ']);
+  assert.deepEqual(p.api.called('GET', '/api/locate')[0].query, { name: 'notes.txt', size: String(f.size), modified: String(f.lastModified) });
+  assert.equal(p.api.called('POST', '/api/sessions/a/upload').length, 0); // nothing copied
+  assert.equal(p.toast(), null);
+});
+
+test('a file that is not an image and cannot be found is named, and the rest still go', async () => {
   const p = await start({ routes: routes({ path: '/data/uploads/1.png' }) });
   const win = p.slotOf('a').querySelector('.win');
   fire(win, 'drop', { dataTransfer: files([file(p, 'notes.txt', 'text/plain'), file(p, 'shot.png', 'image/png')]) });
-  assert.equal(p.toast(), 'Skipped notes.txt: only images (PNG, JPEG, HEIC, WebP, or GIF) can be dropped.');
   await until(() => p.terms[0].pasted.length);
+  assert.equal(p.toast(), 'Could not find notes.txt on this Mac. Paste its path instead.');
   assert.deepEqual(p.terms[0].pasted, ['/data/uploads/1.png ']);
-  fire(win, 'drop', { dataTransfer: files([file(p, 'a.pdf', 'application/pdf'), file(p, 'b', '')]) });
-  assert.equal(p.toast(), 'Skipped 2 files: only images (PNG, JPEG, HEIC, WebP, or GIF) can be dropped.');
-  await flush();
+  p.api.routes['GET /api/locate'] = new Error('offline');
+  fire(win, 'drop', { dataTransfer: files([file(p, 'a.pdf', 'application/pdf')]) });
+  await until(() => p.toast() !== 'Could not find notes.txt on this Mac. Paste its path instead.');
+  assert.equal(p.toast(), 'Could not find a.pdf on this Mac. Paste its path instead.');
   assert.equal(p.api.called('POST', '/api/sessions/a/upload').length, 1);
 });
 

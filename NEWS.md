@@ -5,6 +5,16 @@ in `package.json`.
 
 ## Development version
 
+- **Any file dropped on a Mac window pastes its path.** The browser never
+  sees a dropped file's path, only its name, size, and modified time, so the
+  server finds the file from those: in Downloads, Desktop, Documents, or the
+  home folder first, then through Spotlight, taking only a file whose size
+  and time both match. Its path is pasted, escaped the way Terminal.app
+  pastes a dropped file, and nothing is copied. An image that cannot be
+  found (dragged from a screenshot's thumbnail, say) is still uploaded and
+  its copy's path pasted; any other file that cannot be found is named in a
+  message. Only the Mac's own page can ask where a file is.
+
 - **Slash commands autocomplete on the phone.** Typing `/` at the start of
   the message box lists the window's skills and commands, narrowed as you
   type, with names that start with what you typed first. A tap fills in the

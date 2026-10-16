@@ -275,23 +275,27 @@ function setFocus(id) {
 }
 
 // quiet: a window started elsewhere goes straight to the bottom bar and does not take the keyboard.
-// ---- Images dropped on a window: the browser never sees a dropped file's path on the Mac, so each image is
-// uploaded to Corral's data folder (as the phone's photos are) and that path is pasted, which Claude Code
-// attaches as [Image #n], the same as dropping the file on a Positron or Terminal.app window.
+// ---- Files dropped on a window: the browser never sees a dropped file's path on the Mac, only its name,
+// size, and modified time. The server finds the file from those (see locateFile) and its path is pasted,
+// escaped the way Terminal.app pastes a dropped file, so Claude Code reads it, and attaches an image as
+// [Image #n]. An image the server cannot find (dragged from a screenshot's thumbnail, say) is uploaded to
+// Corral's data folder instead, as the phone's photos are, and that copy's path pasted.
 const filesIn = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/heic', 'image/webp', 'image/gif'];
+const dropPath = (p) => p.replace(/[^\w@%+=:,./-]/g, '\\$&');
 const base64 = (blob) => new Promise((resolve, reject) => {
   const r = new FileReader();
   r.onload = () => resolve(String(r.result).split(',')[1]);
   r.onerror = reject;
   r.readAsDataURL(blob);
 });
-async function addImages(w, files) {
+async function addFiles(w, files) {
   setFocus(w.info.id);
-  const images = files.filter((f) => IMAGE_TYPES.includes(f.type));
-  const other = files.filter((f) => !images.includes(f));
-  if (other.length) toast(`Skipped ${other.length === 1 ? other[0].name : `${other.length} files`}: only images (PNG, JPEG, HEIC, WebP, or GIF) can be dropped.`);
-  for (const f of images) {
+  for (const f of files) {
+    let found = null;
+    try { found = (await api(`/api/locate?${new URLSearchParams({ name: f.name, size: f.size, modified: f.lastModified })}`)).path; } catch {}
+    if (found) { w.term.paste(`${dropPath(found)} `); continue; }
+    if (!IMAGE_TYPES.includes(f.type)) { toast(`Could not find ${f.name} on this Mac. Paste its path instead.`); continue; }
     try {
       const j = await api(`/api/sessions/${encodeURIComponent(w.info.id)}/upload`, { method: 'POST', body: { type: f.type, data: await base64(f) } });
       if (!j.path) { toast(j.error || `Could not add ${f.name}.`); continue; }
@@ -332,14 +336,14 @@ function attach(info, quiet) {
   term.open(el.querySelector('.term'));
 
   const w = { term, fit, el, slot, info, ws: null, muted: false };
-  // Drop a screenshot from Finder or the Desktop on the window to give it to Claude Code (see addImages).
+  // Drop a file from Finder or the Desktop on the window to give its path to Claude Code (see addFiles).
   el.addEventListener('dragover', (e) => { if (filesIn(e)) { e.preventDefault(); el.classList.add('filedrop'); } });
   el.addEventListener('dragleave', () => el.classList.remove('filedrop'));
   el.addEventListener('drop', (e) => {
     el.classList.remove('filedrop');
     if (!filesIn(e)) return;
     e.preventDefault();
-    addImages(w, [...e.dataTransfer.files]);
+    addFiles(w, [...e.dataTransfer.files]);
   });
   // With tmux's mouse on, a plain drag selects inside tmux, and on release tmux sends the text as an
   // OSC 52 escape. Put it on the clipboard. Writes only: a request to read the clipboard is ignored,
