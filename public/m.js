@@ -663,12 +663,45 @@ function sendMsg() {
   if (text) current.term.paste(text);
   setTimeout(() => sendRaw('\r'), text ? 80 : 0);
   msg.value = ''; grow();
+  $('#slash').hidden = true;
 }
 $('#send').onpointerdown = (e) => e.preventDefault();
 $('#send').onclick = sendMsg;
 msg.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMsg(); }
+  if (e.key === 'Escape') $('#slash').hidden = true;
 });
+
+// Slash commands: a "/" at the start of the box lists the window's skills and commands, narrowed as you
+// type, names starting with what you typed first. A tap fills in the name and a space, ready for
+// arguments. The list comes from the Mac once per window while the page is open; a failed load is
+// tried again on the next keystroke.
+const slashCache = new Map();
+function slashList(id) {
+  if (!slashCache.has(id)) {
+    slashCache.set(id, api(`/api/sessions/${encodeURIComponent(id)}/commands`).then((r) => r.commands, () => { slashCache.delete(id); return []; }));
+  }
+  return slashCache.get(id);
+}
+async function showSlash() {
+  const box = $('#slash');
+  const typed = () => msg.value.match(/^\/(\S*)$/)?.[1];
+  if (typed() === undefined || !current) { box.hidden = true; return; }
+  const id = current.info.id;
+  const all = await slashList(id);
+  const q = typed()?.toLowerCase();
+  if (q === undefined || current?.info.id !== id) return; // the box or the window changed while the list loaded
+  const starts = (c) => c.name.toLowerCase().startsWith(q);
+  const hits = all.filter((c) => c.name.toLowerCase().includes(q)).sort((a, b) => starts(b) - starts(a)).slice(0, 40);
+  box.replaceChildren(...hits.map((c) => h('button', {
+    type: 'button',
+    onpointerdown: (e) => e.preventDefault(), // keeps the keyboard up
+    onclick: () => { msg.value = `/${c.name} `; box.hidden = true; grow(); msg.focus(); },
+  }, h('b', {}, `/${c.name}`), c.description ? h('span', {}, c.description) : null)));
+  box.hidden = !hits.length;
+  box.scrollTop = 0;
+}
+msg.addEventListener('input', showSlash);
 
 // ---- Conversation: the view a window running Claude opens in ----
 // Your prompts and Claude's replies, read from Claude Code's transcript every few seconds, with its status lines
@@ -1060,7 +1093,7 @@ renderQuick();
 let swipe = null;
 $('#termview').addEventListener('touchstart', (e) => {
   // The key rows and the message box scroll or select sideways themselves.
-  if (e.touches.length !== 1 || e.target.closest('#keys, #quick, #compose, #askbar')) { swipe = null; return; }
+  if (e.touches.length !== 1 || e.target.closest('#keys, #quick, #slash, #compose, #askbar')) { swipe = null; return; }
   swipe = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
 }, { passive: true });
 $('#termview').addEventListener('touchend', (e) => {

@@ -796,6 +796,93 @@ function answerPrompt(s, choice, key) {
   return { status: 200, ok: true };
 }
 
+// The slash commands a window's Claude Code offers, for the phone's autocomplete: skills and commands from
+// the project (its folder and the folders above it, up to the home folder), the user's own, those of
+// enabled plugins (as plugin:name), and the built-in commands most useful from a phone. A skill turned
+// off in skillOverrides, or marked user-invocable: false, is left out, as Claude Code's own menu does.
+// The built-in descriptions are copied from Claude Code 2.1.301.
+const BUILTIN_COMMANDS = [
+  ['clear', 'Start a new session with empty context; previous session stays on disk (resumable with /resume)'],
+  ['compact', 'Free up context by summarizing the conversation so far'],
+  ['context', 'Visualize current context usage as a colored grid'],
+  ['model', 'Set model for new sessions from this window (not saved)'],
+  ['effort', 'Set effort level for model usage'],
+  ['plan', 'Enable plan mode or view the current session plan'],
+  ['resume', 'Resume a previous conversation'],
+  ['btw', 'Ask a quick side question without interrupting the main conversation'],
+  ['recap', 'Generate a one-line session recap now'],
+  ['goal', 'Set a goal Claude checks before stopping'],
+  ['status', 'Show Claude Code status including version, model, account, API connectivity, and tool statuses'],
+  ['memory', 'Edit CLAUDE.md files and memory settings'],
+  ['skills', 'List available skills'],
+  ['reload-skills', 'Pick up skills added or changed on disk during this session'],
+  ['mcp', 'Manage MCP servers'],
+  ['help', 'Show help and available commands'],
+  // Skills bundled with Claude Code, which live in its binary rather than on disk.
+  ['code-review', 'Review the current diff, or a PR, for correctness bugs'],
+  ['simplify', 'Review the changed code for reuse, simplification, and efficiency, then apply the fixes'],
+  ['security-review', 'Complete a security review of the pending changes on the current branch'],
+  ['init', 'Initialize a new CLAUDE.md file with codebase documentation'],
+  ['loop', 'Run a prompt or slash command on a recurring interval'],
+];
+
+// The YAML front matter of a skill or command file as flat strings: `key: value`, with a folded
+// (`>`, `|`) or indented value joined onto one line. Null when the file cannot be read.
+function frontMatter(file) {
+  let text;
+  try { text = fs.readFileSync(file, 'utf8'); } catch { return null; }
+  const out = {};
+  const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!m) return out;
+  const lines = m[1].split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const kv = lines[i].match(/^([\w-]+):\s*(.*)$/);
+    if (!kv) continue;
+    let v = kv[2].trim();
+    if (/^([>|]-?)?$/.test(v)) {
+      const more = [];
+      while (i + 1 < lines.length && /^\s+\S/.test(lines[i + 1])) more.push(lines[++i].trim());
+      v = more.join(' ');
+    }
+    out[kv[1]] = v.replace(/^(["'])(.*)\1$/, '$2');
+  }
+  return out;
+}
+
+function slashCommands(cwd) {
+  const found = new Map();
+  const add = (name, description, source) => {
+    if (!found.has(name)) found.set(name, { name, description: String(description || '').slice(0, 300), source });
+  };
+  const settings = readJsonFile(path.join(CLAUDE_DIR, 'settings.json')) || {};
+  const off = settings.skillOverrides || {};
+  const list = (dir) => { try { return fs.readdirSync(dir).sort(); } catch { return []; } };
+  const read = (root, prefix, source) => {
+    for (const d of list(path.join(root, 'skills'))) {
+      const fm = frontMatter(path.join(root, 'skills', d, 'SKILL.md'));
+      const name = prefix + (fm?.name || d);
+      if (fm && fm['user-invocable'] !== 'false' && off[name] !== 'off') add(name, fm.description, source);
+    }
+    for (const f of list(path.join(root, 'commands')).filter((x) => x.endsWith('.md'))) {
+      const fm = frontMatter(path.join(root, 'commands', f)); // null for a folder named *.md
+      if (fm) add(prefix + f.slice(0, -3), fm.description, source);
+    }
+  };
+  const home = os.homedir();
+  const projects = [];
+  for (let d = path.resolve(cwd || home); d.startsWith(home + path.sep); d = path.dirname(d)) projects.push(d);
+  for (const d of projects) read(path.join(d, '.claude'), '', 'project');
+  read(CLAUDE_DIR, '', 'user');
+  const installed = readJsonFile(path.join(CLAUDE_DIR, 'plugins', 'installed_plugins.json'))?.plugins || {};
+  for (const [key, on] of Object.entries(settings.enabledPlugins || {})) {
+    if (on !== true) continue;
+    const install = (installed[key] || []).find((e) => typeof e?.installPath === 'string' && (e.scope === 'user' || projects.includes(e.projectPath)));
+    if (install) read(install.installPath, `${key.split('@')[0]}:`, 'plugin');
+  }
+  for (const [name, description] of BUILTIN_COMMANDS) add(name, description, 'built-in');
+  return [...found.values()];
+}
+
 // A read-only look at what changed in a window's project: `git status` plus the diff against HEAD.
 // GIT_OPTIONAL_LOCKS=0 keeps git from taking the index lock, so it never gets in the way of Claude's own git.
 const DIFF_MAX = 600 * 1024;
@@ -1412,7 +1499,7 @@ const server = http.createServer(async (req, res) => {
     if (!s || !s.tmux || s.exited) return send(res, 404, { error: 'no such window' });
     try { return send(res, 200, windowHistory(s.id), 'text/plain; charset=utf-8'); } catch { return send(res, 500, { error: 'could not read the window' }); }
   }
-  const act = url.pathname.match(/^\/api\/sessions\/([\w-]+)\/(prompt|answer|changes|upload|key|rename|mute|last|conversation)$/);
+  const act = url.pathname.match(/^\/api\/sessions\/([\w-]+)\/(prompt|answer|changes|upload|key|rename|mute|last|conversation|commands)$/);
   if (act) {
     const s = sessions.get(act[1]);
     if (!s || s.exited) return send(res, 404, { error: 'no such window' });
@@ -1449,6 +1536,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (act[2] === 'conversation' && req.method === 'GET') {
       try { const { status, ...r } = conversation(s); return send(res, status, r); } catch { return send(res, 500, { error: 'could not read the transcript' }); }
+    }
+    if (act[2] === 'commands' && req.method === 'GET') {
+      return send(res, 200, { commands: slashCommands(windowClaude(s)?.cwd || s.cwd) });
     }
     if (act[2] === 'changes' && req.method === 'GET') {
       const { status, ...r } = await windowChanges(s);
@@ -1619,7 +1709,7 @@ module.exports = {
   loadLedger, seedFromSnapshots, updateLedger, ledgerView, cleanCategories, loadCategories, saveCategories,
   writeJson, readJsonFile, claudeUnder, processChildren, openWindows, overview, withKey, screenLines, screenMode, screenStatus,
   sendCardKey, renameWindow, transcriptFile, wasCleared, tailLines, lastReply, typedText, conversation, windowHistory, rejoin,
-  permissionPrompt, promptKey, windowClaude, answerPrompt, git, windowChanges, saveUpload, loadPush, savePush,
+  permissionPrompt, promptKey, windowClaude, answerPrompt, frontMatter, slashCommands, git, windowChanges, saveUpload, loadPush, savePush,
   vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, pruneUploads,
   cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows,
   reopenProject, newRepos, hideRepo, identityRoots, herdrSnapshot, rootFor, listDir, loadOpenWith, saveOpenWith, fileKind, spaceFile,

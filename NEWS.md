@@ -5,6 +5,16 @@ in `package.json`.
 
 ## Development version
 
+- **Slash commands autocomplete on the phone.** Typing `/` at the start of
+  the message box lists the window's skills and commands, narrowed as you
+  type, with names that start with what you typed first. A tap fills in the
+  name and a space, ready for arguments, without sending. The list comes from
+  the Mac: skills and commands in the project's `.claude` folder (and the
+  folders above it), the user's own in `~/.claude`, enabled plugins' (as
+  `plugin:name`), and the built-in commands most useful from a phone. Skills
+  turned off in `skillOverrides`, or marked `user-invocable: false`, are left
+  out.
+
 - **The phone says why it cannot open Corral.** A request that comes in
   through the tailnet address but is refused now gets a page saying what is
   wrong and what to do, instead of a bare `{"error":"bad host"}`: Tailscale on
