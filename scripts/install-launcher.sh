@@ -17,6 +17,10 @@ cat > "$APP/Contents/MacOS/Corral" <<STUB
 exec "$REPO/scripts/corral-launcher.sh" "\$@"
 STUB
 chmod +x "$APP/Contents/MacOS/Corral"
+# LSArchitecturePriority: a script executable has no architecture of its own, so without this key macOS
+# launches it under Rosetta on Apple silicon. The Intel preference then carries through the native node
+# server to the tmux server and every shell in its panes (`uname -m` says x86_64 there). Verified with a
+# test app on 2026-10-16: sysctl.proc_translated was 1 without the key and 0 with it.
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -32,6 +36,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleIconFile</key><string>app.icns</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>LSUIElement</key><true/>
+  <key>LSArchitecturePriority</key><array><string>arm64</string></array>
 </dict>
 </plist>
 PLIST
