@@ -34,15 +34,24 @@ async function answer(n, action) {
   return self.registration.showNotification(n.title, { body: msg, tag: n.tag, icon: '/apple-touch-icon.png', data: { url: n.data.url } });
 }
 
+// An iPhone can drop the message posted to a page that is still asleep, and the page then wakes on the
+// window it showed last. So the tapped window is also left in Cache Storage, and the page takes it from
+// there when it comes back (takeTap in m.js).
+async function remember(id) {
+  try { await (await caches.open('corral-tap')).put('/tap', new Response(JSON.stringify({ id, t: Date.now() }))); } catch {}
+}
+
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   if ((e.action === 'allow' || e.action === 'deny') && e.notification.data?.answer) return e.waitUntil(answer(e.notification, e.action));
   const url = new URL(e.notification.data?.url || '/m', self.location.origin).href;
+  const w = new URL(url).searchParams.get('w');
   e.waitUntil((async () => {
+    if (w) await remember(w);
     const open = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const c of open) {
       if (new URL(c.url).pathname === '/m' && 'focus' in c) {
-        c.postMessage({ open: new URL(url).searchParams.get('w') });
+        c.postMessage({ open: w });
         return c.focus();
       }
     }

@@ -667,11 +667,13 @@ window.addEventListener('popstate', () => {
   if (current) backHome();
 });
 
-// iOS drops the socket while the page is in the background; reconnect when it comes back.
+// iOS drops the socket while the page is in the background; reconnect when it comes back. A tapped
+// notification can wake the page before sw.js has left the tap, so look again a second later.
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   refresh();
   if (current && current.ws?.readyState !== 1) connect();
+  checkTap(); setTimeout(checkTap, 1000);
 });
 
 function setFont(n) {
@@ -1051,7 +1053,24 @@ const standalone = matchMedia('(display-mode: standalone)').matches || navigator
 const pushable = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 if ('serviceWorker' in navigator && isSecureContext) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
-  navigator.serviceWorker.addEventListener('message', (e) => { if (e.data?.open) openById(e.data.open); });
+  navigator.serviceWorker.addEventListener('message', (e) => { if (e.data?.open) { takeTap(); openById(e.data.open); } });
+}
+
+// The window a tapped notification asked for, left in Cache Storage by sw.js in case its message was
+// lost. Taken once, and ignored after two minutes so an old tap never pulls the page away later.
+async function takeTap() {
+  try {
+    const c = await caches.open('corral-tap');
+    const r = await c.match('/tap');
+    if (!r) return null;
+    await c.delete('/tap');
+    const { id, t } = await r.json();
+    return Date.now() - t < 120000 ? id : null;
+  } catch { return null; }
+}
+async function checkTap() {
+  const id = await takeTap();
+  if (id) openById(id);
 }
 const keyBytes = (b64) => Uint8Array.from(atob(b64.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
 
@@ -1121,6 +1140,7 @@ $('#notify').onclick = (e) => { if (e.target.id === 'notify') $('#notify').hidde
 
 // A tapped notification opens the page at /m?w=<window>; go straight to that window.
 async function openById(id) {
+  if (current?.info.id === id) return; // the message and the stored tap can both arrive
   if (!windows.length) await refresh();
   const w = windows.find((x) => x.id === id);
   if (w) openTerm(w); else toast('That window is no longer open.');
@@ -1174,7 +1194,7 @@ $('#termview').addEventListener('touchend', (e) => {
 setVh();
 refresh().then(() => {
   const w = new URLSearchParams(location.search).get('w');
-  if (w) { history.replaceState(null, '', '/m'); openById(w); }
+  if (w) { history.replaceState(null, '', '/m'); takeTap(); openById(w); } else checkTap();
 });
 checkRestore();
 setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 4000);

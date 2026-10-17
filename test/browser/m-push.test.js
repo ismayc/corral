@@ -1,7 +1,8 @@
 // Notifications: the Alerts sheet, turning Web Push on and off, its settings, and tapped notifications.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { phone, win, settle, unloadPage } = require('../helpers/m');
+const { phone, win, settle, unloadPage, goBack } = require('../helpers/m');
+const { fakeCaches } = require('../helpers/caches');
 
 test.afterEach(async () => { await settle(); unloadPage(); });
 
@@ -221,4 +222,64 @@ test('a tapped notification before the list has loaded waits for it', async () =
   p.sw.emit('message', { open: 'late' });
   await settle();
   assert.equal(p.text('#ttitle'), 'late');
+});
+
+// What sw.js leaves in Cache Storage when a notification is tapped, for when its message never arrives.
+const tapped = (id, ago = 0) => fakeCaches(new Map([['/tap', JSON.stringify({ id, t: Date.now() - ago })]]));
+const withCaches = (caches) => ({ setup: (w) => { w.caches = caches; } });
+const visible = async (p) => { p.doc.dispatchEvent(new p.window.Event('visibilitychange')); await settle(); };
+
+test('a tap whose message was lost opens its window when the page comes back, once', async () => {
+  const caches = fakeCaches();
+  const p = await phone([win('a'), win('b')], withCaches(caches));
+  await p.openWin('a');
+  caches.entries.set('/tap', JSON.stringify({ id: 'b', t: Date.now() }));
+  await visible(p);
+  assert.equal(p.text('#ttitle'), 'b');
+  assert.equal(caches.entries.has('/tap'), false);
+  await goBack(p);
+  await visible(p);
+  assert.equal(p.$('#termview').hidden, true);
+});
+
+test('a tap older than two minutes is thrown away without opening anything', async () => {
+  const caches = tapped('a', 121000);
+  const p = await phone([win('a')], withCaches(caches));
+  await settle();
+  assert.equal(p.$('#termview').hidden, true);
+  assert.equal(caches.entries.has('/tap'), false);
+});
+
+test('a page started fresh by a tap opens the stored window', async () => {
+  const p = await phone([win('a')], withCaches(tapped('a')));
+  await settle();
+  assert.equal(p.text('#ttitle'), 'a');
+});
+
+test('a page opened at ?w= uses the link and clears the stored tap', async () => {
+  const caches = tapped('a');
+  const p = await phone([win('a')], { url: '/m?w=a', ...withCaches(caches) });
+  await settle();
+  assert.equal(p.text('#ttitle'), 'a');
+  assert.equal(p.terms.length, 1);
+  assert.equal(caches.entries.has('/tap'), false);
+});
+
+test('when the message and the stored tap both arrive the window opens once', async () => {
+  const caches = fakeCaches();
+  const p = await phone([win('a')], withCaches(caches));
+  caches.entries.set('/tap', JSON.stringify({ id: 'a', t: Date.now() }));
+  p.sw.emit('message', { open: 'a' });
+  await settle();
+  await visible(p);
+  assert.equal(p.terms.length, 1);
+  assert.equal(caches.entries.has('/tap'), false);
+});
+
+test('a tap for the window already on screen leaves it as it is', async () => {
+  const p = await phone([win('a')]);
+  await p.openWin('a');
+  p.sw.emit('message', { open: 'a' });
+  await settle();
+  assert.equal(p.terms.length, 1);
 });

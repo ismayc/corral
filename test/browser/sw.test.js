@@ -1,12 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
+const { fakeCaches } = require('../helpers/caches');
 
 const SW = path.join(__dirname, '..', '..', 'public', 'sw.js');
 const ORIGIN = 'https://mac.example:8443';
 
 // Loads sw.js against stand-in worker globals and returns the handlers it registered plus what it did.
-function boot({ windows = [], fetchImpl } = {}) {
+function boot({ windows = [], fetchImpl, caches } = {}) {
   const handlers = {};
   const rec = { shown: [], opened: [], skipped: 0, claimed: 0, fetches: [] };
   globalThis.self = {
@@ -20,6 +21,7 @@ function boot({ windows = [], fetchImpl } = {}) {
     registration: { showNotification: async (t, o) => { rec.shown.push({ title: t, ...o }); return 'shown'; } },
     location: { origin: ORIGIN },
   };
+  if (caches) globalThis.caches = caches;
   globalThis.fetch = async (u, o) => {
     rec.fetches.push({ url: u, ...o, body: JSON.parse(o.body) });
     return fetchImpl ? fetchImpl() : { ok: true, json: async () => ({}) };
@@ -44,6 +46,7 @@ const win = (url, extra = {}) => {
 test.afterEach(() => {
   delete globalThis.self;
   delete globalThis.fetch;
+  delete globalThis.caches;
   delete require.cache[require.resolve(SW)];
 });
 
@@ -136,6 +139,35 @@ test('tapping a notification closes it and focuses the open phone page, telling 
   assert.equal(phone.focused, 1);
   assert.deepEqual([other.posted, noFocus.posted], [[], []]);
   assert.deepEqual(rec.opened, []);
+});
+
+test('a tap is left in Cache Storage before the page is told, in case the message is lost', async () => {
+  const phone = win(`${ORIGIN}/m`);
+  const caches = fakeCaches();
+  const before = Date.now();
+  const { handlers } = boot({ windows: [phone], caches });
+  phone.postMessage = (m) => { phone.posted.push({ ...m, stored: caches.entries.has('/tap') }); };
+  const { e } = click('', { url: '/m?w=7' });
+  handlers.notificationclick(e);
+  await settle(e);
+  assert.deepEqual(caches.opened, ['corral-tap']);
+  const tap = JSON.parse(caches.entries.get('/tap'));
+  assert.equal(tap.id, '7');
+  assert.ok(tap.t >= before && tap.t <= Date.now());
+  assert.deepEqual(phone.posted, [{ open: '7', stored: true }]);
+});
+
+test('with no window in the link nothing is stored, and without Cache Storage the tap still opens', async () => {
+  const caches = fakeCaches();
+  let r = boot({ windows: [win(`${ORIGIN}/m`)], caches });
+  let c = click('', { url: '/m' });
+  r.handlers.notificationclick(c.e);
+  await settle(c.e);
+  assert.deepEqual(caches.opened, []);
+  r = boot(); // no caches global: remember() swallows the ReferenceError
+  c = click('', { url: '/m?w=3' });
+  r.handlers.notificationclick(c.e);
+  assert.deepEqual(await settle(c.e), ['opened']);
 });
 
 test('a page link without a w parameter posts open: null', async () => {

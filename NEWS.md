@@ -21,6 +21,11 @@ in `package.json`.
   change" closes the dialog and leaves Claude in plan mode, for the changes
   to go in as a message: Claude Code's own box for them once approved the
   plan instead in a test.
+- **A tapped notification opens its own window.** The tap was passed to the
+  open phone page by a single message, which an iPhone can drop while the
+  page is asleep, so the page woke on the window it showed last. The tap is
+  now also left in Cache Storage, and the page opens that window when it
+  comes back (ignoring a tap older than two minutes).
 
 - **Any file dropped on a Mac window pastes its path.** The browser never
   sees a dropped file's path, only its name, size, and modified time, so the
