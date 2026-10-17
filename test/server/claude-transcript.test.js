@@ -284,11 +284,15 @@ test('conversation carries Claude\'s status and the status lines from the screen
   assert.deepEqual(r.statusLines, ['  📁 chat · main', '  ⏵⏵ auto mode on']);
 });
 
-test('conversation has no status lines while a permission prompt replaces the input box, or without tmux', () => {
+test('conversation has no status lines while a permission prompt or question replaces the input box, or without tmux', () => {
   const { c, s, sessionId } = withClaude();
   c.claude(s, { sessionId, status: 'waiting', waitingFor: 'permission prompt' });
   c.transcript(sessionId, [user('hi')]);
   c.screen(s, ['─'.repeat(40), ' Bash command', '   ls'].join('\n'));
+  assert.deepEqual(c.srv.conversation(s).statusLines, []);
+  // A question dialog puts "Chat about this" and its footer under the last rule, which are not status lines.
+  c.claude(s, { sessionId, status: 'waiting', waitingFor: 'input needed' });
+  c.screen(s, ['Pick one', ' ❯ 1. A', '─'.repeat(40), '  2. Chat about this', 'Enter to select · Esc to cancel'].join('\n'));
   assert.deepEqual(c.srv.conversation(s).statusLines, []);
   s.tmux = false;
   c.claude(s, { sessionId, status: 'busy', pid: s.pty.pid });

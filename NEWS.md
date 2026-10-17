@@ -5,6 +5,16 @@ in `package.json`.
 
 ## Development version
 
+- **The phone answers Claude's questions.** When Claude Code asks with its
+  question dialog (its session file says `input needed`), the card and the
+  bar under the window show the question, a button per answer with its
+  description, a box for an answer of your own, Next on a question that
+  takes several answers, the review screen's Submit, and Cancel. Each answer
+  names the question it was shown for, so it is refused once Claude asks
+  something else. In Chat, the bar now shows what a permission prompt or
+  question asks, since the terminal is covered, and the dialog's own lines
+  are no longer shown as status lines.
+
 - **Any file dropped on a Mac window pastes its path.** The browser never
   sees a dropped file's path, only its name, size, and modified time, so the
   server finds the file from those: in Downloads, Desktop, Documents, or the

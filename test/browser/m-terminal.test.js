@@ -181,6 +181,9 @@ test('the subtitle follows the window and the bar hides when the window goes awa
   assert.equal(p.text('#tsub'), 'Needs permission · ~/repos/a');
   assert.equal(p.$('#askbar').hidden, false);
   assert.equal(p.text('#askbar .head'), 'Claude is asking for permission. Answer:');
+  // Chat covers the terminal, so the bar shows what is asked; the Terminal view shows only the answers.
+  assert.equal(p.text('#askbar pre'), 'Edit file');
+  p.$('#viewbtn').click();
   assert.equal(p.$('#askbar pre'), null);
   assert.deepEqual([...p.$$('#askbar button')].map((b) => b.textContent), ['Yes', 'Deny']);
   // The same prompt again leaves the bar as it is.

@@ -85,6 +85,16 @@
   .ask .answers button { text-align:left; font-size:15px; padding:9px 12px; }
   .ask .answers button.deny { border-color:var(--blocked); color:#ffb4ad; }
   .ask .answers button:disabled { opacity:.5; }
+  /* A question's answers: the answer, its description under it, and a box for an answer of your own. */
+  .ask .answers .label { display:block; }
+  .ask .answers .detail { display:block; margin-top:3px; font-size:13px; line-height:1.35; color:var(--muted); }
+  .ask .answers button.primary .detail { color:inherit; opacity:.85; }
+  .ask .answers button[aria-pressed="true"] { border-color:var(--idle); }
+  .ask .mine { display:flex; gap:6px; }
+  .ask .mine input { flex:1; min-width:0; padding:9px 12px; border-radius:10px; border:1px solid var(--rail);
+                     background:var(--ground); color:var(--text); font:16px -apple-system, BlinkMacSystemFont, sans-serif; }
+  .ask .mine input::placeholder { color:var(--muted); }
+  .ask .hint { margin-top:6px; font-size:13px; color:var(--muted); }
   #askbar { flex:none; max-height:45%; overflow-y:auto; padding:10px 10px 6px; background:var(--panel); border-top:2px solid var(--idle); }
   #askbar .head { font:600 15px var(--brand); color:#a6e9c4; margin-bottom:6px; }
   .card .top { display:flex; align-items:center; gap:8px; }

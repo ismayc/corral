@@ -45,7 +45,10 @@ function ago(ms) {
 // "Waiting" is a prompt Claude cannot get past without you: a permission prompt, or another dialog.
 function statusOf(w) {
   if (!w.claude) return { cls: '', text: 'Shell', rank: 2 };
-  if (w.claude.status === 'waiting') return { cls: 'need', text: w.claude.waitingFor === 'permission prompt' ? 'Needs permission' : 'Waiting on a prompt', rank: 0 };
+  if (w.claude.status === 'waiting') {
+    const text = { 'permission prompt': 'Needs permission', 'input needed': 'Has a question' }[w.claude.waitingFor] || 'Waiting on a prompt';
+    return { cls: 'need', text, rank: 0 };
+  }
   if (w.claude.status === 'busy') return { cls: 'busy', text: 'Working', rank: 1 };
   // Parked: idle after /clear, with nothing typed since. No work waits there, so it sits in its own group last.
   if (w.claude.status === 'idle' && w.claude.cleared) return { cls: 'idle', text: 'Parked', rank: 3 };
@@ -87,19 +90,69 @@ function askBlock(w, showText = true) {
       }, o.label)),
       h('button', { class: 'deny', onclick: (e) => answer('deny', e.currentTarget) }, 'Deny')));
 }
-// The same prompt, under the terminal of the window that asks.
+
+// A question Claude asks (its AskUserQuestion dialog): the question, a button per answer with its
+// description, a box for an answer of your own, Next on a question that takes several answers, and Cancel
+// (Esc). The list redraws its cards every few seconds, which would wipe a half-typed answer, so a card's
+// "Type something" opens the window instead (typing: false).
+function questionBlock(w, { text = true, typing = true } = {}) {
+  const q = w.question;
+  const block = h('div', { class: 'ask', onclick: (e) => e.stopPropagation() });
+  const answer = async (choice, said, typed) => {
+    for (const el of block.querySelectorAll('button, input')) el.disabled = true;
+    try {
+      const r = await fetch(`/api/sessions/${encodeURIComponent(w.id)}/answer`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: true, choice, key: q.key, ...(typed ? { text: typed } : {}) }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) toast(j.error || 'Could not answer.');
+      else if (said) toast(said);
+    } catch { toast('Could not reach the Mac.'); }
+    setTimeout(refresh, 400);
+  };
+  const mine = (o) => {
+    if (!typing) return h('button', { onclick: () => openTerm(w) }, 'Type your own answer…');
+    const input = h('input', { type: 'text', placeholder: 'Type your own answer', enterkeyhint: 'send' });
+    const go = () => { if (input.value.trim()) answer(o.n, `Answered: ${input.value.trim()}`, input.value); };
+    input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } };
+    return h('div', { class: 'mine' }, input, h('button', { class: 'primary', onclick: go }, 'Send'));
+  };
+  // An answer with a checkbox toggles it, which needs no notice: the box redraws ticked.
+  const button = (o, i) => {
+    const box = 'checked' in o;
+    return h('button', {
+      class: i === 0 && !q.multi ? 'primary' : '', 'aria-pressed': box ? String(o.checked) : null,
+      onclick: () => answer(o.n, box ? '' : `Answered: ${o.label}`),
+    }, h('span', { class: 'label' }, box ? `${o.checked ? '☑' : '☐'} ${o.label}` : o.label),
+    o.detail ? h('span', { class: 'detail' }, o.detail) : null);
+  };
+  const answers = q.options.filter((o) => !(o.free && q.multi)).map((o, i) => (o.free ? mine(o) : button(o, i)));
+  block.append(...[
+    text ? h('pre', {}, q.text) : null,
+    h('div', { class: 'answers' }, ...answers,
+      q.multi ? h('button', { class: 'primary', onclick: () => answer('next', '') }, 'Next') : null,
+      q.review ? null : h('button', { class: 'deny', onclick: () => answer('deny', 'Cancelled the question.') }, 'Cancel')),
+    q.multi && q.options.some((o) => o.free) ? h('div', { class: 'hint' }, 'To add an answer of your own here, type it in the terminal.') : null,
+  ].filter(Boolean));
+  return block;
+}
+
+// The same prompt or question, under the terminal of the window that asks. The terminal shows what Claude
+// asks, so there the bar has only the answers; Chat covers the terminal, so there it has the words too.
 let askShown = '';
 let askWindow = null;
 function renderAskbar(w) {
   askWindow = w;
   const bar = $('#askbar');
-  const trust = !w?.prompt && current?.trust;
-  const key = w?.prompt ? JSON.stringify(w.prompt) : trust ? 'trust' : '';
+  const chat = Boolean(current?.chat);
+  const trust = !w?.prompt && !w?.question && current?.trust;
+  const key = w?.prompt || w?.question ? JSON.stringify([w.prompt || w.question, chat]) : trust ? 'trust' : '';
   if (key === askShown) return;
   askShown = key;
   bar.hidden = !key;
-  // The terminal above already shows what Claude asks, so the bar has only the answers.
-  if (w?.prompt) bar.replaceChildren(h('div', { class: 'head' }, 'Claude is asking for permission. Answer:'), askBlock(w, false));
+  if (w?.prompt) bar.replaceChildren(h('div', { class: 'head' }, 'Claude is asking for permission. Answer:'), askBlock(w, chat));
+  else if (w?.question) bar.replaceChildren(h('div', { class: 'head' }, w.question.review ? 'Check your answers, then submit:' : 'Claude has a question. Answer:'), questionBlock(w, { text: chat }));
   else if (trust) {
     bar.replaceChildren(h('div', { class: 'head' }, 'Claude Code asks whether to trust this folder.'),
       h('div', { class: 'ask' }, h('div', { class: 'answers' },
@@ -328,7 +381,7 @@ function renderList() {
         h('button', { class: 'more', 'aria-label': `More for ${w.label}`, onclick: (e) => { stop(e); windowMenu(w); } }, '⋯')),
       h('div', { class: 'where' }, `${home(w.cwd)}${w.activity ? ` · ${ago(w.activity)}` : ''}`),
       tags.length ? h('div', { class: 'tags' }, ...tags) : null,
-      w.prompt ? askBlock(w) : null));
+      w.prompt ? askBlock(w) : w.question ? questionBlock(w, { typing: false }) : null));
   }
   const spacer = h('div', { 'aria-hidden': 'true' });
   const keep = list.scrollTop; // the list redraws every few seconds; stay where the reader is
@@ -716,7 +769,7 @@ function renderView() {
   $('#viewbtn').hidden = !claude;
   $('#viewbtn').textContent = chat ? 'Terminal' : 'Chat';
   $('#convo').hidden = !chat;
-  if (current.chat !== chat) { current.chat = chat; sendSize(current); }
+  if (current.chat !== chat) { current.chat = chat; sendSize(current); renderAskbar(askWindow); }
   if (chat && !convo) {
     convo = { id: current.info.id, timer: setInterval(loadConvo, 3000), sig: '', drawn: false };
     $('#chat').replaceChildren(h('div', { class: 'note' }, 'Loading…'));

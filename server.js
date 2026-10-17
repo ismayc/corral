@@ -540,12 +540,14 @@ function overview({ screens = true } = {}) {
         cleared: screens && wasCleared(claude) } : null,
       askKey: claude?.waitingFor === 'permission prompt' ? promptKey(claude) : null,
       prompt: screen && claude.waitingFor === 'permission prompt' ? withKey(permissionPrompt(s.id, screen), claude) : null,
+      question: screen && claude.waitingFor === 'input needed' ? withQuestionKey(questionPrompt(s.id, screen), claude) : null,
       muted: Boolean(push.muted[s.id]),
     };
   });
 }
 
 const withKey = (p, claude) => (p ? { ...p, key: promptKey(claude) } : null);
+const withQuestionKey = (q, claude) => (q ? { ...q, key: questionKey(claude, q) } : null);
 
 function screenLines(id) {
   try { return tmux('capture-pane', '-p', '-t', SESSION_PREFIX + id).split('\n').map((l) => l.trimEnd()); } catch { return null; }
@@ -724,7 +726,8 @@ function conversation(s) {
       for (const x of content) if (x?.type === 'text' && x.text.trim()) add('claude', x.text.trim(), d.timestamp);
     }
   }
-  const screen = s.tmux && c.waitingFor !== 'permission prompt' ? screenLines(s.id) : null;
+  // While a prompt or question is open the input box is gone, and the lines under the last rule are its own.
+  const screen = s.tmux && !c.waitingFor ? screenLines(s.id) : null;
   return {
     status: 200, items: items.slice(-300), cut: items.length > 300 || fs.statSync(file).size > MAX,
     claude: c.status, statusLines: screen ? screenStatus(screen) : [],
@@ -793,6 +796,91 @@ function answerPrompt(s, choice, key) {
   if (choice === 'deny') tmux('send-keys', '-t', SESSION_PREFIX + s.id, 'Escape');
   else if (p.options.some((o) => o.n === choice)) tmux('send-keys', '-t', SESSION_PREFIX + s.id, '-l', choice);
   else return { status: 400, error: 'that is not one of the answers' };
+  return { status: 200, ok: true };
+}
+
+// Claude Code's question dialog (its AskUserQuestion tool), read from the window's screen. The session file
+// says only "waitingFor": "input needed"; the screen has the question, its numbered answers each with a
+// description under it, "Type something." for an answer of your own and, under a rule, "Chat about this",
+// over a footer "Enter to select · ... · Esc to cancel". Several questions come as tabs
+// ("←  ☐ Fruit  ☐ Colors  ✔ Submit  →") and end on "Review your answers", which has no footer:
+//   Ready to submit your answers? / ❯ 1. Submit answers / 2. Cancel
+// A multi-select question puts "[ ]" or "[✔]" before each answer and "Submit" under them. Checked against
+// Claude Code 2.1.302: a number picks an answer and moves to the next question, toggles one on a
+// multi-select question, or opens the box of "Type something" (type, then Enter); Right moves on from a
+// multi-select question; Esc cancels. The box of "Type something" on a multi-select question did not take
+// keys sent this way.
+function questionPrompt(id, screen) {
+  const lines = screen || screenLines(id);
+  if (!lines) return null;
+  const opt = (l) => l.match(/^\s*(?:❯\s*)?(\d+)\.\s+(.*)$/);
+  let end = lines.findLastIndex((l) => /^\s*Enter to select\b.*Esc to cancel\s*$/.test(l));
+  const review = end < 0;
+  if (review) {
+    const ready = lines.findLastIndex((l) => /^\s*Ready to submit your answers\?/.test(l));
+    end = lines.findLastIndex((l) => opt(l)) + 1;
+    if (ready < 0 || end <= ready) return null;
+  }
+  let first = -1;
+  for (let j = end - 1; j >= 0 && end - j < 60; j--) if (opt(lines[j])?.[1] === '1') { first = j; break; }
+  if (first < 0) return null;
+  const options = [];
+  for (let j = first; j < end; j++) {
+    const m = opt(lines[j]);
+    const t = lines[j].trim();
+    if (m && Number(m[1]) === options.length + 1) options.push({ n: m[1], label: m[2].trim(), detail: '' });
+    else if (t && !/^─{20,}$/.test(t) && t !== 'Submit') {
+      const o = options[options.length - 1];
+      o.detail = o.detail ? rejoin(o.detail, t) : t;
+    }
+  }
+  // The question runs up to the row of tabs, or to the rule over the dialog when there are none.
+  let top = first;
+  while (top > 0 && !/^─{20,}$/.test(lines[top - 1].trim()) && !/^\s*(?:←\s+)?[☐☒✔]\s/.test(lines[top - 1])) top--;
+  // A line the terminal wrapped joins the one above it; a blank line or a "●" or "→" line starts a new one.
+  const text = [];
+  let gap = false;
+  for (const l of lines.slice(top, first)) {
+    const t = l.replace(/^\s?│ ?/, '').trim();
+    if (!t) gap = text.length > 0;
+    else if (text.length && !gap && !/^[●→]/.test(t)) text[text.length - 1] = rejoin(text[text.length - 1], t);
+    else { if (gap) text.push(''); text.push(t); gap = false; }
+  }
+  const answers = options.map((o) => {
+    const box = o.label.match(/^\[(.)\]\s*(.*)$/);
+    const label = (box ? box[2] : o.label).slice(0, 160);
+    return { n: o.n, label, detail: o.detail.slice(0, 400), ...(box ? { checked: box[1] !== ' ' } : {}),
+      ...(/^Type something\.?$/.test(label) ? { free: true } : {}) };
+  });
+  return { text: text.join('\n'), review, multi: answers.some((o) => 'checked' in o), options: answers };
+}
+
+// Names one question. The session file's time stays the same while you go from one question of a dialog
+// to the next, so the question's own words (without spaces, so a rewrap does not change them) go in too.
+const questionKey = (claude, q) => crypto.createHash('sha256')
+  .update(`${claude.sessionId}:${claude.since}:${q.text.replace(/\s+/g, '')}`).digest('hex').slice(0, 16);
+
+// Answers a question: a numbered answer (with the words for "Type something"), "next" to move on from a
+// multi-select question, or "deny" to cancel. The question is read again first, as for a permission prompt.
+function answerQuestion(s, choice, key, text) {
+  const c = windowClaude(s);
+  if (c?.waitingFor !== 'input needed') return { status: 409, error: 'no question is open in this window' };
+  const q = questionPrompt(s.id);
+  if (!q) return { status: 409, error: 'could not read the question on the screen' };
+  if (key !== questionKey(c, q)) return { status: 409, error: 'Claude is asking something else now. Look again before answering.' };
+  const target = SESSION_PREFIX + s.id;
+  const o = q.options.find((x) => x.n === choice);
+  const typed = typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
+  if (choice === 'deny') tmux('send-keys', '-t', target, 'Escape');
+  else if (choice === 'next' && q.multi) tmux('send-keys', '-t', target, 'Right');
+  else if (!o) return { status: 400, error: 'that is not one of the answers' };
+  // On a multi-select question the typed words were lost and Enter toggled the answer under ❯ (2.1.302).
+  else if (o.free && q.multi) return { status: 400, error: 'type your own answer in the terminal' };
+  else if (o.free && !typed) return { status: 400, error: 'type your answer first' };
+  else {
+    tmux('send-keys', '-t', target, '-l', choice);
+    if (o.free) { tmux('send-keys', '-t', target, '-l', typed); tmux('send-keys', '-t', target, 'Enter'); }
+  }
   return { status: 200, ok: true };
 }
 
@@ -1531,13 +1619,18 @@ const server = http.createServer(async (req, res) => {
     if (!s || s.exited) return send(res, 404, { error: 'no such window' });
     if (act[2] === 'prompt' && req.method === 'GET') {
       const c = windowClaude(s);
-      return send(res, 200, { prompt: c?.waitingFor === 'permission prompt' ? withKey(permissionPrompt(s.id), c) : null });
+      return send(res, 200, {
+        prompt: c?.waitingFor === 'permission prompt' ? withKey(permissionPrompt(s.id), c) : null,
+        question: c?.waitingFor === 'input needed' ? withQuestionKey(questionPrompt(s.id), c) : null,
+      });
     }
     if (act[2] === 'answer' && req.method === 'POST') {
       if (!s.tmux) return send(res, 409, { error: 'this window has no tmux session' });
       const body = await readJson(req);
       if (!body || typeof body.choice !== 'string') return send(res, 400, { error: 'bad json' });
-      const { status, ...r } = answerPrompt(s, body.choice, typeof body.key === 'string' ? body.key : null);
+      const key = typeof body.key === 'string' ? body.key : null;
+      // {question: true} answers Claude's question dialog; otherwise the answer is to a permission prompt.
+      const { status, ...r } = body.question ? answerQuestion(s, body.choice, key, body.text) : answerPrompt(s, body.choice, key);
       return send(res, status, r);
     }
     if (act[2] === 'key' && req.method === 'POST') {
@@ -1735,7 +1828,7 @@ module.exports = {
   loadLedger, seedFromSnapshots, updateLedger, ledgerView, cleanCategories, loadCategories, saveCategories,
   writeJson, readJsonFile, claudeUnder, processChildren, openWindows, overview, withKey, screenLines, screenMode, screenStatus,
   sendCardKey, renameWindow, transcriptFile, wasCleared, tailLines, lastReply, typedText, conversation, windowHistory, rejoin,
-  permissionPrompt, promptKey, windowClaude, answerPrompt, frontMatter, slashCommands, git, windowChanges, saveUpload, loadPush, savePush,
+  permissionPrompt, promptKey, windowClaude, answerPrompt, questionPrompt, questionKey, answerQuestion, frontMatter, slashCommands, git, windowChanges, saveUpload, loadPush, savePush,
   vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, pruneUploads,
   locateFile, cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows,
   reopenProject, newRepos, hideRepo, identityRoots, herdrSnapshot, rootFor, listDir, loadOpenWith, saveOpenWith, fileKind, spaceFile,

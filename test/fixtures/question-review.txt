@@ -1,0 +1,15 @@
+earlier output
+────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☒ Fruit  ☒ Colors  ✔ Submit  →
+
+Review your answers
+
+ ● Pick a fruit
+   → Apple
+ ● Pick colors
+   → Green
+
+Ready to submit your answers?
+
+❯ 1. Submit answers
+  2. Cancel

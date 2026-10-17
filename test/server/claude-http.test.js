@@ -94,16 +94,16 @@ test('a window action used with the wrong method falls through to not found', ()
 
 test('GET /api/sessions/:id/prompt returns the open permission prompt with its key', () => withServer({}, async (c, req) => {
   const s = c.open('a');
-  assert.deepEqual((await req('GET', `/api/sessions/${s.id}/prompt`)).json, { prompt: null });
+  assert.deepEqual((await req('GET', `/api/sessions/${s.id}/prompt`)).json, { prompt: null, question: null });
   const id = c.claude(s, { status: 'waiting', waitingFor: 'input' });
   c.screen(s, promptScreen());
-  assert.deepEqual((await req('GET', `/api/sessions/${s.id}/prompt`)).json, { prompt: null });
+  assert.deepEqual((await req('GET', `/api/sessions/${s.id}/prompt`)).json, { prompt: null, question: null });
   c.claude(s, { sessionId: id, status: 'waiting', waitingFor: 'permission prompt', statusUpdatedAt: 55 });
   const r = (await req('GET', `/api/sessions/${s.id}/prompt`)).json.prompt;
   assert.equal(r.key, c.srv.promptKey({ sessionId: id, since: 55 }));
   assert.deepEqual(r.options.map((o) => o.n), ['1', '2', '3']);
   c.screen(s, 'cleared');
-  assert.deepEqual((await req('GET', `/api/sessions/${s.id}/prompt`)).json, { prompt: null });
+  assert.deepEqual((await req('GET', `/api/sessions/${s.id}/prompt`)).json, { prompt: null, question: null });
 }));
 
 function asking(c) {

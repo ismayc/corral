@@ -1,0 +1,18 @@
+earlier output
+────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☐ Fruit  ☐ Colors  ✔ Submit  →
+
+Pick a fruit
+
+❯ 1. Apple
+     A crisp, round fruit with white flesh and thin skin. Apples keep well and are eaten fresh,
+     baked, or pressed into juice. They come in many varieties, from tart green ones to sweet red
+     ones.
+  2. Pear
+     A soft, bell-shaped fruit with grainy, juicy flesh and a mild sweetness. Pears ripen best off
+     the tree and are often eaten fresh or poached. They bruise easily, so handle them with care.
+  3. Type something.
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to cancel
