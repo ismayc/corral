@@ -46,10 +46,10 @@ test('a Claude window opens on the conversation, with a time over each of your p
     ['note', 'Older messages are not shown.'],
     ['when', `${date(day1)}, ${time(day1)}`],
     ['msg you', 'Fix the tests'],
-    ['msg claude', 'Fixed.'],
+    ['msg claude md', 'Fixed.'],
     ['when', time(day1b)],
     ['msg you', 'Now commit'],
-    ['msg claude', 'Committed.'],
+    ['msg claude md', 'Committed.'],
     ['when', `${date(day2)}, ${time(day2)}`],
     ['msg you', 'Next day'],
     ['msg you', 'No time'],
@@ -101,7 +101,7 @@ test('the conversation is read again every three seconds while the page is visib
   mock.timers.tick(3000);
   await settle();
   assert.equal(convoCalls(p), 2);
-  assert.deepEqual(bubbles(p), [['msg you', 'one'], ['msg claude', 'two']]);
+  assert.deepEqual(bubbles(p), [['msg you', 'one'], ['msg claude md', 'two']]);
   Object.defineProperty(p.window.document, 'visibilityState', { value: 'hidden', configurable: true });
   mock.timers.tick(3000);
   await settle();

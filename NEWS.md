@@ -14,6 +14,13 @@ in `package.json`.
   something else. In Chat, the bar now shows what a permission prompt or
   question asks, since the terminal is covered, and the dialog's own lines
   are no longer shown as status lines.
+- **The phone approves plans.** A plan from plan mode asks with a
+  permission prompt that has no "Esc to cancel" line, so the phone showed
+  no answers for it. Its answers now show, with Read the plan, which opens
+  the whole plan from its file in `~/.claude/plans`. "Tell Claude what to
+  change" closes the dialog and leaves Claude in plan mode, for the changes
+  to go in as a message: Claude Code's own box for them once approved the
+  plan instead in a test.
 
 - **Any file dropped on a Mac window pastes its path.** The browser never
   sees a dropped file's path, only its name, size, and modified time, so the

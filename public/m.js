@@ -67,9 +67,12 @@ function paintTerm() {
 }
 
 // What a permission prompt asks, with a button per answer. Esc denies; Claude Code's own "No" answer is
-// left out because Deny does the same and is always there.
+// left out because Deny does the same and is always there. A plan from plan mode (p.plan, read from its
+// file) can be read in full, and its Deny is "Tell Claude what to change": Esc leaves Claude in plan mode,
+// and the changes go in the message box.
 function askBlock(w, showText = true) {
   const p = w.prompt;
+  const plan = 'plan' in p;
   const answer = async (choice, btn) => {
     for (const b of btn.parentNode.children) b.disabled = true;
     try {
@@ -77,18 +80,22 @@ function askBlock(w, showText = true) {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ choice, key: p.key }),
       });
       const j = await r.json().catch(() => ({}));
-      toast(r.ok ? (choice === 'deny' ? `Denied. ${w.label} will ask what to do instead.` : `Answered: ${btn.textContent}`) : j.error || 'Could not answer.');
+      const denied = plan ? `Plan not approved. Type what to change in ${w.label}'s message box.` : `Denied. ${w.label} will ask what to do instead.`;
+      toast(r.ok ? (choice === 'deny' ? denied : `Answered: ${btn.textContent}`) : j.error || 'Could not answer.');
     } catch { toast('Could not reach the Mac.'); }
     setTimeout(refresh, 600);
   };
+  const readPlan = () => sheet(`${w.label}: the plan`,
+    p.plan ? h('div', { class: 'plan md' }, markdown(p.plan)) : h('p', {}, 'Could not read the plan file. The terminal shows it.'));
   const stop = (e) => e.stopPropagation();
   return h('div', { class: 'ask', onclick: stop },
     showText ? h('pre', {}, p.text) : null,
+    plan ? h('div', { class: 'answers' }, h('button', { onclick: readPlan }, 'Read the plan')) : null,
     h('div', { class: 'answers' },
       ...p.options.filter((o) => !/^No\b/.test(o.label) || o.n === '1').map((o, i) => h('button', {
         class: i === 0 ? 'primary' : '', onclick: (e) => answer(o.n, e.currentTarget),
       }, o.label)),
-      h('button', { class: 'deny', onclick: (e) => answer('deny', e.currentTarget) }, 'Deny')));
+      h('button', { class: 'deny', onclick: (e) => answer('deny', e.currentTarget) }, plan ? 'Tell Claude what to change' : 'Deny')));
 }
 
 // A question Claude asks (its AskUserQuestion dialog): the question, a button per answer with its
@@ -914,7 +921,7 @@ function chatItems(r) {
       els.push(h('div', { class: 'when' }, day === lastDay ? time : `${at.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}, ${time}`));
       lastDay = day;
     }
-    els.push(h('div', { class: `msg ${it.who}` }, it.who === 'claude' ? markdown(it.text) : it.text));
+    els.push(h('div', { class: `msg ${it.who}${it.who === 'claude' ? ' md' : ''}` }, it.who === 'claude' ? markdown(it.text) : it.text));
   }
   if (r.claude === 'busy') els.push(h('div', { class: 'working' }, 'Claude is working…'));
   return els;

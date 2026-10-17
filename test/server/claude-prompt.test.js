@@ -184,3 +184,35 @@ test('windowHistory throws when tmux cannot read the window', () => {
   const c = setup();
   assert.throws(() => c.srv.windowHistory('missing'), /can't find session/);
 });
+
+// A plan from plan mode, laid out as Claude Code 2.1.302 draws it (captured October 17, 2026).
+const planScreen = (file = '~/.claude/plans/steady-hamming.md') => require('fs')
+  .readFileSync(require('path').join(__dirname, '..', 'fixtures', 'plan-prompt.txt'), 'utf8')
+  .replace('~/.claude/plans/steady-hamming.md', file).split('\n');
+
+test('permissionPrompt reads a plan prompt by its footer, without its hint line or answer 3, and with the plan file', () => {
+  const c = setup();
+  const plans = require('path').join(c.home, '.claude', 'plans');
+  require('fs').mkdirSync(plans, { recursive: true });
+  require('fs').writeFileSync(require('path').join(plans, 'steady-hamming.md'), '# Plan: create farewell.txt\n');
+  const p = c.srv.permissionPrompt('x', planScreen());
+  assert.equal(p.text, 'Claude has written up a plan and is ready to execute. Would you like to proceed?');
+  assert.deepEqual(p.options, [{ n: '1', label: 'Yes, and use auto mode' }, { n: '2', label: 'Yes, manually approve edits' }]);
+  assert.equal(p.plan, '# Plan: create farewell.txt\n');
+});
+
+test('a plan prompt whose file is missing or outside ~/.claude/plans has an empty plan', () => {
+  const { srv } = setup();
+  assert.equal(srv.permissionPrompt('x', planScreen()).plan, '');
+  const away = srv.permissionPrompt('x', planScreen('/tmp/elsewhere/plan.md'));
+  assert.equal(away.plan, '');
+  assert.equal(away.options.length, 2);
+  assert.equal(srv.readPlan(undefined), '');
+});
+
+test('permissionPrompt without a plan footer has no plan field and keeps every answer', () => {
+  const { srv } = setup();
+  const p = srv.permissionPrompt('x', ['Go?', ' ❯ 1. Yes', '  2. Tell Claude what to change', 'Esc to cancel']);
+  assert.equal('plan' in p, false);
+  assert.equal(p.options.length, 2);
+});

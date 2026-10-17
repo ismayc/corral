@@ -314,3 +314,33 @@ test('the sheet closes with its × or a tap outside it, not a tap inside', async
   p.$('#genx').click();
   assert.equal(p.sheetTitle(), null);
 });
+
+// A plan from plan mode: the plan can be read in full, and Deny says what it does there.
+const PLAN = { key: 'kp', text: 'Would you like to proceed?', plan: '# Plan: farewell\n\n- write **farewell.txt**',
+  options: [{ n: '1', label: 'Yes, and use auto mode' }, { n: '2', label: 'Yes, manually approve edits' }] };
+
+test('a plan prompt offers to read the plan, which opens as Markdown in a sheet', async () => {
+  const p = await phone([asking({ prompt: PLAN })]);
+  const ask = p.card('a').querySelector('.ask');
+  assert.deepEqual([...ask.querySelectorAll('button')].map((b) => b.textContent),
+    ['Read the plan', 'Yes, and use auto mode', 'Yes, manually approve edits', 'Tell Claude what to change']);
+  p.button('Read the plan', ask).click();
+  assert.equal(p.sheetTitle(), 'a: the plan');
+  assert.equal(p.$('#genbody .plan h1').textContent, 'Plan: farewell');
+  assert.equal(p.$('#genbody .plan strong').textContent, 'farewell.txt');
+  assert.equal(p.$('#termview').hidden, true);
+});
+
+test('a plan whose file could not be read says so in the sheet', async () => {
+  const p = await phone([asking({ prompt: { ...PLAN, plan: '' } })]);
+  p.button('Read the plan', p.card('a')).click();
+  assert.equal(p.text('#genbody p'), 'Could not read the plan file. The terminal shows it.');
+});
+
+test('"Tell Claude what to change" sends deny and says to type the changes', async () => {
+  const p = await phone([asking({ prompt: PLAN })], { routes: { 'POST /api/sessions/a/answer': { ok: true } } });
+  p.button('Tell Claude what to change', p.card('a')).click();
+  await settle();
+  assert.deepEqual(p.api.called('POST', '/api/sessions/a/answer')[0].body, { choice: 'deny', key: 'kp' });
+  assert.equal(p.toast(), "Plan not approved. Type what to change in a's message box.");
+});

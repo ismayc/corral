@@ -744,13 +744,21 @@ function windowHistory(id) {
 //   Bash command / <what it wants to run> / Do you want to proceed? / ❯ 1. Yes / 2. ... / 4. No / Esc to cancel
 // Pressing an answer's number picks it, and Esc denies (both checked against Claude Code 2.1.292).
 // Claude Code wraps at spaces, and splits a word only when it is too long for the line (such as a path).
+// A plan from plan mode asks with the same status but its own footer, naming the plan's file:
+//   Would you like to proceed? / ❯ 1. Yes, and use auto mode / 2. Yes, manually approve edits /
+//   3. Tell Claude what to change / shift+tab to approve with this feedback / ctrl+g to edit in VS Code · <file>
+// Its answer 3 opens a box for the changes. Once in a test (Claude Code 2.1.302) Enter there approved the
+// plan instead, so answer 3 is left out: Esc closes the dialog and leaves Claude in plan mode, and the
+// changes go in as a message.
 const rejoin = (a, b) => (/\S{30,}$/.test(a) ? a + b : `${a} ${b}`);
 function permissionPrompt(id, screen) {
   const lines = screen || screenLines(id);
   if (!lines) return null;
-  const end = lines.findLastIndex((l) => /^\s*Esc to cancel/.test(l));
+  const end = lines.findLastIndex((l) => /^\s*(?:Esc to cancel|ctrl\+g to edit in )/.test(l));
   if (end < 0) return null;
-  // The answers are the last run numbered 1, 2, 3... above "Esc to cancel". A line between two answers
+  // Only a plan's footer names a file to edit. Corral reads it only from ~/.claude/plans.
+  const planFile = lines[end].match(/^\s*ctrl\+g to edit in .*· (\S+)$/)?.[1];
+  // The answers are the last run numbered 1, 2, 3... above the footer. A line between two answers
   // continues the one above it, whether Claude Code indented the wrap or the terminal broke the line.
   const opt = (l) => l.match(/^\s*(?:❯\s*)?(\d)\.\s+(.*)$/);
   let first = -1;
@@ -760,7 +768,9 @@ function permissionPrompt(id, screen) {
   for (let j = first; j < end; j++) {
     const m = opt(lines[j]);
     if (m && Number(m[1]) === options.length + 1) options.push({ n: m[1], label: m[2].trim() });
-    else if (lines[j].trim()) options[options.length - 1].label = rejoin(options[options.length - 1].label, lines[j].trim());
+    else if (lines[j].trim() && !/^shift\+tab to approve/.test(lines[j].trim())) {
+      options[options.length - 1].label = rejoin(options[options.length - 1].label, lines[j].trim());
+    }
   }
   const i = first - 1;
   // The prompt's own text runs from the full-width rule above it down to the answers.
@@ -770,7 +780,20 @@ function permissionPrompt(id, screen) {
     .filter((l) => l.trim() && !/^[╌─]{20,}$/.test(l.trim()) && !/^\s*Tip:/.test(l))
     .map((l) => l.replace(/^\s?│ ?/, '').replace(/^ /, ''))
     .slice(-30);
-  return { text: text.join('\n'), options: options.map((o) => ({ n: o.n, label: o.label.slice(0, 160) })) };
+  // A plan prompt is indented further than other prompts.
+  const indent = Math.min(...text.map((l) => l.match(/^ */)[0].length));
+  const answers = options.filter((o) => !(planFile && /^Tell Claude what to change/.test(o.label)));
+  return {
+    text: text.map((l) => l.slice(indent)).join('\n'), options: answers.map((o) => ({ n: o.n, label: o.label.slice(0, 160) })),
+    ...(planFile ? { plan: readPlan(planFile.match(/^~\/\.claude\/plans\/([\w.-]+\.md)$/)?.[1]) } : {}),
+  };
+}
+
+// The plan a plan-mode prompt asks about, from its file in ~/.claude/plans, so the phone can show all of
+// it (the screen shows only what fits). Empty when the file is elsewhere or cannot be read.
+function readPlan(name) {
+  if (!name) return '';
+  try { return fs.readFileSync(path.join(CLAUDE_DIR, 'plans', name), 'utf8').slice(0, 40000); } catch { return ''; }
 }
 
 // Names one permission prompt, so an answer meant for it is refused once another prompt has taken its
@@ -1828,7 +1851,7 @@ module.exports = {
   loadLedger, seedFromSnapshots, updateLedger, ledgerView, cleanCategories, loadCategories, saveCategories,
   writeJson, readJsonFile, claudeUnder, processChildren, openWindows, overview, withKey, screenLines, screenMode, screenStatus,
   sendCardKey, renameWindow, transcriptFile, wasCleared, tailLines, lastReply, typedText, conversation, windowHistory, rejoin,
-  permissionPrompt, promptKey, windowClaude, answerPrompt, questionPrompt, questionKey, answerQuestion, frontMatter, slashCommands, git, windowChanges, saveUpload, loadPush, savePush,
+  permissionPrompt, readPlan, promptKey, windowClaude, answerPrompt, questionPrompt, questionKey, answerQuestion, frontMatter, slashCommands, git, windowChanges, saveUpload, loadPush, savePush,
   vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, pruneUploads,
   locateFile, cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows,
   reopenProject, newRepos, hideRepo, identityRoots, herdrSnapshot, rootFor, listDir, loadOpenWith, saveOpenWith, fileKind, spaceFile,
