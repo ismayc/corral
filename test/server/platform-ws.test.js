@@ -60,6 +60,21 @@ test('a socket for a window gets its scrollback, live output, and sends keystrok
   await until(() => s.clients.size === 0, 'the socket to leave');
 });
 
+test('a socket joining after the modes left the scrollback gets them set again first, screen switch leading', async (t) => {
+  const { srv, ptys, connect } = await world(t);
+  const s = srv.createSession(os.tmpdir(), 'x');
+  // What tmux sends when its client attaches, then over a day of output.
+  ptys[0].emitData('\x1b[?1049h\x1b[?1000l\x1b[?2004h\x1b[?1003;1006h\x1b[?;25l');
+  ptys[0].emitData('x'.repeat(256 * 1024));
+  ptys[0].emitData('\x1b[?25htail');
+  const c = await connect(`id=${s.id}`);
+  await until(() => c.got.length, 'the scrollback');
+  const [first] = c.got;
+  assert.equal(first.slice(0, first.indexOf('x')), '\x1b[?1049h\x1b[?1000l\x1b[?2004h\x1b[?1003h\x1b[?1006h\x1b[?25l');
+  assert.equal(first.endsWith('\x1b[?25htail'), true);
+  assert.equal(first.length - first.indexOf('x'), 256 * 1024, 'the replay itself is unchanged');
+});
+
 test('a window with nothing printed yet sends no scrollback, and a resize the pty rejects is ignored', async (t) => {
   const { srv, ptys, connect } = await world(t);
   const s = srv.createSession(os.tmpdir(), 'x');

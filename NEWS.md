@@ -38,6 +38,13 @@ in `package.json`.
   Code marks (OSC 8, which tmux now passes on, so a long address wrapped
   onto two lines opens whole), plain http(s) text in any window, and the
   links in phone Chat, which used to open at once.
+- **Scrolling works again on the Mac once Corral has run a while.** A Mac
+  page gets a window's last 256 KB of output when it connects. tmux turns
+  mouse reporting on only once, when its client attaches, so after enough
+  output that was no longer in the replay: the page never turned mouse
+  reporting on, and the wheel scrolled its own empty scrollback instead of
+  reaching Claude Code. The server now keeps the terminal modes set by the
+  output it trims and sends them ahead of the replay.
 
 - **Any file dropped on a Mac window pastes its path.** The browser never
   sees a dropped file's path, only its name, size, and modified time, so the

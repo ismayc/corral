@@ -227,15 +227,32 @@ function attachPty(id, dir, useTmux, agent, resume, prompt) {
   return pty.spawn(file, args, { name: 'xterm-256color', cols: 100, rows: 30, cwd: dir, env });
 }
 
+// The terminal modes (DEC private modes: mouse reporting, the alternate screen, bracketed paste, and so on)
+// set by output trimmed off the front of a window's replay. tmux sets them once, when its client attaches,
+// so after a day of output they are gone from the replay, and a page joining then never turned mouse
+// reporting on: the wheel scrolled the browser's own empty scrollback instead of reaching Claude Code.
+function noteModes(modes, text) {
+  for (const m of text.matchAll(/\x1b\[\?([\d;]+)([hl])/g)) for (const n of m[1].split(';')) if (n) modes.set(n, m[2]);
+}
+// Sets those modes again ahead of the replay. The screen switches come first, since they clear the screen.
+function modePrefix(modes) {
+  const screen = (n) => (['47', '1047', '1049'].includes(n) ? 0 : 1);
+  return [...modes].sort(([a], [b]) => screen(a) - screen(b)).map(([n, v]) => `\x1b[?${n}${v}`).join('');
+}
+
 function register(id, dir, label, created, useTmux, space, agent, resume, prompt) {
   const s = {
-    id, pty: null, buf: '', clients: new Set(), cwd: dir, space: space || null,
+    id, pty: null, buf: '', modes: new Map(), clients: new Set(), cwd: dir, space: space || null,
     label: label || path.basename(dir) || dir, exited: false, created, tmux: useTmux,
   };
   s.pty = attachPty(id, dir, useTmux, agent, resume, prompt);
   s.pty.onData((d) => {
     s.buf += d;
-    if (s.buf.length > SCROLLBACK_BYTES) s.buf = s.buf.slice(-SCROLLBACK_BYTES);
+    if (s.buf.length > SCROLLBACK_BYTES) {
+      const cut = s.buf.length - SCROLLBACK_BYTES;
+      noteModes(s.modes, s.buf.slice(0, cut));
+      s.buf = s.buf.slice(cut);
+    }
     for (const ws of s.clients) if (ws.readyState === 1) ws.send(d);
   });
   s.pty.onExit(({ exitCode }) => {
@@ -1790,7 +1807,7 @@ server.on('upgrade', (req, socket, head) => {
       });
     } else {
       s.clients.add(ws);
-      if (s.buf) ws.send(s.buf);
+      if (s.buf) ws.send(modePrefix(s.modes) + s.buf);
     }
     ws.on('message', (raw) => {
       let m;
