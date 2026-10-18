@@ -32,6 +32,12 @@ in `package.json`.
   finished with nothing typed since, is listed under Auto-compacted windows
   on the Mac and on the phone. A manual `/compact` does not count, and
   typing anything moves the window back.
+- **Links in a window open after you confirm.** Clicking a link on the Mac
+  or tapping one on the phone shows the address with Open in browser and
+  Cancel, and Open uses that device's browser. This covers the links Claude
+  Code marks (OSC 8, which tmux now passes on, so a long address wrapped
+  onto two lines opens whole), plain http(s) text in any window, and the
+  links in phone Chat, which used to open at once.
 
 - **Any file dropped on a Mac window pastes its path.** The browser never
   sees a dropped file's path, only its name, size, and modified time, so the

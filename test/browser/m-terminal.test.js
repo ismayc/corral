@@ -267,3 +267,21 @@ test('a tap in the terminal area does not start a swipe from the key rows', asyn
   fire(p.$('#term'), 'touchend', { changedTouches: [{ clientX: 10, clientY: 10 }] });
   assert.equal(p.text('#ttitle'), 'a');
 });
+
+// Links in the terminal: Claude Code's own (OSC 8, through xterm's linkHandler) and plain http(s) text.
+test('a tapped terminal link asks first, then opens in the browser; Cancel opens nothing', async () => {
+  const p = await phone([win('a')]);
+  const opened = [];
+  p.window.open = (...a) => { opened.push(a); };
+  const { term } = await p.openWin('a');
+  term.options.linkHandler.activate({}, 'https://example.com/x');
+  assert.equal(p.sheetTitle(), 'Open this link?');
+  assert.equal(p.text('#genbody p.url'), 'https://example.com/x');
+  p.button('Cancel').click();
+  assert.equal(p.sheetTitle(), null);
+  term.addons[1].handler({}, 'https://example.com/y');
+  assert.equal(p.text('#genbody p.url'), 'https://example.com/y');
+  p.button('Open in browser').click();
+  assert.equal(p.sheetTitle(), null);
+  assert.deepEqual(opened, [['https://example.com/y', '_blank', 'noopener']]);
+});

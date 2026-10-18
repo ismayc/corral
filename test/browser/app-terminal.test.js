@@ -146,3 +146,36 @@ test('a clipboard that refuses the write is not an error', async () => {
   await flush();
   assert.equal(p.clipboard.text, null);
 });
+
+// Links: Claude Code's own (OSC 8, through xterm's linkHandler) and plain http(s) text (the web links addon).
+test('a clicked link asks first, then opens in a new browser tab; Cancel or a click elsewhere opens nothing', async () => {
+  const p = await start(one);
+  const opened = [];
+  p.window.open = (...a) => { opened.push(a); };
+  const term = p.terms[0];
+  const click = { clientX: 40, clientY: 50 };
+  const menu = async (via) => { via(click, 'https://example.com/a?b=1'); await flush(); return p.$('.linkmenu'); };
+  let m = await menu((e, u) => term.options.linkHandler.activate(e, u));
+  assert.deepEqual([m.querySelector('.mhead').textContent, m.querySelector('.murl').textContent], ['Open this link?', 'https://example.com/a?b=1']);
+  assert.deepEqual([m.style.left, m.style.top], ['40px', '54px']);
+  assert.equal(p.doc.activeElement.textContent, 'Open in browser');
+  [...m.querySelectorAll('button')].find((b) => b.textContent === 'Cancel').click();
+  assert.equal(p.$('.linkmenu'), null);
+  m = await menu((e, u) => term.addons[1].handler(e, u));
+  fire(p.doc.body, 'click');
+  assert.equal(p.$('.linkmenu'), null);
+  assert.deepEqual(opened, []);
+  m = await menu((e, u) => term.addons[1].handler(e, u));
+  m.querySelector('button').click();
+  assert.deepEqual(opened, [['https://example.com/a?b=1', '_blank', 'noopener']]);
+  assert.equal(p.$('.linkmenu'), null);
+});
+
+test('the link menu stays on screen near the edges', async () => {
+  const p = await start(one);
+  p.terms[0].options.linkHandler.activate({ clientX: 5000, clientY: -20 }, 'https://example.com');
+  await flush();
+  const m = p.$('.linkmenu');
+  assert.equal(m.style.left, `${p.window.innerWidth - 328}px`);
+  assert.equal(m.style.top, '8px');
+});

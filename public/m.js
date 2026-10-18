@@ -233,6 +233,15 @@ function sheet(title, ...body) {
   $('#gen').hidden = false;
 }
 const closeSheet = () => { $('#gen').hidden = true; };
+
+// A tapped link, in the terminal (one Claude Code marks as a link, or plain http(s) text) or in Chat. It opens
+// in this phone's browser once confirmed, so a stray tap while scrolling goes nowhere.
+function linkSheet(uri) {
+  sheet('Open this link?', h('p', { class: 'url' }, uri), h('div', { class: 'btns' },
+    h('button', { class: 'primary', onclick: () => { closeSheet(); window.open(uri, '_blank', 'noopener'); } }, 'Open in browser'),
+    h('button', { onclick: closeSheet }, 'Cancel')));
+}
+const tapLink = (e) => { e.preventDefault(); linkSheet(e.currentTarget.href); };
 $('#genx').onclick = closeSheet;
 $('#gen').onclick = (e) => { if (e.target.id === 'gen') closeSheet(); };
 
@@ -592,9 +601,11 @@ function openTerm(info, swiped) {
   askShown = null;
   renderAskbar(w);
   const term = new Terminal({ fontFamily: 'Menlo, Monaco, ui-monospace, monospace', fontSize, cursorBlink: false,
-    scrollback: 1000, theme: { background: '#100e15', cursor: '#c9c1ff', selectionBackground: '#4d4366' } });
+    scrollback: 1000, linkHandler: { activate: (e, uri) => linkSheet(uri) },
+    theme: { background: '#100e15', cursor: '#c9c1ff', selectionBackground: '#4d4366' } });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
+  term.loadAddon(new WebLinksAddon.WebLinksAddon((e, uri) => linkSheet(uri)));
   term.open($('#term'));
   // Tapping the terminal should not pop up the keyboard; typing goes through the box below, or the Type key.
   term.textarea.setAttribute('inputmode', 'none');
@@ -835,8 +846,8 @@ function mdInline(s) {
     if (m.index > at) out.push(s.slice(at, m.index));
     if (m[1]) out.push(h('code', {}, m[1]));
     else if (m[2]) out.push(h('strong', {}, mdInline(m[2])));
-    else if (m[3]) out.push(h('a', { href: m[4], target: '_blank', rel: 'noopener' }, mdInline(m[3])));
-    else if (m[7]) out.push(h('a', { href: m[7], target: '_blank', rel: 'noopener' }, m[7]));
+    else if (m[3]) out.push(h('a', { href: m[4], target: '_blank', rel: 'noopener', onclick: tapLink }, mdInline(m[3])));
+    else if (m[7]) out.push(h('a', { href: m[7], target: '_blank', rel: 'noopener', onclick: tapLink }, m[7]));
     else out.push(h('em', {}, mdInline(m[5] || m[6])));
     at = m.index + m[0].length;
   }

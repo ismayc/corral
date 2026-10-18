@@ -281,6 +281,22 @@ test('a reply in Markdown is drawn with headings, emphasis, code, links, and rul
   ].join(''));
 });
 
+test('a link in a reply asks before it opens', async () => {
+  const p = await md('See [the docs](https://example.com/a) or https://example.com/b.');
+  const opened = [];
+  p.window.open = (...a) => { opened.push(a); };
+  const [named, bare] = p.$$('#chat .msg.claude a');
+  const e = new p.window.MouseEvent('click', { bubbles: true, cancelable: true });
+  named.dispatchEvent(e);
+  assert.equal(e.defaultPrevented, true);
+  assert.equal(p.sheetTitle(), 'Open this link?');
+  assert.equal(p.text('#genbody p.url'), 'https://example.com/a');
+  p.button('Cancel').click();
+  bare.click();
+  p.button('Open in browser').click();
+  assert.deepEqual(opened, [['https://example.com/b', '_blank', 'noopener']]);
+});
+
 test('lists nest by indent, numbered lists keep their first number, and a code fence left open runs to the end', async () => {
   const p = await md([
     'Steps:', '3. First', '   more of first', '4. Second', '   - a', '   - b', '',

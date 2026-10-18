@@ -328,11 +328,11 @@ function attach(info, quiet) {
 
   // Option-drag makes a browser selection even while tmux has the mouse (Cmd-C then copies it).
   const term = new Terminal({ fontFamily: 'Menlo, Monaco, monospace', fontSize: 13, cursorBlink: true,
-    scrollback: 5000, macOptionClickForcesSelection: true,
+    scrollback: 5000, macOptionClickForcesSelection: true, linkHandler: { activate: linkMenu },
     theme: { background: '#100e15', cursor: '#c9c1ff', selectionBackground: '#4d4366' } });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
-  term.loadAddon(new WebLinksAddon.WebLinksAddon());
+  term.loadAddon(new WebLinksAddon.WebLinksAddon(linkMenu));
   term.open(el.querySelector('.term'));
 
   const w = { term, fit, el, slot, info, ws: null, muted: false };
@@ -582,6 +582,33 @@ function catMenu(list, anchor) {
   inp.focus();
 }
 document.addEventListener('click', (e) => { if (openMenu && !openMenu.contains(e.target)) closeMenu(); });
+
+// A link clicked in a terminal: one Claude Code marks as a link (OSC 8, which tmux passes on because of
+// corral.tmux.conf) or plain http(s) text. It opens in a new tab of this computer's browser once confirmed.
+// The menu waits for the click that follows the mouse-up, which would otherwise close it at once.
+function linkMenu(e, uri) {
+  setTimeout(() => {
+    closeMenu();
+    const m = document.createElement('div');
+    m.className = 'catmenu linkmenu';
+    const add = (cls, text) => m.appendChild(Object.assign(document.createElement('div'), { className: cls, textContent: text }));
+    add('mhead', 'Open this link?');
+    add('murl', uri);
+    const item = (text, go) => {
+      const b = document.createElement('button');
+      b.textContent = text;
+      b.onclick = () => { closeMenu(); if (go) window.open(uri, '_blank', 'noopener'); };
+      return m.appendChild(b);
+    };
+    const open = item('Open in browser', true);
+    item('Cancel', false);
+    document.body.append(m);
+    m.style.left = `${Math.max(8, Math.min(e.clientX, innerWidth - 328))}px`;
+    m.style.top = `${Math.max(8, Math.min(e.clientY + 4, innerHeight - m.offsetHeight - 8))}px`;
+    openMenu = m;
+    open.focus();
+  });
+}
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   closeMenu();
