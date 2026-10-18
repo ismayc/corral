@@ -158,7 +158,7 @@ test('overview reports the Claude status, mode, and since-time of a window', () 
   c.claude(s, { status: 'busy' });
   c.screen(s, 'output\n\n  ⏸ plan mode on\n');
   const [row] = c.srv.overview();
-  assert.deepEqual(row.claude, { status: 'busy', waitingFor: null, since: 1791390000000, mode: 'plan', cleared: false });
+  assert.deepEqual(row.claude, { status: 'busy', waitingFor: null, since: 1791390000000, mode: 'plan', cleared: false, compacted: false });
   assert.equal(row.askKey, null);
   assert.equal(row.prompt, null);
 });
@@ -170,6 +170,16 @@ test('overview marks a window whose last typed command was /clear, except when s
   c.transcript(id, [{ type: 'user', message: { role: 'user', content: '<command-name>/clear</command-name>\n<command-args></command-args>' } }]);
   assert.equal(c.srv.overview()[0].claude.cleared, true);
   assert.equal(c.srv.overview({ screens: false })[0].claude.cleared, false);
+});
+
+test('overview marks a window Claude Code compacted on its own, except when screens is false', () => {
+  const c = setup();
+  const s = c.open('a');
+  const id = c.claude(s, { status: 'idle' });
+  c.transcript(id, [{ type: 'system', subtype: 'compact_boundary', compactMetadata: { trigger: 'auto' } }]);
+  const [row] = c.srv.overview();
+  assert.deepEqual([row.claude.cleared, row.claude.compacted], [false, true]);
+  assert.equal(c.srv.overview({ screens: false })[0].claude.compacted, false);
 });
 
 test('overview leaves the mode out when screens is false', () => {

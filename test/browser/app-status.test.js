@@ -457,3 +457,22 @@ test('windows last cleared with /clear sit under Parked windows, below Open wind
   await poll();
   assert.deepEqual(p.secs(), ['Open windows (3)', 'All spaces (1)']);
 });
+
+test('windows Claude Code compacted on its own sit under Auto-compacted windows, between Open and Parked, once idle', async () => {
+  const now = { sessions: [status('a', { claude: { status: 'idle', since: 9000, cleared: true } }), status('b', { claude: { status: 'idle', since: 1000 } }),
+    status('c', { claude: { status: 'idle', since: 3000, compacted: true } }), status('d', { claude: { status: 'busy', since: 2000, compacted: true } })] };
+  const p = await start({ routes: {
+    'GET /api/herdr': { available: true, spaces: [space('a'), space('b'), space('c'), space('d')] },
+    'GET /api/sessions': { sessions: [session('a'), session('b'), session('c'), session('d')] },
+    'GET /api/overview': () => now,
+  } });
+  const poll = async () => { p.tick(3000); await flush(); };
+  await poll();
+  assert.deepEqual(p.secs(), ['Open windows (2)', 'Auto-compacted windows (1)', 'Parked windows (1)']);
+  assert.deepEqual(p.rowNames(), ['d', 'b', 'c', 'a']);
+  // Typing in it moves it back under Open windows.
+  now.sessions[2] = status('c', { claude: { status: 'busy', since: 9900 } });
+  await poll();
+  assert.deepEqual(p.secs(), ['Open windows (3)', 'Parked windows (1)']);
+  assert.deepEqual(p.rowNames(), ['c', 'd', 'b', 'a']);
+});

@@ -308,12 +308,12 @@ test('conversation has no status lines when the screen cannot be read', () => {
 
 const CLEAR = user('<command-name>/clear</command-name>\n            <command-message>clear</command-message>\n            <command-args></command-args>');
 
-test('wasCleared is false for a conversation with no transcript yet', () => {
+test('restState is null for a conversation with no transcript yet', () => {
   const { c, sessionId } = withClaude();
-  assert.equal(c.srv.wasCleared({ sessionId }), false);
+  assert.equal(c.srv.restState({ sessionId }), null);
 });
 
-test('wasCleared is true when /clear is the last thing typed, past Claude Code bookkeeping and stray lines', () => {
+test('restState is cleared when /clear is the last thing typed, past Claude Code bookkeeping and stray lines', () => {
   const { c, sessionId } = withClaude();
   c.transcript(sessionId, [
     { type: 'mode', mode: 'normal' },
@@ -325,31 +325,53 @@ test('wasCleared is true when /clear is the last thing typed, past Claude Code b
     '{"type":"user", not json',
     user('<system-reminder>noted</system-reminder>'),
   ]);
-  assert.equal(c.srv.wasCleared({ sessionId }), true);
+  assert.equal(c.srv.restState({ sessionId }), 'cleared');
 });
 
-test('wasCleared is false once something is typed after /clear, or when nothing was typed at all', () => {
+test('restState is null once something is typed after /clear, or when nothing was typed at all', () => {
   const { c, sessionId } = withClaude();
   c.transcript(sessionId, [CLEAR, user('what next?')]);
-  assert.equal(c.srv.wasCleared({ sessionId }), false);
+  assert.equal(c.srv.restState({ sessionId }), null);
   c.transcript(sessionId, [assistant([text('hello')])]);
-  assert.equal(c.srv.wasCleared({ sessionId }), false);
+  assert.equal(c.srv.restState({ sessionId }), null);
 });
 
-test('wasCleared reads a transcript again only when its size or time changes', () => {
+test('restState reads a transcript again only when its size or time changes', () => {
   const { c, sessionId } = withClaude();
   const file = c.transcript(sessionId, [CLEAR, user('abc')]);
   fs.utimesSync(file, 1791390000, 1791390000); // whole seconds, so setting the time again gives the same time
-  assert.equal(c.srv.wasCleared({ sessionId }), false);
+  assert.equal(c.srv.restState({ sessionId }), null);
   fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('"abc"', '"   "'));
   fs.utimesSync(file, 1791390000, 1791390000);
-  assert.equal(c.srv.wasCleared({ sessionId }), false, 'same size and time: the cached answer');
+  assert.equal(c.srv.restState({ sessionId }), null, 'same size and time: the cached answer');
   fs.utimesSync(file, 1791390000, 1791390005);
-  assert.equal(c.srv.wasCleared({ sessionId }), true);
+  assert.equal(c.srv.restState({ sessionId }), 'cleared');
 });
 
-test('wasCleared is false when the transcript cannot be read', () => {
+const boundary = (trigger, o = {}) => ({ type: 'system', subtype: 'compact_boundary', content: 'Conversation compacted', compactMetadata: { trigger }, ...o });
+const summary = user('This session is being continued from a previous conversation that ran out of context.', { isCompactSummary: true });
+
+test('restState is compacted after an automatic compaction, past its summary and Claude carrying on', () => {
+  const { c, sessionId } = withClaude();
+  c.transcript(sessionId, [user('build it'), boundary('auto'), summary, assistant([text('Picking up where I left off.')]), toolResult,
+    boundary('auto', { isSidechain: true })]);
+  assert.equal(c.srv.restState({ sessionId }), 'compacted');
+});
+
+test('restState is null after a manual /compact, or once something is typed after a compaction', () => {
+  const { c, sessionId } = withClaude();
+  c.transcript(sessionId, [boundary('manual'), summary]);
+  assert.equal(c.srv.restState({ sessionId }), null);
+  c.transcript(sessionId, [boundary('auto'), summary, user('and now the tests')]);
+  assert.equal(c.srv.restState({ sessionId }), null);
+  c.transcript(sessionId, [CLEAR, boundary('auto')]);
+  assert.equal(c.srv.restState({ sessionId }), 'compacted', 'the later of the two decides');
+  c.transcript(sessionId, [{ type: 'system', subtype: 'compact_boundary' }]);
+  assert.equal(c.srv.restState({ sessionId }), null, 'no metadata: not known to be automatic');
+});
+
+test('restState is null when the transcript cannot be read', () => {
   const { c, sessionId } = withClaude();
   fs.mkdirSync(path.join(c.home, '.claude', 'projects', 'proj', `${sessionId}.jsonl`), { recursive: true });
-  assert.equal(c.srv.wasCleared({ sessionId }), false);
+  assert.equal(c.srv.restState({ sessionId }), null);
 });

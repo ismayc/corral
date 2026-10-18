@@ -461,9 +461,12 @@ const lastChange = (s) => { const w = windowOf(s); return w.claude?.since || w.a
 // The spaces a filter lets through, and those of them with a window, latest change first.
 const shownSpaces = (q) => spaces.filter((s) => s.label.toLowerCase().includes(q));
 const openFirst = (shown) => shown.filter(hasWindow).sort((a, b) => lastChange(b) - lastChange(a));
-// A window whose last typed command was /clear, listed under Parked windows instead of Open windows.
+// A window whose last typed command was /clear, listed under Parked windows instead of Open windows, and one
+// Claude Code compacted on its own and that has since finished with nothing typed, listed under
+// Auto-compacted windows above it. One still working after its compaction stays under Open windows.
 const isCleared = (s) => Boolean(windowOf(s).claude?.cleared);
-const orderKey = (open) => open.map((s) => (isCleared(s) ? `c${s.id}` : s.id)).join();
+const isCompacted = (s) => windowOf(s).claude?.compacted === true && windowOf(s).claude.status === 'idle';
+const orderKey = (open) => open.map((s) => (isCleared(s) ? `c${s.id}` : isCompacted(s) ? `a${s.id}` : s.id)).join();
 // The filter and Open windows order last drawn, so the status check redraws only when the order changes.
 let drawn = { q: '', order: '' };
 // A space's dot: its open window's color (stateOf) when it has one, since Claude runs in Corral's windows
@@ -707,8 +710,10 @@ function arrange() {
   const sec = (t) => { const h = document.createElement('div'); h.className = 'sec'; h.textContent = t; box.append(h); };
   const put = (list) => { for (const s of list) box.append(rows.get(s.id)); };
 
-  const working = openSpaces.filter((s) => !isCleared(s)), cleared = openSpaces.filter(isCleared);
+  const working = openSpaces.filter((s) => !isCleared(s) && !isCompacted(s));
+  const compacted = openSpaces.filter(isCompacted), cleared = openSpaces.filter(isCleared);
   if (working.length) { sec(`Open windows (${working.length})`); put(working); }
+  if (compacted.length) { sec(`Auto-compacted windows (${compacted.length})`); put(compacted); }
   if (cleared.length) { sec(`Parked windows (${cleared.length})`); put(cleared); }
   if (!cats.categories.length) {
     if (openSpaces.length && rest.length) sec(`All spaces (${rest.length})`);

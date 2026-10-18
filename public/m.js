@@ -50,8 +50,10 @@ function statusOf(w) {
     return { cls: 'need', text, rank: 0 };
   }
   if (w.claude.status === 'busy') return { cls: 'busy', text: 'Working', rank: 1 };
-  // Parked: idle after /clear, with nothing typed since. No work waits there, so it sits in its own group last.
-  if (w.claude.status === 'idle' && w.claude.cleared) return { cls: 'idle', text: 'Parked', rank: 3 };
+  // Auto-compacted: idle after Claude Code compacted the conversation on its own, with nothing typed since.
+  // Parked: idle after /clear, with nothing typed since. Both get their own groups, last.
+  if (w.claude.status === 'idle' && w.claude.compacted) return { cls: 'idle', text: 'Auto-compacted', rank: 3 };
+  if (w.claude.status === 'idle' && w.claude.cleared) return { cls: 'idle', text: 'Parked', rank: 4 };
   if (w.claude.status === 'idle') return { cls: 'idle', text: 'Your turn', rank: 0 };
   return { cls: '', text: 'Claude', rank: 1 };
 }
@@ -421,6 +423,7 @@ const GROUPS = [
   { title: 'Waiting for you', chip: 'Your turn', cls: 'idle' },
   { title: 'Working', chip: 'Working', cls: 'busy' },
   { title: 'Shells', chip: 'Shells', cls: '' },
+  { title: 'Auto-compacted windows', chip: 'Compacted', cls: '' },
   { title: 'Parked windows', chip: 'Parked', cls: '' },
 ];
 // Where an element sits in the list's own scroll position. A stuck header reports where it is stuck,

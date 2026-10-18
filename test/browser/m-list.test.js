@@ -110,6 +110,22 @@ test('windows last cleared with /clear go in a Parked group after the shells, an
   assert.deepEqual(p.$$('#jump button').map((b) => b.textContent), ['Your turn 1', 'Shells 1', 'Parked 2']);
 });
 
+test('windows Claude Code compacted on its own go in an Auto-compacted group just above Parked, once idle', async () => {
+  const p = await phone([
+    win('parked', { claude: claude('idle', { since: 8, cleared: true }) }),
+    win('compacted', { claude: claude('idle', { since: 3, compacted: true }) }),
+    win('still-going', { claude: claude('busy', { since: 4, compacted: true }) }),
+    win('asking', { claude: claude('waiting', { since: 5, waitingFor: 'permission prompt', compacted: true }) }),
+    win('shell', { activity: 5 }),
+  ]);
+  assert.deepEqual(p.$$('.card').map((c) => c.dataset.id), ['asking', 'still-going', 'shell', 'compacted', 'parked']);
+  assert.deepEqual(p.$$('#list .section').map((s) => s.textContent),
+    ['Waiting for you1', 'Working1', 'Shells1', 'Auto-compacted windows1', 'Parked windows1']);
+  assert.equal(p.$('.card[data-id="compacted"] .pill').textContent, 'Auto-compacted');
+  assert.equal(p.window.document.title, '(1) Corral');
+  assert.deepEqual(p.$$('#jump button').map((b) => b.textContent), ['Your turn 1', 'Working 1', 'Shells 1', 'Compacted 1', 'Parked 1']);
+});
+
 test('the Your turn chip is green when nothing is asking for permission', async () => {
   const p = await phone([win('a', { claude: claude('idle') })]);
   assert.deepEqual(p.$$('#jump button').map((b) => b.className), ['idle on']);
