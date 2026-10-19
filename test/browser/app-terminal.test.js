@@ -36,6 +36,26 @@ test('the terminal connects over ws, resets and sizes itself on open, and sends 
   assert.deepEqual(sent(ws).slice(1), [{ t: 'in', d: 'ls\r' }, { t: 'resize', cols: 120, rows: 40 }]);
 });
 
+test('Cmd-Backspace erases to the start of the line; other keys go to xterm as usual', async () => {
+  const p = await start(one);
+  const ws = p.sockets[0];
+  ws.open();
+  const term = p.terms[0];
+  const key = (type, o) => {
+    const e = { type, key: 'Backspace', metaKey: false, altKey: false, ctrlKey: false, ...o, prevented: false };
+    e.preventDefault = () => { e.prevented = true; };
+    return [term.keyHandler(e), e.prevented];
+  };
+  assert.deepEqual(key('keydown', { metaKey: true }), [false, true]);
+  assert.deepEqual(key('keyup', { metaKey: true }), [false, true], 'the key-up is swallowed too, and sends nothing');
+  assert.deepEqual(key('keydown', {}), [true, false]);
+  assert.deepEqual(key('keydown', { altKey: true }), [true, false]);
+  assert.deepEqual(key('keydown', { metaKey: true, altKey: true }), [true, false]);
+  assert.deepEqual(key('keydown', { metaKey: true, ctrlKey: true }), [true, false]);
+  assert.deepEqual(key('keydown', { key: 'a', metaKey: true }), [true, false]);
+  assert.deepEqual(sent(ws).slice(1), [{ t: 'in', d: '\x15' }]);
+});
+
 test('answers xterm gives while replaying saved output never reach the shell', async () => {
   const p = await start(one);
   const ws = p.sockets[0];

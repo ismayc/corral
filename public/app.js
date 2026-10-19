@@ -376,6 +376,14 @@ function attach(info, quiet) {
   paint(w);
   connect();
   term.onData((d) => !w.muted && w.ws?.readyState === 1 && w.ws.send(JSON.stringify({ t: 'in', d })));
+  // Cmd-Backspace erases back to the start of the line (Ctrl-U), as in Positron and VS Code. xterm would send
+  // a single Backspace. Option-Backspace already erases a word: xterm sends ESC DEL.
+  term.attachCustomKeyEventHandler((e) => {
+    if (e.key !== 'Backspace' || !e.metaKey || e.altKey || e.ctrlKey) return true;
+    if (e.type === 'keydown') term.input('\x15');
+    e.preventDefault();
+    return false;
+  });
   term.onResize(({ cols, rows }) => w.ws?.readyState === 1 && w.ws.send(JSON.stringify({ t: 'resize', cols, rows })));
   new ResizeObserver(() => fit.fit()).observe(el.querySelector('.term'));
   el.addEventListener('mousedown', () => setFocus(info.id));

@@ -5,6 +5,10 @@ in `package.json`.
 
 ## Development version
 
+- **Cmd-Backspace erases the line on the Mac.** In a window on the Mac
+  page, Cmd-Backspace erases back to the start of the line (it sends
+  Ctrl-U, as Positron and VS Code do) instead of one letter.
+  Option-Backspace still erases one word at a time.
 - **New project on the Mac.** A New project button in the top bar asks
   for a folder name, then makes the folder in the repos folder with a git
   repo and a herdr space (the phone's `POST /api/projects/create`), and
