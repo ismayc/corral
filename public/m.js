@@ -361,6 +361,7 @@ async function refresh() {
     paintTerm();
     renderAskbar(w);
     renderView();
+    renderLastPrompt(w);
   }
   if (!$('#home').hidden) renderList();
 }
@@ -600,6 +601,7 @@ function openTerm(info, swiped) {
   $('#tsub').textContent = termSub(w);
   askShown = null;
   renderAskbar(w);
+  renderLastPrompt(w);
   const term = new Terminal({ fontFamily: 'Menlo, Monaco, ui-monospace, monospace', fontSize, cursorBlink: false,
     scrollback: 1000, linkHandler: { activate: (e, uri) => linkSheet(uri) },
     theme: { background: '#100e15', cursor: '#c9c1ff', selectionBackground: '#4d4366' } });
@@ -832,8 +834,27 @@ async function loadConvo() {
 $('#morebtn').onclick = () => {
   if (!current) return;
   const item = (label, fn) => h('button', { onclick: () => { closeSheet(); fn(); } }, label);
-  sheet(current.info.label, h('div', { class: 'menu' }, item('Changes not yet committed', showChanges), item('Scrollback as text', showHistory)));
+  sheet(current.info.label, h('div', { class: 'menu' }, item('Changes not yet committed', showChanges), item('Scrollback as text', showHistory),
+    item(promptsOn ? 'Hide my last prompt' : 'Show my last prompt', () => setPrompts(!promptsOn))));
 };
+
+// The last prompt you typed in the window, in a line under the header that stays in place while the window
+// scrolls, in Chat and Terminal alike. A tap shows all of it. Its × or the More menu hides it, on this phone.
+let promptsOn = load('corral.m.prompts', true);
+function setPrompts(on) {
+  promptsOn = on;
+  store('corral.m.prompts', on);
+  renderLastPrompt(windows.find((x) => x.id === current?.info.id));
+  if (!on) toast('Your last prompt is hidden. The ··· menu shows it again.');
+}
+function renderLastPrompt(w) {
+  const text = (promptsOn && w?.claude?.lastPrompt) || '';
+  const bar = $('#lastprompt');
+  if (bar.querySelector('.pt').textContent !== text) bar.querySelector('.pt').textContent = text;
+  if (bar.hidden !== !text) { bar.hidden = !text; if (!text) bar.classList.remove('full'); }
+}
+$('#lastprompt').onclick = () => $('#lastprompt').classList.toggle('full');
+$('#lastprompt button').onclick = (e) => { e.stopPropagation(); setPrompts(false); };
 
 // ---- Markdown: Claude's replies drawn as headings, lists, tables, code, and links ----
 // Built as elements, never as HTML, so text in a reply cannot add markup or run script. Links go out only

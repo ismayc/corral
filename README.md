@@ -31,6 +31,10 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   windows are open and the shape of the screen), Halves, Thirds, Quarters,
   Main + 2, 2 over 1, 3 x 3, and more, plus a plain columns-by-rows grid. Drag a
   window's title bar onto another zone to move it there or swap.
+- **Your last prompt at the top of each window**, in a line under the title
+  bar that stays put while the terminal scrolls (click it to see all of it).
+  Its × hides it; **Prompts** in the toolbar shows it again. The phone has
+  the same line under a window's header.
 - **Minimize** a window to the bottom bar; it keeps running, and one click
   brings it back.
 - **Terminals that survive.** Each shell lives in its own tmux session, so

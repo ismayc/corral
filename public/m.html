@@ -96,6 +96,14 @@
                      background:var(--ground); color:var(--text); font:16px -apple-system, BlinkMacSystemFont, sans-serif; }
   .ask .mine input::placeholder { color:var(--muted); }
   .ask .hint { margin-top:6px; font-size:13px; color:var(--muted); }
+  /* The last prompt you typed, under the header: one line, or all of it after a tap. */
+  #lastprompt { flex:none; display:flex; align-items:flex-start; gap:8px; padding:6px 8px 6px 14px; background:#1b1726;
+                border-bottom:1px solid var(--rail); font-size:14px; color:var(--text); }
+  #lastprompt[hidden] { display:none; }
+  #lastprompt .pt { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-top:2px; }
+  #lastprompt .pt::before { content:'You: '; color:var(--muted); }
+  #lastprompt.full .pt { white-space:pre-wrap; overflow-wrap:anywhere; max-height:30vh; overflow-y:auto; }
+  #lastprompt button { padding:0 8px; min-height:0; line-height:22px; }
   #askbar { flex:none; max-height:45%; overflow-y:auto; padding:10px 10px 6px; background:var(--panel); border-top:2px solid var(--idle); }
   #askbar .head { font:600 15px var(--brand); color:#a6e9c4; margin-bottom:6px; }
   .card .top { display:flex; align-items:center; gap:8px; }
@@ -281,6 +289,7 @@
     <button class="iconbtn" id="viewbtn" hidden>Terminal</button>
     <button class="iconbtn" id="morebtn" aria-label="More: changes and scrollback">&middot;&middot;&middot;</button>
   </header>
+  <div id="lastprompt" hidden><span class="pt"></span><button class="iconbtn" aria-label="Hide my last prompt">&times;</button></div>
   <div id="termwrap"><div id="term" style="height:100%"></div><span id="conn" hidden>Reconnecting&hellip;</span>
     <div id="convo" hidden><div id="chat"></div><pre id="statusline" hidden></pre></div></div>
   <div id="askbar" hidden></div>

@@ -20,7 +20,7 @@ test('the ⋯ menu in a terminal offers the changes and the scrollback', async (
   assert.equal(p.$('#morebtn').getAttribute('aria-label'), 'More: changes and scrollback');
   p.$('#morebtn').click();
   assert.equal(p.sheetTitle(), 'a');
-  assert.deepEqual(p.$$('#genbody .menu button').map((b) => b.textContent), ['Changes not yet committed', 'Scrollback as text']);
+  assert.deepEqual(p.$$('#genbody .menu button').map((b) => b.textContent), ['Changes not yet committed', 'Scrollback as text', 'Hide my last prompt']);
 });
 
 test('Scrollback as text closes the menu and shows the window\'s scrollback', async () => {

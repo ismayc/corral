@@ -476,3 +476,53 @@ test('windows Claude Code compacted on its own sit under Auto-compacted windows,
   assert.deepEqual(p.secs(), ['Open windows (3)', 'Parked windows (1)']);
   assert.deepEqual(p.rowNames(), ['c', 'd', 'b', 'a']);
 });
+
+test('the last prompt sits under the title bar, above a permission prompt, and changes with the next one', async () => {
+  const p = await two();
+  assert.equal(p.$('#prompts').textContent, 'Prompts: on');
+  p.set('a', { claude: { status: 'busy', lastPrompt: 'fix the scrolling' } });
+  await p.poll();
+  const win = p.slotOf('a').querySelector('.win');
+  const bar = win.querySelector('.lastprompt');
+  assert.equal(bar.previousElementSibling, win.querySelector('.title'));
+  assert.equal(bar.querySelector('.pt').textContent, 'fix the scrolling');
+  assert.equal(p.slotOf('b').querySelector('.lastprompt'), null, 'nothing typed in b');
+  await p.poll();
+  assert.equal(win.querySelector('.lastprompt'), bar, 'the same prompt keeps the same bar');
+  p.set('a', { prompt: PROMPT, claude: { status: 'waiting', lastPrompt: 'and the tests' } });
+  await p.poll();
+  assert.equal(bar.querySelector('.pt').textContent, 'and the tests');
+  assert.equal(win.querySelector('.ask').previousElementSibling, bar);
+  bar.click();
+  assert.ok(bar.classList.contains('full'));
+  bar.click();
+  assert.ok(!bar.classList.contains('full'));
+  p.set('a', { prompt: null, claude: null });
+  await p.poll();
+  assert.equal(win.querySelector('.lastprompt'), null, 'Claude has exited');
+});
+
+test('the × or the Prompts button hides every last prompt, remembered, and Prompts shows them again', async () => {
+  const p = await two();
+  p.set('a', { claude: { status: 'idle', lastPrompt: 'one' } });
+  p.set('b', { claude: { status: 'idle', lastPrompt: 'two' } });
+  await p.poll();
+  p.slotOf('a').querySelector('.lastprompt button').click();
+  assert.equal(p.$$('.lastprompt').length, 0);
+  assert.equal(p.$('#prompts').textContent, 'Prompts: off');
+  assert.equal(p.store('corral.prompts'), false);
+  assert.equal(p.toast(), 'Last prompts are hidden. Prompts in the toolbar shows them again.');
+  await p.poll();
+  assert.equal(p.$$('.lastprompt').length, 0, 'stays hidden');
+  p.$('#prompts').click();
+  assert.deepEqual(p.$$('.lastprompt .pt').map((e) => e.textContent), ['one', 'two']);
+  assert.equal(p.store('corral.prompts'), true);
+});
+
+test('the last prompts start hidden when this browser hid them', async () => {
+  const p = await two({ storage: { 'corral.prompts': false } });
+  p.set('a', { claude: { status: 'idle', lastPrompt: 'one' } });
+  await p.poll();
+  assert.equal(p.$('#prompts').textContent, 'Prompts: off');
+  assert.equal(p.$$('.lastprompt').length, 0);
+});

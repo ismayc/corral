@@ -555,7 +555,7 @@ function overview({ screens = true } = {}) {
       ...publicSession(s),
       activity: p ? p.activity : null,
       claude: claude ? { status: claude.status, waitingFor: claude.waitingFor, since: claude.since, mode: screen ? screenMode(screen) : null,
-        cleared: rest === 'cleared', compacted: rest === 'compacted' } : null,
+        cleared: rest === 'cleared', compacted: rest === 'compacted', lastPrompt: screens ? lastPrompt(claude) : null } : null,
       askKey: claude?.waitingFor === 'permission prompt' ? promptKey(claude) : null,
       prompt: screen && claude.waitingFor === 'permission prompt' ? withKey(permissionPrompt(s.id, screen), claude) : null,
       question: screen && claude.waitingFor === 'input needed' ? withQuestionKey(questionPrompt(s.id, screen), claude) : null,
@@ -650,6 +650,46 @@ function restState(c) {
     }
     restCache.set(file, { size, mtimeMs, state });
     return state;
+  } catch { return null; }
+}
+
+// The last prompt you typed in a window's conversation, for the line at the top of its window: slash
+// commands are left out, and a message sent while Claude was working counts. The first read takes the last
+// 8 MB of the transcript; after that only what was added since, since the pages ask every few seconds and a
+// working Claude adds megabytes of tool output. Cut to 600 characters.
+const PROMPT_TAIL = 8 * 1024 * 1024;
+const promptCache = new Map();
+function lastPrompt(c) {
+  try {
+    const file = transcriptFile(c);
+    if (!file) return null;
+    const { size } = fs.statSync(file);
+    let hit = promptCache.get(file);
+    if (!hit || size < hit.at) hit = { at: 0, text: null };
+    if (size - hit.at > PROMPT_TAIL) hit = { at: size - PROMPT_TAIL, text: hit.text, cut: true };
+    if (size > hit.at) {
+      const fd = fs.openSync(file, 'r');
+      const buf = Buffer.alloc(size - hit.at);
+      fs.readSync(fd, buf, 0, buf.length, hit.at);
+      fs.closeSync(fd);
+      const end = buf.lastIndexOf(0x0a) + 1; // a line still being written waits for the next read
+      const lines = buf.subarray(0, end).toString('utf8').split('\n');
+      if (hit.cut) lines.shift(); // the first line may be cut
+      hit = { at: hit.at + end, text: hit.text };
+      for (const line of lines) {
+        const user = /"type":\s*"user"/.test(line) && !line.includes('"tool_use_id"');
+        if (!user && !line.includes('"queued_command"')) continue;
+        let d;
+        try { d = JSON.parse(line); } catch { continue; }
+        if (d.isSidechain || d.isMeta || d.isCompactSummary) continue;
+        let t = '';
+        if (d.type === 'user') t = typedText(d.message?.content);
+        else if (d.attachment?.type === 'queued_command' && d.attachment.origin?.kind === 'human') t = typedText(d.attachment.prompt);
+        if (t && !t.startsWith('/')) hit.text = t.length > 600 ? `${t.slice(0, 600)}…` : t;
+      }
+    }
+    promptCache.set(file, hit);
+    return hit.text;
   } catch { return null; }
 }
 
@@ -1872,7 +1912,7 @@ module.exports = {
   attachPty, register, createSession, adoptSessions, publicSession, skippedRoot, saveLedger, migrateLegacyData,
   loadLedger, seedFromSnapshots, updateLedger, ledgerView, cleanCategories, loadCategories, saveCategories,
   writeJson, readJsonFile, claudeUnder, processChildren, openWindows, overview, withKey, screenLines, screenMode, screenStatus,
-  sendCardKey, renameWindow, transcriptFile, restState, tailLines, lastReply, typedText, conversation, windowHistory, rejoin,
+  sendCardKey, renameWindow, transcriptFile, restState, lastPrompt, tailLines, lastReply, typedText, conversation, windowHistory, rejoin,
   permissionPrompt, readPlan, promptKey, windowClaude, answerPrompt, questionPrompt, questionKey, answerQuestion, frontMatter, slashCommands, git, windowChanges, saveUpload, loadPush, savePush,
   vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, pruneUploads,
   locateFile, cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows,

@@ -5,6 +5,15 @@ in `package.json`.
 
 ## Development version
 
+- **Your last prompt at the top of each window.** On the Mac page, a line
+  under each window's title bar shows the last prompt you typed there, and
+  on the phone a line under the window's header does the same, in Chat and
+  Terminal alike. It stays in place while the terminal scrolls; a click or
+  tap shows all of it. Slash commands are left out, and a message sent
+  while Claude was working counts. Its × hides it on that browser:
+  Prompts in the Mac toolbar, or the phone's ··· menu, shows it again. The
+  server reads it from the end of the window's transcript, then only from
+  what was added since.
 - **The phone answers Claude's questions.** When Claude Code asks with its
   question dialog (its session file says `input needed`), the card and the
   bar under the window show the question, a button per answer with its

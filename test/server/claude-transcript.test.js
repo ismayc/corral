@@ -375,3 +375,70 @@ test('restState is null when the transcript cannot be read', () => {
   fs.mkdirSync(path.join(c.home, '.claude', 'projects', 'proj', `${sessionId}.jsonl`), { recursive: true });
   assert.equal(c.srv.restState({ sessionId }), null);
 });
+
+const queued = (prompt, kind = 'human') => ({ type: 'attachment', attachment: { type: 'queued_command', prompt, origin: { kind } } });
+
+test('lastPrompt is null for a conversation with no transcript yet, or one that cannot be read', () => {
+  const { c, sessionId } = withClaude();
+  assert.equal(c.srv.lastPrompt({ sessionId }), null);
+  fs.mkdirSync(path.join(c.home, '.claude', 'projects', 'proj', `${sessionId}.jsonl`), { recursive: true });
+  assert.equal(c.srv.lastPrompt({ sessionId }), null);
+});
+
+test('lastPrompt is the last thing you typed, past slash commands, bookkeeping, side tasks, and queued messages from Claude', () => {
+  const { c, sessionId } = withClaude();
+  c.transcript(sessionId, [
+    user('first'),
+    user([text('fix the scrolling')]),
+    assistant([text('On it.')]),
+    toolResult,
+    '{"type":"user", not json',
+    user('<system-reminder>noted</system-reminder>'),
+    user('a side task', { isSidechain: true }),
+    user('caveat', { isMeta: true }),
+    user('summary', { isCompactSummary: true }),
+    CLEAR,
+    queued('from a hook', 'system'),
+    { type: 'attachment', attachment: { type: 'other' }, note: 'queued_command' },
+  ]);
+  assert.equal(c.srv.lastPrompt({ sessionId }), 'fix the scrolling');
+});
+
+test('lastPrompt counts a message sent while Claude was working, and cuts a long one', () => {
+  const { c, sessionId } = withClaude();
+  c.transcript(sessionId, [user('build it'), queued('and add tests')]);
+  assert.equal(c.srv.lastPrompt({ sessionId }), 'and add tests');
+  const { c: c2, sessionId: id2 } = withClaude();
+  c2.transcript(id2, [user('x'.repeat(700))]);
+  assert.equal(c2.srv.lastPrompt({ sessionId: id2 }), `${'x'.repeat(600)}…`);
+});
+
+test('lastPrompt reads only what was added since the last read, waiting for a line still being written', () => {
+  const { c, sessionId } = withClaude();
+  const file = c.transcript(sessionId, [user('one')]);
+  assert.equal(c.srv.lastPrompt({ sessionId }), 'one');
+  assert.equal(c.srv.lastPrompt({ sessionId }), 'one', 'nothing added');
+  const line = JSON.stringify(user('two'));
+  fs.appendFileSync(file, line.slice(0, 10));
+  assert.equal(c.srv.lastPrompt({ sessionId }), 'one', 'half a line');
+  fs.appendFileSync(file, `${line.slice(10)}\n${JSON.stringify(assistant([text('ok')]))}\n`);
+  assert.equal(c.srv.lastPrompt({ sessionId }), 'two');
+  // Earlier bytes are not read again: a prompt written over them is not seen.
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('"one"', '"uno"'));
+  fs.appendFileSync(file, `${JSON.stringify(toolResult)}\n`);
+  assert.equal(c.srv.lastPrompt({ sessionId }), 'two');
+  // A shorter file is a new one: read from the start.
+  fs.writeFileSync(file, `${JSON.stringify(user('three'))}\n`);
+  assert.equal(c.srv.lastPrompt({ sessionId }), 'three');
+});
+
+test('lastPrompt reads only the last 8 MB of a long transcript, and of a long stretch added at once', () => {
+  const { c, sessionId } = withClaude();
+  const pad = `${JSON.stringify(toolResult).replace('a b c', 'z'.repeat(1024 * 1024))}\n`;
+  const file = c.transcript(sessionId, [user('too early')]);
+  fs.appendFileSync(file, pad.repeat(9));
+  fs.appendFileSync(file, `${JSON.stringify(user('in reach'))}\n`);
+  assert.equal(c.srv.lastPrompt({ sessionId }), 'in reach');
+  fs.appendFileSync(file, `${JSON.stringify(user('lost'))}\n${pad.repeat(9)}`);
+  assert.equal(c.srv.lastPrompt({ sessionId }), 'in reach', 'kept when nothing newer is in reach');
+});

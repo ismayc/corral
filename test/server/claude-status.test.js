@@ -158,7 +158,7 @@ test('overview reports the Claude status, mode, and since-time of a window', () 
   c.claude(s, { status: 'busy' });
   c.screen(s, 'output\n\n  ⏸ plan mode on\n');
   const [row] = c.srv.overview();
-  assert.deepEqual(row.claude, { status: 'busy', waitingFor: null, since: 1791390000000, mode: 'plan', cleared: false, compacted: false });
+  assert.deepEqual(row.claude, { status: 'busy', waitingFor: null, since: 1791390000000, mode: 'plan', cleared: false, compacted: false, lastPrompt: null });
   assert.equal(row.askKey, null);
   assert.equal(row.prompt, null);
 });

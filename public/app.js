@@ -1091,6 +1091,39 @@ $('#alerts').onclick = async () => {
 };
 showAlerts();
 
+// The last prompt you typed in each window, in a line under its title bar that stays in place while the
+// terminal scrolls. A click shows all of it. Its × or the toolbar's Prompts button hides them, on this browser.
+let promptsOn = load('corral.prompts', true);
+function showPrompts() {
+  $('#prompts').textContent = `Prompts: ${promptsOn ? 'on' : 'off'}`;
+  for (const w of open.values()) paintPrompt(w);
+}
+function setPrompts(on) {
+  promptsOn = on;
+  store('corral.prompts', on);
+  showPrompts();
+  if (!on) toast('Last prompts are hidden. Prompts in the toolbar shows them again.');
+}
+$('#prompts').onclick = () => setPrompts(!promptsOn);
+function paintPrompt(w) {
+  const text = (promptsOn && w.claude?.lastPrompt) || null;
+  if (text === (w.promptText || null)) return;
+  w.promptText = text;
+  let bar = w.el.querySelector('.lastprompt');
+  if (!text) return bar?.remove();
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.className = 'lastprompt';
+    bar.innerHTML = '<span class="pt"></span><button title="Hide the last prompt in every window">&times;</button>';
+    bar.onclick = () => bar.classList.toggle('full');
+    bar.querySelector('button').onclick = (e) => { e.stopPropagation(); setPrompts(false); };
+    w.el.querySelector('.title').after(bar);
+  }
+  bar.querySelector('.pt').textContent = text;
+  bar.title = 'Your last prompt (click to see all of it)';
+}
+showPrompts();
+
 async function watchStatus() {
   const r = await api('/api/overview').catch(() => null);
   if (!r?.sessions) return;
@@ -1103,6 +1136,7 @@ async function watchStatus() {
     w.claude = s.claude;
     w.activity = s.activity;
     paint(w);
+    paintPrompt(w);
     if (s.exited) continue;
     if (s.label !== w.info.label) { w.info.label = s.label; w.el.querySelector('.t').textContent = s.label; relayout = true; }
     const key = s.prompt?.key || null;
@@ -1111,7 +1145,7 @@ async function watchStatus() {
       w.el.querySelector('.ask')?.remove();
       w.asking = Boolean(s.prompt);
       w.el.classList.toggle('asking', w.asking);
-      if (s.prompt) w.el.querySelector('.title').after(askBar(s));
+      if (s.prompt) (w.el.querySelector('.lastprompt') || w.el.querySelector('.title')).after(askBar(s));
       requestAnimationFrame(() => w.fit.fit());
       relayout = true;
     }
