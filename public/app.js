@@ -1026,6 +1026,30 @@ $('#hidden').checked = load('corral.hidden', false);
 $('#hidden').onchange = () => { store('corral.hidden', $('#hidden').checked); renderSpaces(); };
 $('#refresh').onclick = () => loadSpaces();
 $('#newshell').onclick = () => spawn(null, 'shell');
+
+// New project, as the phone's Start sheet makes one: a folder in the repos folder with a git repo and a herdr
+// space, then a window in it that opens as "A space opens" says. Enter makes it; Esc or leaving the box closes it.
+$('#newproj').onclick = () => {
+  const box = $('#newprojname');
+  box.hidden = !box.hidden;
+  box.placeholder = `Folder name in ${reposDir || '~/repos'}, then Enter`;
+  if (!box.hidden) box.focus();
+};
+$('#newprojname').onblur = (e) => { if (!e.target.value) e.target.hidden = true; };
+$('#newprojname').onkeydown = async (e) => {
+  const box = e.target;
+  if (e.key === 'Escape') { box.value = ''; box.hidden = true; return; }
+  if (e.key !== 'Enter' || !box.value.trim() || box.disabled) return;
+  box.disabled = true;
+  const r = await fetch('/api/projects/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: box.value.trim() }) }).catch(() => null);
+  const j = r ? await r.json().catch(() => ({})) : {};
+  box.disabled = false;
+  if (!r?.ok) { box.focus(); return toast(r ? j.error || 'Could not make the folder.' : 'Could not reach Corral.'); }
+  box.value = ''; box.hidden = true;
+  if (!j.space) toast(`Made ${j.root.replace(/^\/Users\/[^/]+/, '~')}, but herdr has no space for it: ${j.warning}`);
+  spawn(j.root, j.label, j.space, $('#agent').value);
+  loadSpaces(true).catch(() => {});
+};
 $('#agent').value = load('corral.agent', 'claude');
 $('#agent').onchange = () => store('corral.agent', $('#agent').value);
 $('#cols').value = load('corral.cols', 2);

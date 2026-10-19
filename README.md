@@ -26,6 +26,10 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   exits. A space has one window: clicking a space that already has one
   brings that window forward (out of the bottom bar if it is there), and a
   double-click never makes a second one.
+- **Start a new project.** **New project** in the top bar asks for a folder
+  name, then makes that folder in `~/repos` with a git repo and a herdr
+  space, and opens a window in it the way "A space opens" says, as the
+  phone's Start sheet does.
 - **Layouts for your windows**, in the spirit of
   [Sash](https://github.com/ismayc/sash): Auto (picks a tiling from how many
   windows are open and the shape of the screen), Halves, Thirds, Quarters,

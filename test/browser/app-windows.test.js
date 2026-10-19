@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { start, stop, space, session, flush } = require('../helpers/app');
+const { start, stop, space, session, flush, fire } = require('../helpers/app');
 
 test.afterEach(stop);
 
@@ -121,4 +121,86 @@ test('a window still being created when the poll picks it up is not opened twice
   assert.deepEqual(p.visible(), ['shell']);
   assert.deepEqual(p.chips(), []);
   assert.ok(p.slotOf('shell').querySelector('.win').classList.contains('focus'));
+});
+
+const created = (o = {}) => ({ __reply: true, status: 201, body: { root: '/Users/me/repos/demo', label: 'demo', space: 'w9', ...o } });
+
+test('New project makes a folder with a herdr space and opens a window there as "A space opens" says', async () => {
+  const p = await start({ routes: {
+    'GET /api/projects': { projects: [], newRepos: [], reposDir: '~/code' },
+    'POST /api/projects/create': created(),
+    'POST /api/sessions': session('s1', { label: 'demo', cwd: '/Users/me/repos/demo', space: 'w9' }),
+  } });
+  const box = p.$('#newprojname');
+  assert.equal(box.hidden, true);
+  p.$('#newproj').click();
+  assert.equal(box.hidden, false);
+  assert.equal(box.placeholder, 'Folder name in ~/code, then Enter');
+  assert.equal(p.doc.activeElement, box);
+  fire(box, 'keydown', { key: 'Enter' });
+  await flush();
+  assert.deepEqual(p.api.called('POST', '/api/projects/create'), [], 'nothing typed yet');
+  box.value = '  demo ';
+  fire(box, 'keydown', { key: 'x' });
+  fire(box, 'keydown', { key: 'Enter' });
+  fire(box, 'keydown', { key: 'Enter' }); // a second Enter while the first is still working
+  await flush();
+  assert.deepEqual(p.api.called('POST', '/api/projects/create').map((c) => c.body), [{ name: 'demo' }]);
+  assert.deepEqual(p.api.called('POST', '/api/sessions')[0].body, { cwd: '/Users/me/repos/demo', label: 'demo', space: 'w9', agent: 'claude' });
+  assert.deepEqual(p.wins(), ['demo']);
+  assert.deepEqual([box.hidden, box.value, box.disabled], [true, '', false]);
+});
+
+test('New project says why a name is refused, and keeps the box to fix it', async () => {
+  const p = await start({ routes: { 'POST /api/projects/create': { __reply: true, status: 409, body: { error: '~/repos/demo already exists.' } } } });
+  p.$('#newproj').click();
+  const box = p.$('#newprojname');
+  assert.equal(box.placeholder, 'Folder name in ~/repos, then Enter', 'before the projects list loads');
+  box.value = 'demo';
+  fire(box, 'keydown', { key: 'Enter' });
+  await flush();
+  assert.equal(p.toast(), '~/repos/demo already exists.');
+  assert.deepEqual([box.hidden, box.value, p.doc.activeElement === box], [false, 'demo', true]);
+  p.api.routes['POST /api/projects/create'] = { __reply: true, status: 500, body: 'oops' };
+  fire(box, 'keydown', { key: 'Enter' });
+  await flush();
+  assert.equal(p.toast(), 'Could not make the folder.');
+  p.api.routes['POST /api/projects/create'] = new Error('offline');
+  fire(box, 'keydown', { key: 'Enter' });
+  await flush();
+  assert.equal(p.toast(), 'Could not reach Corral.');
+  assert.deepEqual(p.api.called('POST', '/api/sessions'), []);
+});
+
+test('New project still opens a window when herdr could not make the space or answer', async () => {
+  const p = await start({ routes: {
+    'POST /api/projects/create': created({ space: null, warning: 'herdr not reachable' }),
+    'POST /api/sessions': session('s1', { label: 'demo', cwd: '/Users/me/repos/demo' }),
+  } });
+  p.$('#newproj').click();
+  p.$('#newprojname').value = 'demo';
+  p.api.routes['GET /api/herdr'] = new Error('offline'); // the sidebar refresh fails quietly
+  fire(p.$('#newprojname'), 'keydown', { key: 'Enter' });
+  await flush();
+  assert.equal(p.toast(), 'Made ~/repos/demo, but herdr has no space for it: herdr not reachable');
+  assert.deepEqual(p.api.called('POST', '/api/sessions')[0].body, { cwd: '/Users/me/repos/demo', label: 'demo', space: null, agent: 'claude' });
+});
+
+test('the New project box closes on Esc, on a second click, or when left empty', async () => {
+  const p = await start({});
+  const box = p.$('#newprojname');
+  p.$('#newproj').click();
+  box.value = 'half';
+  fire(box, 'keydown', { key: 'Escape' });
+  assert.deepEqual([box.hidden, box.value], [true, '']);
+  p.$('#newproj').click();
+  p.$('#newproj').click();
+  assert.equal(box.hidden, true);
+  p.$('#newproj').click();
+  box.value = 'kept';
+  fire(box, 'blur');
+  assert.equal(box.hidden, false, 'a name in it keeps it open');
+  box.value = '';
+  fire(box, 'blur');
+  assert.equal(box.hidden, true);
 });

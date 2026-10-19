@@ -5,6 +5,11 @@ in `package.json`.
 
 ## Development version
 
+- **New project on the Mac.** A New project button in the top bar asks
+  for a folder name, then makes the folder in the repos folder with a git
+  repo and a herdr space (the phone's `POST /api/projects/create`), and
+  opens a window there as "A space opens" says. A name that is taken or
+  not allowed says why and keeps the box open to fix it.
 - **Your last prompt at the top of each window.** On the Mac page, a line
   under each window's title bar shows the last prompt you typed there, and
   on the phone a line under the window's header does the same, in Chat and

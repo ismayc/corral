@@ -130,6 +130,7 @@
   #restore { border-color:var(--fence); color:var(--lavender); border-radius:6px 0 0 6px; }
   #restorex { border-left:0; border-radius:0 6px 6px 0; color:var(--muted); padding:4px 8px; }
   #bar .sp { flex:1; }
+  #newprojname { width:260px; padding:3px 8px; }
   #newshell { background:var(--fence); border-color:var(--fence); color:#14101f; font-weight:600; }
   #newshell:hover { background:var(--lavender); border-color:var(--lavender); }
   #count { color:var(--muted); }
@@ -235,6 +236,8 @@
   <section id="main">
     <div id="bar">
       <button id="newshell" title="Open a plain shell in your home folder">New shell</button>
+      <button id="newproj" title="Make a new project folder with its own herdr space, and open a window in it">New project</button>
+      <input id="newprojname" hidden maxlength="100" autocomplete="off" spellcheck="false" aria-label="New project's folder name">
       <span id="restorewrap" hidden><button id="restore"></button><button id="restorex" title="Forget these windows">&times;</button></span>
       <label>A space opens <select id="agent">
         <option value="claude">Claude Code</option>
