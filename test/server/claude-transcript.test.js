@@ -442,3 +442,37 @@ test('lastPrompt reads only the last 8 MB of a long transcript, and of a long st
   fs.appendFileSync(file, `${JSON.stringify(user('lost'))}\n${pad.repeat(9)}`);
   assert.equal(c.srv.lastPrompt({ sessionId }), 'in reach', 'kept when nothing newer is in reach');
 });
+
+// As Claude Code writes them: a skill or a command of your own is followed by the prompt it expands to
+// (isMeta); one of Claude Code's own is followed by its output.
+const skill = (name, args) => user(`<command-message>${name}</command-message>\n<command-name>/${name}</command-name>${args ? `\n<command-args>${args}</command-args>` : ''}`);
+const expanded = user([text('Base directory for this skill: ~/.claude/skills/wrap-up\n\n# Wrap up a session')], { isMeta: true });
+const builtin = (name, args = '') => user(`<command-name>/${name}</command-name>\n            <command-message>${name}</command-message>\n            <command-args>${args}</command-args>`);
+const stdout = user('<local-command-stdout>Set model to Opus</local-command-stdout>');
+
+test('lastPrompt counts a skill or a command of your own, with its arguments', () => {
+  const { c, sessionId } = withClaude();
+  c.transcript(sessionId, [user('fix it'), skill('wrap-up'), expanded, assistant([text('Wrapping up.')])]);
+  assert.equal(c.srv.lastPrompt({ sessionId }), '/wrap-up');
+  c.transcript(sessionId, [user('fix it'), skill('prep-class', 'week 3'), expanded]);
+  assert.equal(c.srv.lastPrompt({ sessionId }), '/prep-class week 3');
+});
+
+test('lastPrompt leaves out Claude Code\'s own commands, even with a hidden message later on', () => {
+  const { c, sessionId } = withClaude();
+  c.transcript(sessionId, [user('fix it'), builtin('model', 'opus'), stdout, user('caveat', { isMeta: true })]);
+  assert.equal(c.srv.lastPrompt({ sessionId }), 'fix it');
+  c.transcript(sessionId, [user('fix it'), CLEAR, { type: 'system', subtype: 'local_command', content: '<local-command-stdout></local-command-stdout>' },
+    user('<local-command-caveat>Caveat</local-command-caveat>', { isMeta: true })]);
+  assert.equal(c.srv.lastPrompt({ sessionId }), 'fix it');
+  c.transcript(sessionId, [user('fix it'), user('caveat', { isMeta: true })]);
+  assert.equal(c.srv.lastPrompt({ sessionId }), 'fix it', 'a hidden message with no command before it');
+});
+
+test('lastPrompt counts a skill whose expanded prompt arrives on a later read', () => {
+  const { c, sessionId } = withClaude();
+  const file = c.transcript(sessionId, [user('fix it'), skill('wrap-up')]);
+  assert.equal(c.srv.lastPrompt({ sessionId }), 'fix it');
+  fs.appendFileSync(file, `${JSON.stringify(expanded)}\n`);
+  assert.equal(c.srv.lastPrompt({ sessionId }), '/wrap-up');
+});

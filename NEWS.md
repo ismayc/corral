@@ -9,8 +9,9 @@ in `package.json`.
   under each window's title bar shows the last prompt you typed there, and
   on the phone a line under the window's header does the same, in Chat and
   Terminal alike. It stays in place while the terminal scrolls; a click or
-  tap shows all of it. Slash commands are left out, and a message sent
-  while Claude was working counts. Its × hides it on that browser:
+  tap shows all of it. A skill or a command of your own (`/wrap-up`)
+  counts, Claude Code's own commands (`/model`, `/clear`) do not, and a
+  message sent while Claude was working counts. Its × hides it on that browser:
   Prompts in the Mac toolbar, or the phone's ··· menu, shows it again. The
   server reads it from the end of the window's transcript, then only from
   what was added since.

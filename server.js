@@ -653,10 +653,12 @@ function restState(c) {
   } catch { return null; }
 }
 
-// The last prompt you typed in a window's conversation, for the line at the top of its window: slash
-// commands are left out, and a message sent while Claude was working counts. The first read takes the last
-// 8 MB of the transcript; after that only what was added since, since the pages ask every few seconds and a
-// working Claude adds megabytes of tool output. Cut to 600 characters.
+// The last prompt you typed in a window's conversation, for the line at the top of its window. A message
+// sent while Claude was working counts. A slash command counts when Claude Code expands it into a prompt, as
+// a skill or a command of your own: the next line in the transcript is then that prompt, marked isMeta.
+// Claude Code's own commands (/model, /clear) are followed by their output instead, and are left out. The
+// first read takes the last 8 MB of the transcript; after that only what was added since, since the pages ask
+// every few seconds and a working Claude adds megabytes of tool output. Cut to 600 characters.
 const PROMPT_TAIL = 8 * 1024 * 1024;
 const promptCache = new Map();
 function lastPrompt(c) {
@@ -675,17 +677,23 @@ function lastPrompt(c) {
       const end = buf.lastIndexOf(0x0a) + 1; // a line still being written waits for the next read
       const lines = buf.subarray(0, end).toString('utf8').split('\n');
       if (hit.cut) lines.shift(); // the first line may be cut
-      hit = { at: hit.at + end, text: hit.text };
+      hit = { at: hit.at + end, text: hit.text, command: hit.command };
+      const cut = (t) => (t.length > 600 ? `${t.slice(0, 600)}…` : t);
       for (const line of lines) {
+        if (!line) continue;
+        const command = hit.command; // a slash command on the line before
+        hit.command = null;
         const user = /"type":\s*"user"/.test(line) && !line.includes('"tool_use_id"');
         if (!user && !line.includes('"queued_command"')) continue;
         let d;
         try { d = JSON.parse(line); } catch { continue; }
-        if (d.isSidechain || d.isMeta || d.isCompactSummary) continue;
+        if (d.isSidechain || d.isCompactSummary) continue;
+        if (d.isMeta) { if (command) hit.text = command; continue; }
         let t = '';
         if (d.type === 'user') t = typedText(d.message?.content);
         else if (d.attachment?.type === 'queued_command' && d.attachment.origin?.kind === 'human') t = typedText(d.attachment.prompt);
-        if (t && !t.startsWith('/')) hit.text = t.length > 600 ? `${t.slice(0, 600)}…` : t;
+        if (t.startsWith('/')) hit.command = cut(t);
+        else if (t) hit.text = cut(t);
       }
     }
     promptCache.set(file, hit);
