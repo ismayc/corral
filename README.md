@@ -199,6 +199,12 @@ network between your own devices.
   full terminal, and **Chat** switches back; the phone remembers which you
   used last. The keys, the message box, and the photo button work in both.
   A plain shell opens in the terminal.
+- **Your last prompt, pinned.** A line under the window's header shows the
+  last prompt you typed there, in Chat and Terminal alike, and stays put
+  while the window scrolls; tap it to read all of it. A skill or a command
+  of your own (`/wrap-up`) counts, Claude Code's own commands (`/model`,
+  `/clear`) do not. Its × hides it on that phone, and **Show my last
+  prompt** in the ⋯ menu brings it back.
 - **Keys a phone lacks.** In either view, a row of keys covers
   what a phone keyboard lacks: **Use suggestion** (sends Claude Code's dimmed
   suggested prompt in one tap), Esc, Shift-Tab (Claude Code's modes), Tab,
