@@ -493,10 +493,6 @@ test('the last prompt sits under the title bar, above a permission prompt, and c
   await p.poll();
   assert.equal(bar.querySelector('.pt').textContent, 'and the tests');
   assert.equal(win.querySelector('.ask').previousElementSibling, bar);
-  bar.click();
-  assert.ok(bar.classList.contains('full'));
-  bar.click();
-  assert.ok(!bar.classList.contains('full'));
   p.set('a', { prompt: null, claude: null });
   await p.poll();
   assert.equal(win.querySelector('.lastprompt'), null, 'Claude has exited');
@@ -525,4 +521,53 @@ test('the last prompts start hidden when this browser hid them', async () => {
   await p.poll();
   assert.equal(p.$('#prompts').textContent, 'Prompts: off');
   assert.equal(p.$$('.lastprompt').length, 0);
+});
+
+const PROMPTS = { prompts: [
+  { text: 'an old one', at: '2020-01-02T15:04:00Z' },
+  { text: '/wrap-up', at: 'not a time' },
+  { text: 'fix the scrolling\nand the tests', at: new Date().toISOString() },
+], cut: false };
+
+test('a click on the last prompt lists every prompt in the conversation, newest at the bottom, under the line', async () => {
+  const p = await two({ routes: { 'GET /api/sessions/a/prompts': PROMPTS } });
+  p.set('a', { claude: { status: 'idle', lastPrompt: 'fix the scrolling' } });
+  await p.poll();
+  p.slotOf('a').querySelector('.lastprompt').click();
+  await flush();
+  const m = p.$('.promptmenu');
+  assert.equal(m.querySelector('.mhead').textContent, '3 prompts in a');
+  assert.deepEqual([...m.querySelectorAll('.ptext')].map((e) => e.textContent), ['an old one', '/wrap-up', 'fix the scrolling\nand the tests']);
+  const when = [...m.querySelectorAll('.pwhen')].map((e) => e.textContent);
+  assert.match(when[0], /^Jan 2, \d{1,2}:\d{2}/, 'another day: the date too');
+  assert.equal(when[1], '', 'no time known');
+  assert.match(when[2], /^\d{1,2}:\d{2}/, 'today: the time only');
+  assert.equal(m.style.top, '2px'); // jsdom lays nothing out: under a bar at 0
+  m.querySelector('.ptext').click();
+  assert.ok(p.$('.promptmenu'), 'a click inside keeps it open');
+  fire(p.doc.body, 'click');
+  assert.equal(p.$('.promptmenu'), null);
+});
+
+test('the prompt list says when it holds only the most recent, or a single prompt', async () => {
+  const p = await two({ routes: { 'GET /api/sessions/a/prompts': { prompts: [{ text: 'one', at: null }], cut: true } } });
+  p.set('a', { claude: { status: 'idle', lastPrompt: 'one' } });
+  await p.poll();
+  p.slotOf('a').querySelector('.lastprompt').click();
+  await flush();
+  assert.equal(p.$('.promptmenu .mhead').textContent, '1 prompt in a (the most recent)');
+});
+
+test('a prompt list that cannot load says why, or just that it could not', async () => {
+  const p = await two({ routes: { 'GET /api/sessions/a/prompts': { error: 'no transcript yet' } } });
+  p.set('a', { claude: { status: 'idle', lastPrompt: 'one' } });
+  await p.poll();
+  p.slotOf('a').querySelector('.lastprompt').click();
+  await flush();
+  assert.equal(p.toast(), 'Could not list the prompts: no transcript yet.');
+  assert.equal(p.$('.promptmenu'), null);
+  p.api.routes['GET /api/sessions/a/prompts'] = new Error('offline');
+  p.slotOf('a').querySelector('.lastprompt').click();
+  await flush();
+  assert.equal(p.toast(), 'Could not list the prompts.');
 });

@@ -9,7 +9,9 @@ in `package.json`.
   under each window's title bar shows the last prompt you typed there, and
   on the phone a line under the window's header does the same, in Chat and
   Terminal alike. It stays in place while the terminal scrolls; a click or
-  tap shows all of it. A skill or a command of your own (`/wrap-up`)
+  tap lists every prompt you sent in that conversation, oldest first, with
+  when you sent it (the most recent 500, from the last 64 MB of the
+  transcript, through `GET /api/sessions/:id/prompts`). A skill or a command of your own (`/wrap-up`)
   counts, Claude Code's own commands (`/model`, `/clear`) do not, and a
   message sent while Claude was working counts. Its × hides it on that browser:
   Prompts in the Mac toolbar, or the phone's ··· menu, shows it again. The

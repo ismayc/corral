@@ -73,7 +73,7 @@ test('GET /api/sessions/:id/history is 500 when tmux cannot read the window', ()
 test('window actions are 404 for an unknown or exited window', () => withServer({}, async (c, req) => {
   const gone = c.open('gone');
   gone.exited = true;
-  const cases = [['GET', 'prompt'], ['POST', 'answer'], ['POST', 'key'], ['POST', 'rename'], ['POST', 'mute'], ['GET', 'last'], ['GET', 'conversation'], ['GET', 'changes'], ['POST', 'upload']];
+  const cases = [['GET', 'prompt'], ['POST', 'answer'], ['POST', 'key'], ['POST', 'rename'], ['POST', 'mute'], ['GET', 'last'], ['GET', 'conversation'], ['GET', 'prompts'], ['GET', 'changes'], ['POST', 'upload']];
   for (const id of ['nope', gone.id]) {
     for (const [method, action] of cases) {
       const r = await req(method, `/api/sessions/${id}/${action}`, method === 'POST' ? { body: {} } : {});
@@ -87,7 +87,7 @@ test('a window action used with the wrong method falls through to not found', ()
   for (const action of ['answer', 'key', 'rename', 'mute', 'upload']) {
     assert.equal((await req('GET', `/api/sessions/${s.id}/${action}`)).status, 404, `GET ${action}`);
   }
-  for (const action of ['prompt', 'last', 'conversation', 'changes']) {
+  for (const action of ['prompt', 'last', 'conversation', 'prompts', 'changes']) {
     assert.deepEqual((await req('POST', `/api/sessions/${s.id}/${action}`, { body: {} })).json, { error: 'not found' }, `POST ${action}`);
   }
 }));
@@ -207,11 +207,38 @@ test('GET /api/sessions/:id/conversation returns the conversation, or why there 
   assert.deepEqual([r.status, r.json], [200, { items: [{ who: 'you', text: 'hi', at: 't' }], cut: false, claude: 'idle', statusLines: [] }]);
 }));
 
-test('last and conversation answer 500 when the transcript cannot be read', () => withServer({}, async (c, req) => {
+test('GET /api/sessions/:id/prompts lists every prompt typed, or why there are none', () => withServer({}, async (c, req) => {
+  const s = c.open('a');
+  const url = `/api/sessions/${s.id}/prompts`;
+  assert.equal((await req('GET', url)).status, 409);
+  const id = c.claude(s, { status: 'idle' });
+  assert.equal((await req('GET', url)).status, 404);
+  c.transcript(id, [
+    { type: 'user', timestamp: 't1', message: { content: 'hi' } },
+    { type: 'user', timestamp: 't2', message: { content: '<command-message>wrap-up</command-message>\n<command-name>/wrap-up</command-name>' } },
+    { type: 'user', isMeta: true, message: { content: [{ type: 'text', text: 'Base directory for this skill' }] } },
+    { type: 'user', timestamp: 't3', message: { content: '<command-name>/model</command-name>\n<command-args>opus</command-args>' } },
+    { type: 'user', timestamp: 't3', message: { content: '<local-command-stdout>Set model</local-command-stdout>' } },
+  ]);
+  const r = await req('GET', url);
+  assert.deepEqual([r.status, r.json], [200, { prompts: [{ text: 'hi', at: 't1' }, { text: '/wrap-up', at: 't2' }], cut: false }]);
+}));
+
+test('the prompt list keeps the most recent 500', () => {
+  const c = setup();
+  const s = c.open('a');
+  const id = c.claude(s, { status: 'idle' });
+  c.transcript(id, Array.from({ length: 501 }, (_, i) => ({ type: 'user', timestamp: `t${i}`, message: { content: `p${i}` } })));
+  const r = c.srv.promptList(s);
+  assert.equal(r.prompts.length, 500);
+  assert.deepEqual([r.prompts[0].text, r.cut], ['p1', true]);
+});
+
+test('last, conversation, and prompts answer 500 when the transcript cannot be read', () => withServer({}, async (c, req) => {
   const s = c.open('a');
   const id = c.claude(s, { status: 'idle' });
   fs.mkdirSync(path.join(c.home, '.claude/projects/p', `${id}.jsonl`), { recursive: true });
-  for (const action of ['last', 'conversation']) {
+  for (const action of ['last', 'conversation', 'prompts']) {
     const r = await req('GET', `/api/sessions/${s.id}/${action}`);
     assert.deepEqual([r.status, r.json], [500, { error: 'could not read the transcript' }]);
   }

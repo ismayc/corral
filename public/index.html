@@ -111,6 +111,10 @@
   .catmenu input { margin-top:6px; }
   .catmenu.openwith { width:280px; }
   .catmenu.linkmenu { width:320px; }
+  .catmenu.promptmenu { width:480px; max-width:calc(100vw - 16px); gap:0; }
+  .promptmenu .prow { display:flex; flex-direction:column; gap:2px; padding:6px 9px; border-top:1px solid var(--rail); }
+  .promptmenu .pwhen { color:var(--muted); font-size:11px; }
+  .promptmenu .ptext { white-space:pre-wrap; overflow-wrap:anywhere; font-size:12.5px; user-select:text; }
   .catmenu .murl { font-size:12px; padding:0 9px 6px; overflow-wrap:anywhere; max-height:7.5em; overflow:auto; }
   .catmenu .msep { border-top:1px solid var(--rail); margin:5px 2px; }
   .catmenu .mnote { color:var(--muted); font-size:11px; padding:2px 9px 4px; }
@@ -172,12 +176,11 @@
   .win .ask button { padding:2px 10px; }
   .win .ask button.allow { background:var(--fence); border-color:var(--fence); color:#fff; }
   .win .ask button.deny { border-color:#e5584d; color:#ffb4ad; }
-  /* The last prompt you typed, under the title bar: one line, or all of it after a click. */
+  /* The last prompt you typed, under the title bar; a click lists every prompt (.promptmenu). */
   .win .lastprompt { display:flex; align-items:flex-start; gap:6px; padding:3px 6px 3px 10px; background:#1b1726;
                      border-bottom:1px solid var(--rail); font-size:12px; color:var(--text); cursor:pointer; }
   .win .lastprompt .pt { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .win .lastprompt .pt::before { content:'You: '; color:var(--muted); }
-  .win .lastprompt.full .pt { white-space:pre-wrap; overflow-wrap:anywhere; max-height:9em; overflow-y:auto; }
   .win .lastprompt button { padding:0 6px; line-height:16px; background:transparent; border-color:transparent; color:var(--muted); }
   .win .lastprompt button:hover { color:var(--text); border-color:var(--rail); }
   #tray .chip .dot { display:inline-block; margin-right:6px; vertical-align:middle; }

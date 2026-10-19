@@ -653,12 +653,31 @@ function restState(c) {
   } catch { return null; }
 }
 
-// The last prompt you typed in a window's conversation, for the line at the top of its window. A message
-// sent while Claude was working counts. A slash command counts when Claude Code expands it into a prompt, as
-// a skill or a command of your own: the next line in the transcript is then that prompt, marked isMeta.
-// Claude Code's own commands (/model, /clear) are followed by their output instead, and are left out. The
-// first read takes the last 8 MB of the transcript; after that only what was added since, since the pages ask
-// every few seconds and a working Claude adds megabytes of tool output. Cut to 600 characters.
+// What you typed, one transcript line at a time, for the line at the top of a window and the list a click on
+// it opens. A message sent while Claude was working counts. A slash command counts when Claude Code expands it
+// into a prompt, as a skill or a command of your own: the next line in the transcript is then that prompt,
+// marked isMeta. Claude Code's own commands (/model, /clear) are followed by their output instead, and are left
+// out. `state.command` holds a slash command until the next line decides it; `found(text, at)` gets each prompt.
+function promptLine(state, line, found) {
+  if (!line) return;
+  const command = state.command; // a slash command on the line before
+  state.command = null;
+  const user = /"type":\s*"user"/.test(line) && !line.includes('"tool_use_id"');
+  if (!user && !line.includes('"queued_command"')) return;
+  let d;
+  try { d = JSON.parse(line); } catch { return; }
+  if (d.isSidechain || d.isCompactSummary) return;
+  if (d.isMeta) { if (command) found(command.text, command.at); return; }
+  let t = '';
+  if (d.type === 'user') t = typedText(d.message?.content);
+  else if (d.attachment?.type === 'queued_command' && d.attachment.origin?.kind === 'human') t = typedText(d.attachment.prompt);
+  if (t.startsWith('/')) state.command = { text: t, at: d.timestamp };
+  else if (t) found(t, d.timestamp);
+}
+
+// The last prompt you typed in a window's conversation, cut to 600 characters. The first read takes the last
+// 8 MB of the transcript; after that only what was added since, since the pages ask every few seconds and a
+// working Claude adds megabytes of tool output.
 const PROMPT_TAIL = 8 * 1024 * 1024;
 const promptCache = new Map();
 function lastPrompt(c) {
@@ -678,27 +697,26 @@ function lastPrompt(c) {
       const lines = buf.subarray(0, end).toString('utf8').split('\n');
       if (hit.cut) lines.shift(); // the first line may be cut
       hit = { at: hit.at + end, text: hit.text, command: hit.command };
-      const cut = (t) => (t.length > 600 ? `${t.slice(0, 600)}…` : t);
-      for (const line of lines) {
-        if (!line) continue;
-        const command = hit.command; // a slash command on the line before
-        hit.command = null;
-        const user = /"type":\s*"user"/.test(line) && !line.includes('"tool_use_id"');
-        if (!user && !line.includes('"queued_command"')) continue;
-        let d;
-        try { d = JSON.parse(line); } catch { continue; }
-        if (d.isSidechain || d.isCompactSummary) continue;
-        if (d.isMeta) { if (command) hit.text = command; continue; }
-        let t = '';
-        if (d.type === 'user') t = typedText(d.message?.content);
-        else if (d.attachment?.type === 'queued_command' && d.attachment.origin?.kind === 'human') t = typedText(d.attachment.prompt);
-        if (t.startsWith('/')) hit.command = cut(t);
-        else if (t) hit.text = cut(t);
-      }
+      const found = (t) => { hit.text = t.length > 600 ? `${t.slice(0, 600)}…` : t; };
+      for (const line of lines) promptLine(hit, line, found);
     }
     promptCache.set(file, hit);
     return hit.text;
   } catch { return null; }
+}
+
+// Every prompt you typed in a window's conversation, oldest first, with when you sent it. Read from the last
+// 64 MB of the transcript, as the conversation is; the most recent 500.
+function promptList(s) {
+  const c = windowClaude(s);
+  if (!c) return { status: 409, error: 'Claude Code is not running in this window' };
+  const file = transcriptFile(c);
+  if (!file) return { status: 404, error: 'no transcript yet' };
+  const MAX = 64 * 1024 * 1024;
+  const prompts = [];
+  const state = {};
+  for (const line of tailLines(file, MAX)) promptLine(state, line, (text, at) => prompts.push({ text, at }));
+  return { status: 200, prompts: prompts.slice(-500), cut: prompts.length > 500 || fs.statSync(file).size > MAX };
 }
 
 // The last `max` bytes of a file as whole lines.
@@ -1706,7 +1724,7 @@ const server = http.createServer(async (req, res) => {
     if (!s || !s.tmux || s.exited) return send(res, 404, { error: 'no such window' });
     try { return send(res, 200, windowHistory(s.id), 'text/plain; charset=utf-8'); } catch { return send(res, 500, { error: 'could not read the window' }); }
   }
-  const act = url.pathname.match(/^\/api\/sessions\/([\w-]+)\/(prompt|answer|changes|upload|key|rename|mute|last|conversation|commands)$/);
+  const act = url.pathname.match(/^\/api\/sessions\/([\w-]+)\/(prompt|answer|changes|upload|key|rename|mute|last|conversation|prompts|commands)$/);
   if (act) {
     const s = sessions.get(act[1]);
     if (!s || s.exited) return send(res, 404, { error: 'no such window' });
@@ -1745,6 +1763,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (act[2] === 'last' && req.method === 'GET') {
       try { const { status, ...r } = lastReply(s); return send(res, status, r); } catch { return send(res, 500, { error: 'could not read the transcript' }); }
+    }
+    if (act[2] === 'prompts' && req.method === 'GET') {
+      try { const { status, ...r } = promptList(s); return send(res, status, r); } catch { return send(res, 500, { error: 'could not read the transcript' }); }
     }
     if (act[2] === 'conversation' && req.method === 'GET') {
       try { const { status, ...r } = conversation(s); return send(res, status, r); } catch { return send(res, 500, { error: 'could not read the transcript' }); }
@@ -1920,7 +1941,7 @@ module.exports = {
   attachPty, register, createSession, adoptSessions, publicSession, skippedRoot, saveLedger, migrateLegacyData,
   loadLedger, seedFromSnapshots, updateLedger, ledgerView, cleanCategories, loadCategories, saveCategories,
   writeJson, readJsonFile, claudeUnder, processChildren, openWindows, overview, withKey, screenLines, screenMode, screenStatus,
-  sendCardKey, renameWindow, transcriptFile, restState, lastPrompt, tailLines, lastReply, typedText, conversation, windowHistory, rejoin,
+  sendCardKey, renameWindow, transcriptFile, restState, lastPrompt, promptList, tailLines, lastReply, typedText, conversation, windowHistory, rejoin,
   permissionPrompt, readPlan, promptKey, windowClaude, answerPrompt, questionPrompt, questionKey, answerQuestion, frontMatter, slashCommands, git, windowChanges, saveUpload, loadPush, savePush,
   vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, pruneUploads,
   locateFile, cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows,

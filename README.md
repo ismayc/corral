@@ -32,7 +32,8 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   Main + 2, 2 over 1, 3 x 3, and more, plus a plain columns-by-rows grid. Drag a
   window's title bar onto another zone to move it there or swap.
 - **Your last prompt at the top of each window**, in a line under the title
-  bar that stays put while the terminal scrolls (click it to see all of it).
+  bar that stays put while the terminal scrolls. Click it to list every
+  prompt you sent in that conversation, with when you sent it.
   Its × hides it; **Prompts** in the toolbar shows it again. The phone has
   the same line under a window's header.
 - **Minimize** a window to the bottom bar; it keeps running, and one click
@@ -201,7 +202,8 @@ network between your own devices.
   A plain shell opens in the terminal.
 - **Your last prompt, pinned.** A line under the window's header shows the
   last prompt you typed there, in Chat and Terminal alike, and stays put
-  while the window scrolls; tap it to read all of it. A skill or a command
+  while the window scrolls; tap it to list every prompt you sent in that
+  conversation, with when you sent it. A skill or a command
   of your own (`/wrap-up`) counts, Claude Code's own commands (`/model`,
   `/clear`) do not. Its × hides it on that phone, and **Show my last
   prompt** in the ⋯ menu brings it back.

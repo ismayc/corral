@@ -839,7 +839,8 @@ $('#morebtn').onclick = () => {
 };
 
 // The last prompt you typed in the window, in a line under the header that stays in place while the window
-// scrolls, in Chat and Terminal alike. A tap shows all of it. Its × or the More menu hides it, on this phone.
+// scrolls, in Chat and Terminal alike. A tap lists every prompt in the conversation. Its × or the More menu
+// hides it, on this phone.
 let promptsOn = load('corral.m.prompts', true);
 function setPrompts(on) {
   promptsOn = on;
@@ -851,9 +852,26 @@ function renderLastPrompt(w) {
   const text = (promptsOn && w?.claude?.lastPrompt) || '';
   const bar = $('#lastprompt');
   if (bar.querySelector('.pt').textContent !== text) bar.querySelector('.pt').textContent = text;
-  if (bar.hidden !== !text) { bar.hidden = !text; if (!text) bar.classList.remove('full'); }
+  bar.hidden = !text;
 }
-$('#lastprompt').onclick = () => $('#lastprompt').classList.toggle('full');
+// When a prompt was sent: the time today, else the date and time.
+function sentAt(at) {
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return '';
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return d.toDateString() === new Date().toDateString() ? time : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`;
+}
+// Every prompt you typed in the window's conversation, oldest first, in a sheet that opens on the newest.
+$('#lastprompt').onclick = async () => {
+  const c = current; // the line shows only in a window's view
+  let r;
+  try { r = await api(`/api/sessions/${encodeURIComponent(c.info.id)}/prompts`); } catch { return toast('Could not list the prompts.'); }
+  if (current !== c) return; // moved to another window while the list loaded
+  const n = r.prompts.length;
+  sheet(`${n} prompt${n === 1 ? '' : 's'}${r.cut ? ' (the most recent)' : ''}`, h('div', { class: 'plist' },
+    ...r.prompts.map((p) => h('div', { class: 'prow' }, h('span', { class: 'pwhen' }, sentAt(p.at)), h('span', { class: 'ptext' }, p.text)))));
+  $('#genbody').scrollTop = $('#genbody').scrollHeight;
+};
 $('#lastprompt button').onclick = (e) => { e.stopPropagation(); setPrompts(false); };
 
 // ---- Markdown: Claude's replies drawn as headings, lists, tables, code, and links ----

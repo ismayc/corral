@@ -1092,7 +1092,8 @@ $('#alerts').onclick = async () => {
 showAlerts();
 
 // The last prompt you typed in each window, in a line under its title bar that stays in place while the
-// terminal scrolls. A click shows all of it. Its × or the toolbar's Prompts button hides them, on this browser.
+// terminal scrolls. A click lists every prompt in the conversation. Its × or the toolbar's Prompts button hides
+// them, on this browser.
 let promptsOn = load('corral.prompts', true);
 function showPrompts() {
   $('#prompts').textContent = `Prompts: ${promptsOn ? 'on' : 'off'}`;
@@ -1115,12 +1116,46 @@ function paintPrompt(w) {
     bar = document.createElement('div');
     bar.className = 'lastprompt';
     bar.innerHTML = '<span class="pt"></span><button title="Hide the last prompt in every window">&times;</button>';
-    bar.onclick = () => bar.classList.toggle('full');
+    bar.onclick = () => promptsMenu(w, bar);
     bar.querySelector('button').onclick = (e) => { e.stopPropagation(); setPrompts(false); };
     w.el.querySelector('.title').after(bar);
   }
   bar.querySelector('.pt').textContent = text;
-  bar.title = 'Your last prompt (click to see all of it)';
+  bar.title = 'Your last prompt (click for every prompt in this conversation)';
+}
+
+// When a prompt was sent: the time today, else the date and time.
+function sentAt(at) {
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return '';
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return d.toDateString() === new Date().toDateString() ? time : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`;
+}
+// Every prompt you typed in the window's conversation, oldest first, in a menu under its line that opens on
+// the newest. It waits a turn so the click that opened it does not close it.
+async function promptsMenu(w, bar) {
+  const r = await api(`/api/sessions/${encodeURIComponent(w.info.id)}/prompts`).catch(() => null);
+  if (!r?.prompts) return toast(`Could not list the prompts${r?.error ? `: ${r.error}` : ''}.`);
+  setTimeout(() => {
+    closeMenu();
+    const m = document.createElement('div');
+    m.className = 'catmenu promptmenu';
+    const add = (cls, text) => m.appendChild(Object.assign(document.createElement('div'), { className: cls, textContent: text }));
+    const n = r.prompts.length;
+    add('mhead', `${n} prompt${n === 1 ? '' : 's'} in ${w.info.label}${r.cut ? ' (the most recent)' : ''}`);
+    for (const p of r.prompts) {
+      const row = m.appendChild(Object.assign(document.createElement('div'), { className: 'prow' }));
+      row.append(Object.assign(document.createElement('span'), { className: 'pwhen', textContent: sentAt(p.at) }),
+        Object.assign(document.createElement('span'), { className: 'ptext', textContent: p.text }));
+    }
+    document.body.append(m);
+    const b = bar.getBoundingClientRect();
+    m.style.left = `${Math.max(8, Math.min(b.left, innerWidth - m.offsetWidth - 8))}px`;
+    m.style.top = `${b.bottom + 2}px`;
+    m.style.maxHeight = `${Math.max(160, innerHeight - b.bottom - 12)}px`;
+    m.scrollTop = m.scrollHeight;
+    openMenu = m;
+  });
 }
 showPrompts();
 

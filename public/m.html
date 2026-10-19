@@ -96,13 +96,12 @@
                      background:var(--ground); color:var(--text); font:16px -apple-system, BlinkMacSystemFont, sans-serif; }
   .ask .mine input::placeholder { color:var(--muted); }
   .ask .hint { margin-top:6px; font-size:13px; color:var(--muted); }
-  /* The last prompt you typed, under the header: one line, or all of it after a tap. */
+  /* The last prompt you typed, under the header; a tap lists every prompt (.plist, in a sheet). */
   #lastprompt { flex:none; display:flex; align-items:flex-start; gap:8px; padding:6px 8px 6px 14px; background:#1b1726;
                 border-bottom:1px solid var(--rail); font-size:14px; color:var(--text); }
   #lastprompt[hidden] { display:none; }
   #lastprompt .pt { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-top:2px; }
   #lastprompt .pt::before { content:'You: '; color:var(--muted); }
-  #lastprompt.full .pt { white-space:pre-wrap; overflow-wrap:anywhere; max-height:30vh; overflow-y:auto; }
   #lastprompt button { padding:0 8px; min-height:0; line-height:22px; }
   #askbar { flex:none; max-height:45%; overflow-y:auto; padding:10px 10px 6px; background:var(--panel); border-top:2px solid var(--idle); }
   #askbar .head { font:600 15px var(--brand); color:#a6e9c4; margin-bottom:6px; }
@@ -171,6 +170,9 @@
   .sheetbody .menu button { display:block; width:100%; text-align:left; margin-bottom:8px; padding:12px 14px; font-size:16px; }
   .sheetbody .menu button.danger { border-color:var(--blocked); color:#ffb4ad; }
   .sheetbody p { color:var(--muted); margin:0 0 12px; font-size:15px; }
+  .sheetbody .prow { display:flex; flex-direction:column; gap:3px; padding:10px 0; border-top:1px solid var(--rail); }
+  .sheetbody .pwhen { color:var(--muted); font-size:12px; }
+  .sheetbody .ptext { white-space:pre-wrap; overflow-wrap:anywhere; font-size:15px; user-select:text; -webkit-user-select:text; }
   .sheetbody p.url { color:var(--text); overflow-wrap:anywhere; max-height:9em; overflow:auto; }
   .sheetbody input, .sheetbody textarea { width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--rail);
     background:var(--ground); color:var(--text); font:16px/1.4 -apple-system, BlinkMacSystemFont, sans-serif; margin-bottom:10px; }
