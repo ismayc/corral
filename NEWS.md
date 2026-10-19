@@ -5,6 +5,10 @@ in `package.json`.
 
 ## Development version
 
+- **Shortcuts in the Mac page's top bar.** A Shortcuts button lists the
+  keys and clicks that work on the page: erasing what you typed, Claude
+  Code's own keys, the mouse in a window, and the sidebar. A click
+  outside it, or Esc, closes it.
 - **Cmd-Backspace erases the line on the Mac.** In a window on the Mac
   page, Cmd-Backspace erases back to the start of the line (it sends
   Ctrl-U, as Positron and VS Code do) instead of one letter.

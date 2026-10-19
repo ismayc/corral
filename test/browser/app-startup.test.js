@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { boot, start, stop, session, flush } = require('../helpers/app');
+const { boot, start, stop, session, flush, fire } = require('../helpers/app');
 
 test.afterEach(stop);
 
@@ -108,4 +108,27 @@ test('a browser that refuses to save settings still works', async () => {
   p.$('#agent').onchange();
   assert.equal(p.window.localStorage.getItem('corral.agent'), null);
   assert.equal(p.$('#agent').value, 'claude-continue');
+});
+
+test('Shortcuts opens a list of the keys and clicks; a second click, a click outside, or Esc closes it', async () => {
+  const p = await start();
+  const btn = p.$('#keysbtn'), menu = p.$('#keysmenu');
+  assert.equal(menu.hidden, true);
+  btn.click();
+  assert.equal(menu.hidden, false);
+  assert.equal(btn.getAttribute('aria-expanded'), 'true');
+  assert.match(menu.textContent, /Cmd-Backspace or Ctrl-U\s*Back to the start of the line/);
+  menu.querySelector('dd').click();
+  assert.equal(menu.hidden, false, 'a click inside the list leaves it open');
+  btn.click();
+  assert.equal(menu.hidden, true);
+  assert.equal(btn.getAttribute('aria-expanded'), 'false');
+  btn.click();
+  p.$('#grid').click();
+  assert.equal(menu.hidden, true);
+  btn.click();
+  fire(p.doc.body, 'keydown', { key: 'a' });
+  assert.equal(menu.hidden, false);
+  fire(p.doc.body, 'keydown', { key: 'Escape' });
+  assert.equal(menu.hidden, true);
 });

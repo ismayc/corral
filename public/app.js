@@ -1066,8 +1066,14 @@ $('#rows').value = load('corral.rows', 'auto');
 $('#rows').onchange = () => { store('corral.rows', $('#rows').value); layout(); };
 new ResizeObserver(() => layout()).observe($('#grid'));
 $('#laybtn').onclick = (e) => { e.stopPropagation(); buildLayoutMenu(); $('#laymenu').hidden = !$('#laymenu').hidden; };
-document.addEventListener('click', (e) => { if (!e.target.closest('#laywrap')) $('#laymenu').hidden = true; });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#laymenu').hidden = true; });
+// Shortcuts: a reminder of the keys and clicks that work on this page, written out in index.html.
+const showKeys = (on) => { $('#keysmenu').hidden = !on; $('#keysbtn').setAttribute('aria-expanded', String(on)); };
+$('#keysbtn').onclick = () => showKeys($('#keysmenu').hidden);
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#laywrap')) $('#laymenu').hidden = true;
+  if (!e.target.closest('#keyswrap')) showKeys(false);
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('#laymenu').hidden = true; showKeys(false); } });
 
 (async () => {
   layout();

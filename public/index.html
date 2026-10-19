@@ -134,6 +134,19 @@
   #newshell { background:var(--fence); border-color:var(--fence); color:#14101f; font-weight:600; }
   #newshell:hover { background:var(--lavender); border-color:var(--lavender); }
   #count { color:var(--muted); }
+  #keyswrap { position:relative; }
+  #keysmenu { position:absolute; top:calc(100% + 6px); right:0; z-index:20; width:660px; max-height:calc(100vh - 70px); overflow:auto;
+              padding:12px 14px; display:grid; grid-template-columns:1fr 1fr; gap:4px 22px; background:var(--panel);
+              border:1px solid var(--rail); border-radius:10px; box-shadow:0 12px 32px rgba(8,6,14,.6); font-size:12px; }
+  #keysmenu[hidden] { display:none; }
+  #keysmenu h4 { grid-column:1 / -1; margin:8px 0 2px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+  #keysmenu h4:first-child { margin-top:0; }
+  #keysmenu dl { display:contents; }
+  #keysmenu .k { display:flex; gap:8px; align-items:baseline; }
+  #keysmenu dt { flex:none; width:168px; }
+  #keysmenu dd { margin:0; color:var(--muted); }
+  #keysmenu kbd { font:11px Menlo, monospace; padding:0 4px; border:1px solid var(--rail); border-radius:4px; color:var(--text); }
+  #keysmenu .note { grid-column:1 / -1; margin:8px 0 0; padding:0; color:var(--muted); }
   #laywrap { position:relative; }
   #laymenu { position:absolute; top:calc(100% + 6px); left:0; z-index:20; width:380px; padding:10px; display:grid;
              grid-template-columns:repeat(4, 1fr); gap:8px; background:var(--panel); border:1px solid var(--rail);
@@ -248,6 +261,13 @@
       <label id="colslab" hidden>Columns <select id="cols"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
       <label id="rowslab" hidden>Rows <select id="rows"><option value="auto">Auto</option><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
       <span class="sp"></span>
+      <div id="keyswrap"><button id="keysbtn" title="Keyboard and mouse shortcuts" aria-expanded="false">Shortcuts</button><div id="keysmenu" hidden>
+        <h4>Erasing what you typed</h4><dl><div class="k"><dt><kbd>Option-Backspace</kbd> or <kbd>Ctrl-W</kbd></dt><dd>One word</dd></div><div class="k"><dt><kbd>Cmd-Backspace</kbd> or <kbd>Ctrl-U</kbd></dt><dd>Back to the start of the line</dd></div><div class="k"><dt><kbd>Esc</kbd> <kbd>Esc</kbd></dt><dd>The whole prompt (Claude Code)</dd></div><div class="k"><dt><kbd>Ctrl-Shift-_</kbd></dt><dd>Undo</dd></div></dl>
+        <h4>Claude Code</h4><dl><div class="k"><dt><kbd>\</kbd> then <kbd>Return</kbd></dt><dd>New line</dd></div><div class="k"><dt><kbd>Shift-Tab</kbd></dt><dd>Switch mode (accept edits, plan)</dd></div><div class="k"><dt><kbd>Ctrl-O</kbd></dt><dd>Verbose output</dd></div><div class="k"><dt><kbd>Ctrl-T</kbd></dt><dd>Show or hide tasks</dd></div><div class="k"><dt><kbd>Ctrl-S</kbd></dt><dd>Stash the prompt</dd></div><div class="k"><dt><kbd>Ctrl-G</kbd></dt><dd>Edit the prompt in $EDITOR</dd></div><div class="k"><dt><kbd>Ctrl-V</kbd></dt><dd>Paste an image</dd></div><div class="k"><dt><kbd>Ctrl-Z</kbd></dt><dd>Suspend</dd></div><div class="k"><dt><kbd>!</kbd> <kbd>/</kbd> <kbd>@</kbd></dt><dd>Shell mode, commands, file paths</dd></div></dl>
+        <h4>Mouse in a window</h4><dl><div class="k"><dt>Drag</dt><dd>Select and copy (on release)</dd></div><div class="k"><dt>Option-drag</dt><dd>Browser selection, then Cmd-C</dd></div><div class="k"><dt>Scroll</dt><dd>Scroll back</dd></div><div class="k"><dt>Click a link</dt><dd>Asks before opening it</dd></div><div class="k"><dt>Drop files</dt><dd>Gives their paths to Claude</dd></div><div class="k"><dt>Drag the title</dt><dd>Move the window to another spot</dd></div><div class="k"><dt>Click last prompt</dt><dd>Every prompt you sent</dd></div></dl>
+        <h4>Sidebar and page</h4><dl><div class="k"><dt>Click a space</dt><dd>Open a window there</dd></div><div class="k"><dt>Cmd-click or Shift-click</dt><dd>Select several spaces</dd></div><div class="k"><dt>Right-click or ⋯</dt><dd>Move to a category</dd></div><div class="k"><dt>Right-click a file</dt><dd>Choose the app to open it</dd></div><div class="k"><dt><kbd>Esc</kbd></dt><dd>Close a menu, end a selection, clear Find</dd></div><div class="k"><dt>Double-click the tray edge</dt><dd>Reset the tray height</dd></div></dl>
+        <p class="note">Type <kbd>?</kbd> in an empty Claude Code prompt for its own list, and <code>/keybindings</code> to change it.</p>
+      </div></div>
       <button id="prompts" title="Show the last prompt you typed at the top of each window"></button>
       <button id="alerts" title="Show a desktop notification when a window needs you while this page is in the background">Alerts: off</button>
       <button id="phone" hidden title="Copy the link that opens Corral on your phone or another Tailscale device">On your phone</button>
