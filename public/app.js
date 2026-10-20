@@ -829,6 +829,7 @@ function buildRows() {
         return syncSel();
       }
       if (selected.size) { selected.clear(); return syncSel(); } // a plain click first ends a selection
+      if ($('#filter').value) clearFilter(false); // a pick from a search shows the full list again
       spawn(s.cwd, s.label, s.id, $('#agent').value);
     };
     d.addEventListener('contextmenu', (e) => { e.preventDefault(); catMenu(pickList(s), { x: e.clientX, y: e.clientY }); });
@@ -1018,9 +1019,10 @@ function renderInactive() {
 }
 
 $('#filter').oninput = () => { $('#clearfilter').hidden = !$('#filter').value; arrange(); renderInactive(); };
-// The x in the search box, or Escape while typing in it, empties the search.
-const clearFilter = () => { $('#filter').value = ''; $('#filter').oninput(); $('#filter').focus(); };
-$('#clearfilter').onclick = clearFilter;
+// The x in the search box, or Escape while typing in it, empties the search and stays in the box. Opening
+// a space from the results empties it too, but leaves the keyboard with the window that opens.
+const clearFilter = (refocus = true) => { $('#filter').value = ''; $('#filter').oninput(); if (refocus) $('#filter').focus(); };
+$('#clearfilter').onclick = () => clearFilter();
 $('#filter').onkeydown = (e) => { if (e.key === 'Escape' && e.target.value) clearFilter(); };
 $('#newcat').onclick = () => { $('#newcatrow').hidden = !$('#newcatrow').hidden; if (!$('#newcatrow').hidden) $('#newcatname').focus(); };
 $('#newcatname').onkeydown = (e) => {

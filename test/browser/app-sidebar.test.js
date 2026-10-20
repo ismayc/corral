@@ -77,6 +77,19 @@ test('the x in the search box, or Esc, clears the search', async () => {
   assert.equal(p.$('#filter').value, '');
 });
 
+test('opening a space from a search clears the search and leaves the search box', async () => {
+  const p = await start({ routes: herdr('alpha', 'beta') });
+  typeFilter(p, 'bet');
+  assert.deepEqual(p.rowNames(), ['beta']);
+  p.row('beta').click();
+  await flush();
+  assert.equal(p.api.called('POST', '/api/sessions').length, 1);
+  assert.equal(p.$('#filter').value, '');
+  assert.equal(p.$('#clearfilter').hidden, true);
+  assert.deepEqual(p.rowNames(), ['alpha', 'beta']);
+  assert.notEqual(p.doc.activeElement, p.$('#filter'));
+});
+
 test('when herdr cannot be reached the sidebar says why', async () => {
   const p = await start({ routes: { 'GET /api/herdr': { available: false, spaces: [], error: 'connection refused' } } });
   assert.equal(p.$('#spaces').textContent, 'herdr not reachable: connection refused');

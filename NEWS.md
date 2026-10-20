@@ -5,6 +5,10 @@ in `package.json`.
 
 ## Development version
 
+- **Opening a space from a search clears the search.** On the Mac page,
+  clicking a space you found with "Find a space" empties the box, so the
+  sidebar shows the full list again, and the keyboard stays in the window
+  that opens. The x and Esc still clear the search and keep you in the box.
 - **Shortcuts in the Mac page's top bar.** A Shortcuts button lists the
   keys and clicks that work on the page: erasing what you typed, Claude
   Code's own keys, the mouse in a window, and the sidebar. A click
