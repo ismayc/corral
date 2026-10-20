@@ -54,3 +54,30 @@ test('requests must name this Mac on loopback', async () => {
     assert.equal(notJson.status, 415);
   } finally { await h.close(); }
 });
+
+test('GET /api/hub gives the hub address from its file, and null unless it is an http(s) address', async () => {
+  const file = path.join(require('os').tmpdir(), `corral-hub-${process.pid}`);
+  const { srv } = loadServer({ env: { CORRAL_HUB_FILE: file } });
+  const h = await listen(srv);
+  try {
+    assert.deepEqual((await h.request('GET', '/api/hub')).json, { url: null }); // no file
+    for (const [text, want] of [
+      ['https://hub.example/\n', 'https://hub.example/'],
+      ['  http://hub.example:8443/x \nsecond line\n', 'http://hub.example:8443/x'],
+      ['', null], ['\n', null], ['hub.example\n', null], ['javascript:alert(1)\n', null], ['https://a b\n', null],
+    ]) {
+      fs.writeFileSync(file, text);
+      assert.deepEqual((await h.request('GET', '/api/hub')).json, { url: want }, JSON.stringify(text));
+    }
+  } finally { fs.rmSync(file, { force: true }); await h.close(); }
+});
+
+test('the hub file defaults to ~/.config/tailnet-hub/url', async () => {
+  const { srv, home } = loadServer();
+  const h = await listen(srv);
+  try {
+    fs.mkdirSync(path.join(home, '.config/tailnet-hub'), { recursive: true });
+    fs.writeFileSync(path.join(home, '.config/tailnet-hub/url'), 'https://hub.example/\n');
+    assert.deepEqual((await h.request('GET', '/api/hub')).json, { url: 'https://hub.example/' });
+  } finally { await h.close(); }
+});

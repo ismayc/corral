@@ -472,6 +472,13 @@ async function doRestore() {
 
 $('#todesk').onclick = () => { location.href = '/?desktop'; };
 
+// A link to the page that lists every page on the tailnet, when the server knows its address.
+api('/api/hub').then((r) => {
+  if (!/^https?:\/\//i.test(r.url || '')) return;
+  $('#hub').href = r.url;
+  $('#hub').hidden = false;
+}).catch(() => {});
+
 // ---- Start something: pick a project and what to run there ----
 let agent = load('corral.m.agent', 'claude');
 let projects = [];

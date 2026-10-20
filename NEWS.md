@@ -5,6 +5,10 @@ in `package.json`.
 
 ## Development version
 
+- **A link to your tailnet's page list.** When `~/.config/tailnet-hub/url`
+  holds an `http://` or `https://` address, the Mac page's top bar and the
+  phone page's header show an "All tailnet pages" link to it, in the same
+  tab. Without the file, or with anything else in it, they show nothing.
 - **Opening a space from a search clears the search.** On the Mac page,
   clicking a space you found with "Find a space" empties the box, so the
   sidebar shows the full list again, and the keyboard stays in the window

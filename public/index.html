@@ -130,6 +130,7 @@
   #restore { border-color:var(--fence); color:var(--lavender); border-radius:6px 0 0 6px; }
   #restorex { border-left:0; border-radius:0 6px 6px 0; color:var(--muted); padding:4px 8px; }
   #bar .sp { flex:1; }
+  #hub { color:var(--lavender); font-size:12px; white-space:nowrap; }
   #newprojname { width:260px; padding:3px 8px; }
   #newshell { background:var(--fence); border-color:var(--fence); color:#14101f; font-weight:600; }
   #newshell:hover { background:var(--lavender); border-color:var(--lavender); }
@@ -271,6 +272,7 @@
       <button id="prompts" title="Show the last prompt you typed at the top of each window"></button>
       <button id="alerts" title="Show a desktop notification when a window needs you while this page is in the background">Alerts: off</button>
       <button id="phone" hidden title="Copy the link that opens Corral on your phone or another Tailscale device">On your phone</button>
+      <a id="hub" hidden>All tailnet pages</a>
       <span id="count" class="note"></span>
     </div>
     <div id="grid"></div>

@@ -100,6 +100,7 @@ const DEFAULT_ROUTES = {
   'GET /api/herdr': { available: true, spaces: [] },
   'GET /api/projects': { projects: [] },
   'GET /api/categories': { version: 1, categories: [], uncatCollapsed: false, assign: {} },
+  'GET /api/hub': { url: null },
   'GET /api/remote': { url: null, machine: null, remote: false },
   'GET /api/restore': { savedAt: null, windows: [] },
   'GET /api/push': { key: 'BKey', devices: 0, prefs: { turn: true, permission: true, away: true, awake: true } },

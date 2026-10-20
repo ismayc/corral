@@ -377,6 +377,10 @@ about who can reach it:
 - `~/.local/share/corral/push.json`: the key Corral signs notifications with,
   the devices that turned them on, your notification and keep-awake settings,
   and which windows are muted (owner-only permissions).
+- `~/.config/tailnet-hub/url` (optional, one line, written by you): when it
+  holds an `http://` or `https://` address, both pages show an "All tailnet
+  pages" link to it. Corral only reads this file. `CORRAL_HUB_FILE` points it
+  elsewhere.
 - The phone's quick replies, in that phone's browser storage.
 - `~/.local/share/corral/uploads/`: photos sent from the phone (owner-only
   permissions). Corral deletes each one after 14 days.

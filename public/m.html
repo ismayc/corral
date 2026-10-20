@@ -45,6 +45,7 @@
   header h1 { font:700 20px/1.1 var(--brand); margin:0; letter-spacing:-.01em; }
   header .sub { color:var(--muted); font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   header .grow { flex:1; min-width:0; }
+  header a.sub { display:block; color:var(--lavender); }
   header .title { font:600 16px/1.2 var(--brand); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .icon { width:28px; height:28px; flex:none; }
   .iconbtn { padding:6px 10px; min-width:40px; }
@@ -274,7 +275,7 @@
 <section id="home" class="view">
   <header>
     <img class="icon" src="/favicon.svg" alt="">
-    <div class="grow"><h1>Corral</h1><div class="sub" id="machine"></div></div>
+    <div class="grow"><h1>Corral</h1><div class="sub" id="machine"></div><a class="sub" id="hub" hidden>All tailnet pages</a></div>
     <button class="iconbtn" id="bell" aria-label="Notifications">Alerts</button>
     <button class="iconbtn" id="todesk" title="Open the full desktop page">Desktop</button>
   </header>

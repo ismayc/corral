@@ -408,6 +408,15 @@ function ledgerView() {
 // hide it for good. Older folders without a space are left out: those were most likely kept out on purpose.
 const REPOS_DIR = process.env.CORRAL_REPOS || path.join(os.homedir(), 'repos');
 const NEW_REPO_DAYS = 14;
+
+// The page that lists every page on the tailnet. Its address lives in a file outside the repo, one line, so it
+// is read per request; only an http(s) address counts, and anything else (or no file) means no link.
+const HUB_FILE = process.env.CORRAL_HUB_FILE || path.join(os.homedir(), '.config', 'tailnet-hub', 'url');
+function hubUrl() {
+  let line = '';
+  try { line = fs.readFileSync(HUB_FILE, 'utf8').split('\n')[0].trim(); } catch {}
+  return /^https?:\/\/\S+$/i.test(line) ? line : null;
+}
 const HIDDEN_REPOS_FILE = path.join(DATA_DIR, 'hidden-repos.json');
 const hiddenRepos = () => new Set(readJsonFile(HIDDEN_REPOS_FILE)?.roots || []);
 function newRepos() {
@@ -1715,6 +1724,7 @@ const server = http.createServer(async (req, res) => {
     const found = await locateFile(q.get('name'), Number(q.get('size')), Number(q.get('modified')));
     return found ? send(res, 200, { path: found }) : send(res, 404, { error: 'not found on this Mac' });
   }
+  if (url.pathname === '/api/hub' && req.method === 'GET') return send(res, 200, { url: hubUrl() });
   if (url.pathname === '/api/remote' && req.method === 'GET') {
     return send(res, 200, { url: tailnet?.served ? tailnet.url : null, machine: tailnet?.machine || null, remote: Boolean(access.remote) });
   }

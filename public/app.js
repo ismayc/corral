@@ -1107,6 +1107,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('#laym
   }
   checkRestore();
   showPhoneLink();
+  showHubLink();
   setInterval(pickUpNewWindows, 3000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) pickUpNewWindows(); });
   watchStatus();
@@ -1321,6 +1322,15 @@ async function pickUpNewWindows() {
     toast(`${s.label} ${isNew ? 'was started with' : 'was given'} a task from another app. Here it is.`);
   }
   unclaimed = new Set(fresh.filter((s) => !open.has(s.id)).map((s) => s.id));
+}
+
+// A link to the page that lists every page on the tailnet, when the server knows its address.
+async function showHubLink() {
+  const r = await api('/api/hub').catch(() => null);
+  if (!/^https?:\/\//i.test(r?.url || '')) return;
+  const a = $('#hub');
+  a.href = r.url;
+  a.hidden = false;
 }
 
 // When Tailscale serves Corral, offer the link that opens it on a phone or another of your devices.
