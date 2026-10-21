@@ -436,6 +436,8 @@ async function spawn(cwd, label, space, agent) {
   if (r?.status === 409 && j.existing) return bringForward(j.existing);
   if (!r?.ok) return toast(j.error || 'Could not start the window.');
   attach(j);
+  // Says so when a space opens without Claude Code, so a bumped "A space opens" shows on the first click.
+  if (space && agent === '') toast('Opened a plain shell: "A space opens" is set to A plain shell.');
 }
 // Into a zone with the keyboard: opened if this page does not have it yet, out of the bottom bar if it is there.
 function showSummoned(info) {

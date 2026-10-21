@@ -29,6 +29,21 @@ test('a space set to open a plain shell sends no agent', async () => {
   p.row('alpha').click();
   await flush();
   assert.equal(p.api.called('POST', '/api/sessions')[0].body.agent, null);
+  assert.equal(p.$('#toast').hidden, false);
+  assert.match(p.$('#toast').textContent, /plain shell/);
+});
+
+test('a space opened with Claude Code shows no notice', async () => {
+  const p = await start({ routes: { ...herdr('alpha'), 'POST /api/sessions': session('n1', { space: 'alpha' }) } });
+  p.row('alpha').click();
+  await flush();
+  assert.equal(p.api.called('POST', '/api/sessions')[0].body.agent, 'claude');
+  assert.equal(p.$('#toast').hidden, true);
+});
+
+test('the "A space opens" choice is not restored by the browser over the saved one', async () => {
+  const p = await start();
+  assert.equal(p.$('#agent').getAttribute('autocomplete'), 'off');
 });
 
 test('a second click on a space brings its window forward instead of opening another', async () => {

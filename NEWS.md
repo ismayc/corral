@@ -5,6 +5,11 @@ in `package.json`.
 
 ## Development version
 
+- **A notice when a space opens a plain shell.** On the Mac page, a
+  click on a space that opens a shell instead of Claude Code says so, and
+  names the "A space opens" setting behind it. The browser no longer brings
+  back an old value for that setting when it reloads the page; the saved
+  choice decides.
 - **A link to your tailnet's page list.** When `~/.config/tailnet-hub/url`
   holds an `http://` or `https://` address, the Mac page's top bar and the
   phone page's header show an "All tailnet pages" link to it, in the same
