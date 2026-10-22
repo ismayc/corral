@@ -58,6 +58,36 @@ function statusOf(w) {
   return { cls: '', text: 'Claude', rank: 1 };
 }
 const needsYou = (w) => statusOf(w).rank === 0;
+
+// TO-DO: project folders to work on next, kept on the Mac in categories.json and shared with the Mac page.
+// A window in one of those folders is listed first, in its own group, until it is cleared with /clear.
+let todoRoots = [];
+const TODO_RANK = 5;
+const isTodoWin = (w) => Boolean(w.cwd) && todoRoots.includes(w.cwd) && !(w.claude?.status === 'idle' && w.claude.cleared);
+const rankOf = (w) => (isTodoWin(w) ? TODO_RANK : statusOf(w).rank);
+async function saveTodo(doc, roots) {
+  todoRoots = roots;
+  await api('/api/categories', { method: 'POST', body: { ...doc, todo: roots } });
+}
+async function loadTodo() {
+  try {
+    const doc = await api('/api/categories');
+    todoRoots = doc.todo || [];
+    // A cleared window finishes its TO-DO item.
+    const done = windows.filter((w) => w.cwd && todoRoots.includes(w.cwd) && w.claude?.status === 'idle' && w.claude.cleared).map((w) => w.cwd);
+    if (done.length) await saveTodo(doc, todoRoots.filter((r) => !done.includes(r)));
+  } catch {}
+}
+async function toggleTodo(w) {
+  closeSheet();
+  try {
+    const doc = await api('/api/categories');
+    const on = !(doc.todo || []).includes(w.cwd);
+    await saveTodo(doc, on ? [...(doc.todo || []), w.cwd] : doc.todo.filter((r) => r !== w.cwd));
+    toast(on ? `${w.label} is in TO-DO.` : `${w.label} is out of TO-DO.`);
+  } catch { toast('Could not change that.'); }
+  refresh();
+}
 // The color for a status, as on the Mac's page: yellow working, green your turn (asking included), none for a shell.
 const colorOf = (st) => (st.cls === 'need' ? 'idle' : st.cls === 'busy' ? 'working' : st.cls);
 
@@ -253,6 +283,7 @@ function windowMenu(w) {
     item('Open the window', () => { closeSheet(); openTerm(w); }),
     claude ? item('Last reply', () => showLastReply(w)) : null,
     claude && w.claude.status !== 'waiting' ? item(`Next mode${w.claude.mode ? ` (now ${modeName(w.claude.mode)})` : ''}`, () => { closeSheet(); cardKey(w, 'mode'); }) : null,
+    w.cwd ? item(isTodoWin(w) ? 'Remove from TO-DO' : 'Add to TO-DO', () => toggleTodo(w)) : null,
     item(w.muted ? 'Notify me about this window again' : 'Mute notifications for this window', () => setMuted(w, !w.muted)),
     item('Rename', () => renameSheet(w)),
     item('Close the window', () => closeSheetFor(w), 'danger')));
@@ -343,6 +374,7 @@ async function refresh() {
   $('#home').classList.remove('offline');
   $('#machine').textContent = `on ${o.machine}`;
   windows = o.sessions.filter((s) => !s.exited);
+  await loadTodo();
   // A window whose Claude finishes while you look elsewhere gets a notice.
   for (const w of windows) {
     const now = w.claude?.status;
@@ -377,13 +409,14 @@ function renderList() {
   if (!windows.length) kids.push(h('div', { class: 'empty' }, 'Nothing is running on the Mac. Start something below.'));
   const sorted = listOrder();
   const count = GROUPS.map(() => 0);
-  for (const w of sorted) count[statusOf(w).rank]++;
+  for (const w of sorted) count[rankOf(w)]++;
   let lastRank = -1;
   for (const w of sorted) {
     const st = statusOf(w);
-    if (st.rank !== lastRank) {
-      kids.push(h('div', { class: 'section', id: `group-${st.rank}` }, GROUPS[st.rank].title, h('span', { class: 'n' }, String(count[st.rank]))));
-      lastRank = st.rank;
+    const rank = rankOf(w);
+    if (rank !== lastRank) {
+      kids.push(h('div', { class: 'section', id: `group-${rank}` }, GROUPS[rank].title, h('span', { class: 'n' }, String(count[rank]))));
+      lastRank = rank;
     }
     const stop = (e) => e.stopPropagation();
     const busy = w.claude?.status === 'busy';
@@ -414,7 +447,7 @@ function renderList() {
   list.scrollTop = keep;
   const jump = $('#jump');
   const asking = windows.some((w) => statusOf(w).cls === 'need');
-  jump.replaceChildren(...GROUPS.map((g, rank) => (count[rank] ? h('button', {
+  jump.replaceChildren(...GROUP_ORDER.map((rank) => [GROUPS[rank], rank]).map(([g, rank]) => (count[rank] ? h('button', {
     class: rank === 0 && asking ? 'need' : g.cls, 'data-rank': rank, onclick: () => jumpTo(rank),
   }, g.chip, ' ', h('b', {}, String(count[rank]))) : null)).filter(Boolean));
   jump.hidden = !windows.length;
@@ -426,7 +459,8 @@ function renderList() {
 // started waiting on you most recently. tmux's activity time is no use for that, since an idle Claude still
 // redraws its screen; it orders only the shells, which have no Claude status.
 const lastChange = (w) => w.claude?.since || w.activity || 0;
-const listOrder = () => [...windows].sort((a, b) => statusOf(a).rank - statusOf(b).rank || lastChange(b) - lastChange(a));
+const GROUP_ORDER = [TODO_RANK, 0, 1, 2, 3, 4];
+const listOrder = () => [...windows].sort((a, b) => GROUP_ORDER.indexOf(rankOf(a)) - GROUP_ORDER.indexOf(rankOf(b)) || lastChange(b) - lastChange(a));
 
 // The groups, in list order.
 const GROUPS = [
@@ -435,6 +469,7 @@ const GROUPS = [
   { title: 'Shells', chip: 'Shells', cls: '' },
   { title: 'Auto-compacted windows', chip: 'Compacted', cls: '' },
   { title: 'Parked windows', chip: 'Parked', cls: '' },
+  { title: 'TO-DO', chip: 'TO-DO', cls: '' },
 ];
 // Where an element sits in the list's own scroll position. A stuck header reports where it is stuck,
 // so jumping measures the first window under the header, which never sticks.

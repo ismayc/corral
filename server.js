@@ -440,7 +440,7 @@ function hideRepo(root) {
 // Categories: the user's own groups for the sidebar. A space belongs to at most one, keyed by its
 // project folder so the grouping survives a space being closed and reopened.
 const CATEGORIES_FILE = path.join(DATA_DIR, 'categories.json');
-let categories = { version: 1, categories: [], uncatCollapsed: false, assign: {} };
+let categories = { version: 1, categories: [], uncatCollapsed: false, assign: {}, todo: [] };
 
 // Accepts only a well-formed whole document; returns the cleaned copy or null.
 function cleanCategories(body) {
@@ -457,7 +457,9 @@ function cleanCategories(body) {
   // fromEntries makes plain own properties, so a folder called "__proto__" cannot touch the prototype.
   const assign = Object.fromEntries(Object.entries(body.assign)
     .filter(([root, name]) => root.length < 1024 && typeof name === 'string' && names.has(name)));
-  return { version: 1, categories: list, uncatCollapsed: Boolean(body.uncatCollapsed), assign };
+  // TO-DO: project folders to work on next, shown above Open windows. Older files have none.
+  const todo = [...new Set(Array.isArray(body.todo) ? body.todo.filter((r) => typeof r === 'string' && r && r.length < 1024) : [])].slice(0, 200);
+  return { version: 1, categories: list, uncatCollapsed: Boolean(body.uncatCollapsed), assign, todo };
 }
 
 function loadCategories() {

@@ -105,7 +105,7 @@ test('the ⋯ menu of a Claude window lists every action and names its mode', as
   assert.equal(p.sheetTitle(), 'a');
   assert.equal(p.$('#termview').hidden, true);
   assert.deepEqual(p.$$('#genbody .menu button').map((b) => b.textContent),
-    ['Open the window', 'Last reply', 'Next mode (now Plan mode)', 'Mute notifications for this window', 'Rename', 'Close the window']);
+    ['Open the window', 'Last reply', 'Next mode (now Plan mode)', 'Add to TO-DO', 'Mute notifications for this window', 'Rename', 'Close the window']);
   assert.equal(p.button('Close the window').className, 'danger');
 });
 
@@ -121,7 +121,7 @@ test('the menu of a shell has no Claude actions, and a muted window offers to no
   const p = await phone([win('sh', { muted: true })]);
   p.card('sh').querySelector('.more').click();
   assert.deepEqual(p.$$('#genbody .menu button').map((b) => b.textContent),
-    ['Open the window', 'Notify me about this window again', 'Rename', 'Close the window']);
+    ['Open the window', 'Add to TO-DO', 'Notify me about this window again', 'Rename', 'Close the window']);
 });
 
 test('Open the window from the menu closes the sheet and opens the terminal', async () => {

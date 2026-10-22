@@ -5,6 +5,13 @@ in `package.json`.
 
 ## Development version
 
+- **A TO-DO section for spaces you still need to work on.** On the Mac
+  page, the space menu (the dots, or a right-click) has a "TO-DO" entry, and
+  spaces can be dragged onto the TO-DO header. The section sits above Open
+  windows. When Claude's window in a TO-DO space is cleared with /clear, the
+  space leaves TO-DO and goes under Parked windows. The phone page has the
+  same: a card's menu has "Add to TO-DO", and those windows form the first
+  group. The list is saved on the Mac with the categories, by project folder.
 - **A notice when a space opens a plain shell.** On the Mac page, a
   click on a space that opens a shell instead of Claude Code says so, and
   names the "A space opens" setting behind it. The browser no longer brings
