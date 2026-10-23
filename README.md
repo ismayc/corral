@@ -179,7 +179,8 @@ network between your own devices.
   transcript, without opening the window.
 - **Copy a `! command`.** In Chat, press and hold a code span or code
   block that starts with `! ` until it is outlined, then lift your finger
-  to copy all of it. On the Mac page, hold the mouse still for half a
+  to copy all of it. In Terminal, hold a line with a `! ` command until a
+  toast names it, then lift. On the Mac page, hold the mouse still for half a
   second on a terminal line with a `! ` command to copy the command.
 - **Allow or deny from the list.** A session stopped at a permission prompt
   goes to the top with a red **Needs permission** label. Its card shows what

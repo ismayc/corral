@@ -8,7 +8,9 @@ in `package.json`.
 - **Press and hold a `! command` to copy it.** In the phone's Chat view, a
   code span or code block in Claude's reply that starts with `! ` (Claude
   Code's prefix for a shell command) is outlined after half a second of
-  holding, and lifting the finger copies the whole span or block. On the
+  holding, and lifting the finger copies the whole span or block. In the
+  phone's Terminal view, holding a line with a `! ` command shows a toast
+  that names it, and lifting the finger copies it. On the
   Mac page, holding the mouse still for half a second on a terminal line
   with a `! ` command copies it, from the `!` to the end of the line. A
   toast says what was copied.

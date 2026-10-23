@@ -285,3 +285,40 @@ test('a tapped terminal link asks first, then opens in the browser; Cancel opens
   assert.equal(p.sheetTitle(), null);
   assert.deepEqual(opened, [['https://example.com/y', '_blank', 'noopener']]);
 });
+
+// Press and hold a line with a `! command` to copy the command, as in Chat.
+test('holding a terminal line with a ! command names it, and lifting copies it', async () => {
+  const p = await phone([win('sh')]);
+  await p.openWin('sh');
+  const term = p.terms[0];
+  term.screen = ['$ ls', '  ! zsh ~/.claude/run-next.sh', 'no bang! here'];
+  term.screenEl.getBoundingClientRect = () => ({ top: 100, height: 240 }); // 24 rows of 10 px
+  const el = p.$('#term');
+  mock.timers.enable({ apis: ['setTimeout'] });
+  const hold = (y, { ms = 600, move = 0, end = 'pointerup' } = {}) => {
+    fire(el, 'pointerdown', { clientX: 20, clientY: y });
+    if (move) fire(el, 'pointermove', { clientX: 20 + move, clientY: y });
+    mock.timers.tick(ms);
+    fire(el, end);
+  };
+  fire(el, 'pointermove', { clientX: 0, clientY: 0 });
+  fire(el, 'pointerup');
+  hold(115, { ms: 200 });
+  hold(115, { move: 20 });
+  hold(115, { end: 'pointercancel' });
+  hold(105);
+  hold(205);
+  mock.timers.reset();
+  await settle();
+  assert.equal(p.clipboard.text, null);
+  mock.timers.enable({ apis: ['setTimeout'] });
+  fire(el, 'pointerdown', { clientX: 20, clientY: 115 });
+  fire(el, 'pointermove', { clientX: 23, clientY: 116 });
+  mock.timers.tick(600);
+  assert.equal(p.toast(), 'Lift to copy: ! zsh ~/.claude/run-next.sh');
+  fire(el, 'pointerup');
+  mock.timers.reset();
+  await settle();
+  assert.equal(p.clipboard.text, '! zsh ~/.claude/run-next.sh');
+  assert.equal(p.toast(), 'Copied: ! zsh ~/.claude/run-next.sh');
+});

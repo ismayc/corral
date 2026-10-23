@@ -1049,11 +1049,46 @@ $('#chat').addEventListener('pointercancel', dropBang);
 $('#chat').addEventListener('pointerup', () => {
   const text = bangHeld?.textContent.trim();
   dropBang();
-  if (!text) return;
+  if (text) copyBang(text);
+});
+function copyBang(text) {
   navigator.clipboard.writeText(text)
     .then(() => toast(text.includes('\n') ? 'Copied the block.' : `Copied: ${text}`))
     .catch(() => toast('Could not copy. Select the text instead.'));
+}
+
+// The same in Terminal: hold a line with a `! command` on it until a toast names the command, then lift to copy
+// it, from the ! to the end of the line.
+let termHold = null;
+function dropTermHold() {
+  clearTimeout(termHold?.timer);
+  termHold = null;
+}
+$('#term').addEventListener('pointerdown', (e) => {
+  dropTermHold();
+  const hold = { x: e.clientX, y: e.clientY, cmd: '' };
+  hold.timer = setTimeout(() => {
+    hold.cmd = bangAt(current.term, hold.y);
+    if (hold.cmd) toast(`Lift to copy: ${hold.cmd}`);
+  }, 500);
+  termHold = hold;
 });
+$('#term').addEventListener('pointermove', (e) => {
+  if (termHold && Math.hypot(e.clientX - termHold.x, e.clientY - termHold.y) > 10) dropTermHold();
+});
+$('#term').addEventListener('pointercancel', dropTermHold);
+$('#term').addEventListener('pointerup', () => {
+  const cmd = termHold?.cmd;
+  dropTermHold();
+  if (cmd) copyBang(cmd);
+});
+// The `! command` on the terminal row at height y: from a ! that starts a word to the end of the row.
+function bangAt(term, y) {
+  const r = term.element.querySelector('.xterm-screen').getBoundingClientRect();
+  const b = term.buffer.active;
+  const line = b.getLine(b.viewportY + Math.floor((y - r.top) / (r.height / term.rows)))?.translateToString(true);
+  return line?.match(/(?:^|\s)(! +\S.*)$/)?.[1];
+}
 
 // ---- History: the window's scrollback as plain text ----
 async function showHistory() {
