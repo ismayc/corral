@@ -177,6 +177,10 @@ network between your own devices.
 - **Read the last reply.** Press and hold a card, or use Last reply in its
   menu, to read what Claude last said, taken from Claude Code's own
   transcript, without opening the window.
+- **Copy a `! command`.** In Chat, press and hold a code span or code
+  block that starts with `! ` until it is outlined, then lift your finger
+  to copy all of it. On the Mac page, hold the mouse still for half a
+  second on a terminal line with a `! ` command to copy the command.
 - **Allow or deny from the list.** A session stopped at a permission prompt
   goes to the top with a red **Needs permission** label. Its card shows what
   Claude wants to run and a button for each answer Claude Code offers (Yes,

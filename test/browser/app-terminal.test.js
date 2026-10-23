@@ -199,3 +199,49 @@ test('the link menu stays on screen near the edges', async () => {
   assert.equal(m.style.left, `${p.window.innerWidth - 328}px`);
   assert.equal(m.style.top, '8px');
 });
+
+// Press and hold a line with a `! command` to copy the command.
+const { mock } = test;
+function bangTerm(p) {
+  const term = p.terms[0];
+  term.screen = ['⏺ Run this:', '  ! zsh ~/.claude/run-next.sh', 'no bang! here'];
+  term.screenEl.getBoundingClientRect = () => ({ top: 100, height: 240 }); // 24 rows of 10 px
+  mock.timers.enable({ apis: ['Date'], now: 0 });
+  const el = term.element;
+  return (y, { ms = 600, move = 0, button = 0 } = {}) => {
+    fire(el, 'pointerdown', { button, clientX: 20, clientY: y });
+    if (move) fire(el, 'pointermove', { clientX: 20 + move, clientY: y });
+    mock.timers.tick(ms);
+    fire(el, 'pointerup', { clientX: 20, clientY: y });
+  };
+}
+
+test('pressing and holding a line with a ! command copies the command', async (t) => {
+  t.after(() => mock.timers.reset());
+  const p = await start(one);
+  const hold = bangTerm(p);
+  fire(p.terms[0].element, 'pointermove', { clientX: 0, clientY: 0 });
+  hold(115, { move: 3 });
+  await flush();
+  assert.equal(p.clipboard.text, '! zsh ~/.claude/run-next.sh');
+  assert.equal(p.toast(), 'Copied: ! zsh ~/.claude/run-next.sh');
+});
+
+test('a short press, a drag, a right button, a row without a ! command, or a refused copy copies nothing', async (t) => {
+  t.after(() => mock.timers.reset());
+  const p = await start(one);
+  const hold = bangTerm(p);
+  hold(115, { ms: 200 });
+  hold(115, { move: 20 });
+  hold(115, { button: 2 });
+  hold(105);
+  hold(125);
+  hold(205);
+  fire(p.terms[0].element, 'pointerup', { clientX: 20, clientY: 115 });
+  await flush();
+  assert.equal(p.clipboard.text, null);
+  p.clipboard.fail = true;
+  hold(115);
+  await flush();
+  assert.equal(p.toast(), 'Could not copy. Option-drag to select it.');
+});

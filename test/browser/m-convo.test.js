@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { mock } = test;
-const { phone, win, claude, overview, settle, unloadPage, deferred, goBack } = require('../helpers/m');
+const { phone, win, claude, overview, settle, unloadPage, deferred, goBack, fire } = require('../helpers/m');
 
 test.afterEach(async () => { await settle(); unloadPage(); mock.timers.reset(); });
 
@@ -324,4 +324,61 @@ test('a table scrolls inside the bubble; a line with a bar but no rule under it 
 test('a reply can end in a list and a blank line', async () => {
   const p = await md('- last\n');
   assert.equal(replyHtml(p), '<ul><li><p>last</p></li></ul>');
+});
+
+// Press and hold a `! command` in a reply to copy it for Claude Code's prompt.
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const BANGS = ['Run `! zsh ~/run.sh` now, not `!important` or `ls`.', '', '```', '! zsh a.sh', 'echo b', '```', '', '```', 'plain', '```'].join('\n');
+
+test('pressing and holding a ! command in a reply marks it, and lifting copies it', async () => {
+  const p = await md(BANGS);
+  const bangs = p.$$('#chat .bang');
+  assert.deepEqual(bangs.map((b) => [b.tagName, b.textContent]), [['CODE', '! zsh ~/run.sh'], ['PRE', '! zsh a.sh\necho b']]);
+  const [inline, block] = bangs;
+  fire(inline, 'pointerdown', { clientX: 10, clientY: 10 });
+  fire(inline, 'pointermove', { clientX: 14, clientY: 13 });
+  await wait(600);
+  assert.ok(inline.classList.contains('held'));
+  assert.equal(p.clipboard.text, null, 'nothing is copied before the finger lifts');
+  fire(inline, 'pointerup');
+  await settle();
+  assert.ok(!inline.classList.contains('held'));
+  assert.equal(p.clipboard.text, '! zsh ~/run.sh');
+  assert.equal(p.toast(), 'Copied: ! zsh ~/run.sh');
+  fire(block.firstChild, 'pointerdown', { clientX: 10, clientY: 10 });
+  await wait(600);
+  fire(block, 'pointerup');
+  await settle();
+  assert.equal(p.clipboard.text, '! zsh a.sh\necho b');
+  assert.equal(p.toast(), 'Copied the block.');
+});
+
+test('a tap, a drag, a cancel, or a press on other text copies nothing, and a refused copy says to select', async () => {
+  const p = await md(BANGS);
+  const inline = p.$('#chat .bang');
+  const chat = p.$('#chat');
+  fire(chat, 'pointermove', { clientX: 50, clientY: 50 });
+  fire(inline, 'pointerdown', { clientX: 10, clientY: 10 });
+  fire(inline, 'pointerup');
+  fire(inline, 'pointerdown', { clientX: 10, clientY: 10 });
+  fire(inline, 'pointermove', { clientX: 10, clientY: 30 });
+  await wait(600);
+  assert.ok(!inline.classList.contains('held'));
+  fire(inline, 'pointerup');
+  fire(inline, 'pointerdown', { clientX: 10, clientY: 10 });
+  await wait(600);
+  fire(inline, 'pointercancel');
+  assert.ok(!inline.classList.contains('held'));
+  fire(inline, 'pointerup');
+  fire(p.$$('#chat pre')[1], 'pointerdown', { clientX: 10, clientY: 10 });
+  await wait(600);
+  fire(chat, 'pointerup');
+  await settle();
+  assert.equal(p.clipboard.text, null);
+  p.clipboard.fail = true;
+  fire(inline, 'pointerdown', { clientX: 10, clientY: 10 });
+  await wait(600);
+  fire(inline, 'pointerup');
+  await settle();
+  assert.equal(p.toast(), 'Could not copy. Select the text instead.');
 });

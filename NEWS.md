@@ -5,6 +5,13 @@ in `package.json`.
 
 ## Development version
 
+- **Press and hold a `! command` to copy it.** In the phone's Chat view, a
+  code span or code block in Claude's reply that starts with `! ` (Claude
+  Code's prefix for a shell command) is outlined after half a second of
+  holding, and lifting the finger copies the whole span or block. On the
+  Mac page, holding the mouse still for half a second on a terminal line
+  with a `! ` command copies it, from the `!` to the end of the line. A
+  toast says what was copied.
 - **A TO-DO section for spaces you still need to work on.** On the Mac
   page, the space menu (the dots, or a right-click) has a "TO-DO" entry, and
   spaces can be dragged onto the TO-DO header. The section sits above Open

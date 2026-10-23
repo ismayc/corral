@@ -357,6 +357,21 @@ function attach(info, quiet) {
     } catch {}
     return true;
   });
+  // Press and hold a line with a `! command` on it for half a second to copy the command, ready to paste into
+  // Claude Code's prompt. A drag is a tmux selection instead.
+  const termEl = el.querySelector('.term');
+  let hold = null;
+  termEl.addEventListener('pointerdown', (e) => { hold = e.button === 0 ? { x: e.clientX, y: e.clientY, at: Date.now() } : null; });
+  termEl.addEventListener('pointermove', (e) => {
+    if (hold && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 5) hold = null;
+  });
+  termEl.addEventListener('pointerup', (e) => {
+    const held = hold && Date.now() - hold.at >= 500;
+    hold = null;
+    const cmd = held && bangAt(term, e.clientY);
+    if (!cmd) return;
+    navigator.clipboard.writeText(cmd).then(() => toast(`Copied: ${cmd}`), () => toast('Could not copy. Option-drag to select it.'));
+  });
   open.set(info.id, w);
   const connect = () => {
     const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?id=${info.id}`);
@@ -396,6 +411,14 @@ function attach(info, quiet) {
   };
   if (quiet) { persist(); minimize(info.id); arrange(); return; }
   persist(); layout(); arrange(); setFocus(info.id);
+}
+
+// The `! command` on the terminal row at height y: from a ! that starts a word to the end of the row.
+function bangAt(term, y) {
+  const r = term.element.querySelector('.xterm-screen').getBoundingClientRect();
+  const b = term.buffer.active;
+  const line = b.getLine(b.viewportY + Math.floor((y - r.top) / (r.height / term.rows)))?.translateToString(true);
+  return line?.match(/(?:^|\s)(! +\S.*)$/)?.[1];
 }
 
 const persist = () => store('corral.open', [...open.keys()]);

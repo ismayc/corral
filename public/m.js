@@ -919,13 +919,15 @@ $('#lastprompt button').onclick = (e) => { e.stopPropagation(); setPrompts(false
 // ---- Markdown: Claude's replies drawn as headings, lists, tables, code, and links ----
 // Built as elements, never as HTML, so text in a reply cannot add markup or run script. Links go out only
 // for http(s) addresses.
+// A `! command` (Claude Code runs a prompt that starts with ! as a shell command), alone in code or a code block.
+const BANG = /^! +\S/;
 const INLINE = /`([^`]+)`|\*\*(.+?)\*\*|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(?<![\w*])\*(?![\s*])(.+?)(?<!\s)\*(?!\w)|(?<!\w)_(?![\s_])(.+?)(?<!\s)_(?!\w)|(https?:\/\/[^\s<>()]*[^\s<>().,;:!?'"])/g;
 function mdInline(s) {
   const out = [];
   let at = 0;
   for (const m of s.matchAll(INLINE)) {
     if (m.index > at) out.push(s.slice(at, m.index));
-    if (m[1]) out.push(h('code', {}, m[1]));
+    if (m[1]) out.push(h('code', BANG.test(m[1]) ? { class: 'bang' } : {}, m[1]));
     else if (m[2]) out.push(h('strong', {}, mdInline(m[2])));
     else if (m[3]) out.push(h('a', { href: m[4], target: '_blank', rel: 'noopener', onclick: tapLink }, mdInline(m[3])));
     else if (m[7]) out.push(h('a', { href: m[7], target: '_blank', rel: 'noopener', onclick: tapLink }, m[7]));
@@ -951,7 +953,8 @@ function markdown(text) {
       flush();
       const code = [];
       for (i++; i < lines.length && !lines[i].trim().startsWith(m[1]); i++) code.push(lines[i]);
-      out.push(h('pre', {}, h('code', {}, code.join('\n'))));
+      const body = code.join('\n');
+      out.push(h('pre', BANG.test(body.trimStart()) ? { class: 'bang' } : {}, h('code', {}, body)));
       i++;
     } else if ((m = line.match(/^(#{1,6}) +(.*)$/))) {
       flush();
@@ -1023,6 +1026,34 @@ function chatItems(r) {
   if (r.claude === 'busy') els.push(h('div', { class: 'working' }, 'Claude is working…'));
   return els;
 }
+
+// Press and hold a `! command` in a reply to copy it, ready to paste into Claude Code's prompt. The copy is
+// made when the finger lifts, since iOS writes to the clipboard only inside the touch's own events.
+let bangTimer = null, bangHeld = null, bangStart = null;
+function dropBang() {
+  clearTimeout(bangTimer);
+  bangHeld?.classList.remove('held');
+  bangHeld = null; bangStart = null;
+}
+$('#chat').addEventListener('pointerdown', (e) => {
+  const el = e.target.closest('.bang');
+  if (!el) return;
+  dropBang();
+  bangStart = { x: e.clientX, y: e.clientY };
+  bangTimer = setTimeout(() => { bangHeld = el; el.classList.add('held'); }, 500);
+});
+$('#chat').addEventListener('pointermove', (e) => {
+  if (bangStart && Math.hypot(e.clientX - bangStart.x, e.clientY - bangStart.y) > 10) dropBang();
+});
+$('#chat').addEventListener('pointercancel', dropBang);
+$('#chat').addEventListener('pointerup', () => {
+  const text = bangHeld?.textContent.trim();
+  dropBang();
+  if (!text) return;
+  navigator.clipboard.writeText(text)
+    .then(() => toast(text.includes('\n') ? 'Copied the block.' : `Copied: ${text}`))
+    .catch(() => toast('Could not copy. Select the text instead.'));
+});
 
 // ---- History: the window's scrollback as plain text ----
 async function showHistory() {

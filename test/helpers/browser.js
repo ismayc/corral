@@ -19,6 +19,9 @@ class FakeTerminal {
     this.element = el;
     this.textarea = el.ownerDocument.createElement('textarea');
     el.appendChild(this.textarea);
+    this.screenEl = el.ownerDocument.createElement('div');
+    this.screenEl.className = 'xterm-screen';
+    el.appendChild(this.screenEl);
   }
   onData(cb) { this.dataCbs.push(cb); return { dispose() {} }; }
   onResize(cb) { this.resizeCbs.push(cb); return { dispose() {} }; }
@@ -32,7 +35,7 @@ class FakeTerminal {
   // What the terminal shows: a test sets `screen` to its lines, top to bottom.
   get buffer() {
     const lines = this.screen || [];
-    return { active: { baseY: 0, getLine: (i) => (i < lines.length ? { translateToString: () => lines[i] } : undefined) } };
+    return { active: { baseY: 0, viewportY: this.viewportY || 0, getLine: (i) => (i < lines.length ? { translateToString: () => lines[i] } : undefined) } };
   }
   paste(d) { this.pasted.push(d); }
   reset() { this.resets++; }
