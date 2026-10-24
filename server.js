@@ -479,6 +479,17 @@ function saveCategories() {
   } catch (e) { console.error('categories save failed:', e.message); return false; }
 }
 
+// Quick replies: the phone page's one-tap messages, kept on the Mac so every phone and iPad shows the same list.
+// null until a device first saves a list.
+const QUICK_FILE = path.join(DATA_DIR, 'quick-replies.json');
+const quickReplies = () => readJsonFile(QUICK_FILE)?.replies || null;
+// Up to 20 non-empty lines of at most 500 characters, or null for anything else.
+function cleanQuick(body) {
+  if (!Array.isArray(body?.replies) || !body.replies.every((r) => typeof r === 'string')) return null;
+  const replies = body.replies.map((r) => r.trim()).filter(Boolean);
+  return replies.length <= 20 && replies.every((r) => r.length <= 500) ? replies : null;
+}
+
 // Backup of the open windows, so they can be brought back after the tmux server or the Mac restarts.
 // open-sessions.json always mirrors what is open now, with the Claude Code conversation running in each
 // window. At startup, windows in it that are no longer running move to restore.json, where they wait for
@@ -1615,6 +1626,13 @@ const server = http.createServer(async (req, res) => {
     if (!clean) return send(res, 400, { error: 'bad categories' });
     categories = clean;
     return saveCategories() ? send(res, 200, categories) : send(res, 500, { error: 'could not save' });
+  }
+  if (url.pathname === '/api/quick' && req.method === 'GET') return send(res, 200, { replies: quickReplies() });
+  if (url.pathname === '/api/quick' && req.method === 'POST') {
+    const replies = cleanQuick(await readJson(req));
+    if (!replies) return send(res, 400, { error: 'bad quick replies' });
+    try { writeJson(QUICK_FILE, { version: 1, replies }); } catch (e) { console.error('quick replies save failed:', e.message); return send(res, 500, { error: 'could not save' }); }
+    return send(res, 200, { replies });
   }
   if (url.pathname === '/api/projects' && req.method === 'GET') {
     await herdrSnapshot(); // keeps the open/inactive split current

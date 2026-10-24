@@ -730,6 +730,7 @@ window.addEventListener('popstate', () => {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   refresh();
+  loadQuick();
   if (current && current.ws?.readyState !== 1) connect();
   checkTap(); setTimeout(checkTap, 1000);
 });
@@ -1308,9 +1309,18 @@ async function openById(id) {
 }
 
 // ---- Quick replies: tap one to put it in the message box, then Send ----
-// Kept on this device. Tapping fills the box rather than sending, so a slip of the finger sends nothing.
+// Kept on the Mac, so every phone and iPad shows the same list; this device keeps a copy to draw at once.
+// Tapping fills the box rather than sending, so a slip of the finger sends nothing.
 const QUICK_DEFAULT = ['Continue', 'Yes, go ahead', 'Run the tests', 'Commit and push', '/clear'];
 let quick = load('corral.m.quick', QUICK_DEFAULT);
+function setQuick(list) { quick = list; store('corral.m.quick', list); renderQuick(); }
+// The Mac's list replaces this device's copy. A Mac with no list yet takes this device's list, if it was edited.
+async function loadQuick() {
+  let r;
+  try { r = await api('/api/quick'); } catch { return; }
+  if (r.replies) setQuick(r.replies);
+  else if (load('corral.m.quick', null)) api('/api/quick', { method: 'POST', body: { replies: quick } }).catch(() => {});
+}
 function renderQuick() {
   $('#quick').replaceChildren(...quick.map((q) => h('button', {
     onpointerdown: (e) => e.preventDefault(),
@@ -1320,15 +1330,24 @@ function renderQuick() {
 function editQuick() {
   const ta = h('textarea', { rows: '7' });
   ta.value = quick.join('\n');
-  sheet('Quick replies', h('p', {}, 'One per line. Tapping one puts it in the message box; Send sends it.'), ta,
+  sheet('Quick replies', h('p', {}, 'One per line. Tapping one puts it in the message box; Send sends it. Saved on the Mac for every device.'), ta,
     h('div', { class: 'btns' },
-      h('button', { class: 'primary', onclick: () => {
-        quick = ta.value.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 20);
-        store('corral.m.quick', quick); renderQuick(); closeSheet();
+      h('button', { class: 'primary', onclick: async (e) => {
+        const btn = e.currentTarget;
+        const replies = ta.value.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 20);
+        btn.disabled = true;
+        try {
+          setQuick((await api('/api/quick', { method: 'POST', body: { replies } })).replies);
+          closeSheet();
+        } catch {
+          btn.disabled = false;
+          toast('Could not save on the Mac. A reply can be at most 500 characters.');
+        }
       } }, 'Save'),
       h('button', { onclick: () => { ta.value = QUICK_DEFAULT.join('\n'); } }, 'Reset')));
 }
 renderQuick();
+loadQuick();
 
 // ---- Swipe left or right in a terminal to go to the next or previous window in the list ----
 let swipe = null;

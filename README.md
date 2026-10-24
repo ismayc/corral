@@ -224,8 +224,8 @@ network between your own devices.
   previous window in the list.
 - **Quick replies.** A row of chips above the message box (Continue, Run the
   tests, Commit and push, `/clear`, and others) puts that text in the box;
-  tap Send to send it. **Edit** changes the list, which is kept on that
-  device.
+  tap Send to send it. **Edit** changes the list, which is kept on the Mac,
+  so every phone and iPad shows the same chips.
 - **Type or dictate.** The message box at the bottom works with the
   keyboard's microphone. A message with several lines goes in as one.
 - **Send a photo.** The camera button next to the message box opens the
@@ -386,7 +386,9 @@ about who can reach it:
   holds an `http://` or `https://` address, both pages show an "All tailnet
   pages" link to it. Corral only reads this file. `CORRAL_HUB_FILE` points it
   elsewhere.
-- The phone's quick replies, in that phone's browser storage.
+- `~/.local/share/corral/quick-replies.json`: the phone page's quick replies,
+  shared by every device. Each device also keeps a copy in its browser
+  storage to show them at once.
 - `~/.local/share/corral/uploads/`: photos sent from the phone (owner-only
   permissions). Corral deletes each one after 14 days.
 - Your browser's local storage: window layout, which windows are open or

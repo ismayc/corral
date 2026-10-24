@@ -75,7 +75,7 @@ test('quick replies fill the box without sending, and add to what is already the
   assert.deepEqual(ws.sent.filter((s) => s.includes('"in"')), []);
 });
 
-test('Edit saves one quick reply per line, trimmed, at most twenty, and keeps them on the phone', async () => {
+test('Edit saves one quick reply per line, trimmed, at most twenty, on the Mac and on the phone', async () => {
   const p = await phone([]);
   p.button('Edit', p.$('#quick')).click();
   assert.equal(p.sheetTitle(), 'Quick replies');
@@ -83,7 +83,10 @@ test('Edit saves one quick reply per line, trimmed, at most twenty, and keeps th
   assert.equal(ta.value, 'Continue\nYes, go ahead\nRun the tests\nCommit and push\n/clear');
   ta.value = ['  ok  ', '', ...Array.from({ length: 25 }, (_, i) => `r${i}`)].join('\n');
   p.button('Save').click();
+  assert.equal(p.button('Save').disabled, true);
+  await settle();
   assert.equal(p.sheetTitle(), null);
+  assert.equal(p.api.called('POST', '/api/quick')[0].body.replies.length, 20);
   const saved = JSON.parse(p.window.localStorage.getItem('corral.m.quick'));
   assert.equal(saved.length, 20);
   assert.equal(saved[0], 'ok');
@@ -97,6 +100,7 @@ test('Reset in the editor puts back the default quick replies', async () => {
   p.button('Reset').click();
   assert.equal(p.$('#genbody textarea').value, 'Continue\nYes, go ahead\nRun the tests\nCommit and push\n/clear');
   p.button('Save').click();
+  await settle();
   assert.equal(p.$$('#quick button').length, 6);
 });
 
@@ -110,6 +114,44 @@ test('storage that refuses writes leaves the page working', async () => {
   p.button('Edit', p.$('#quick')).click();
   p.$('#genbody textarea').value = 'Only';
   p.button('Save').click();
+  await settle();
   assert.deepEqual(p.$$('#quick button').map((b) => b.textContent), ['Only', 'Edit']);
   assert.equal(p.window.localStorage.getItem('corral.m.quick'), null);
+});
+
+test('the Mac\'s quick replies replace this device\'s copy on load and when the page comes back', async () => {
+  const p = await phone([], { storage: { 'corral.m.quick': ['Old'] }, routes: { 'GET /api/quick': { replies: ['Shared'] } } });
+  assert.deepEqual(p.$$('#quick button').map((b) => b.textContent), ['Shared', 'Edit']);
+  assert.deepEqual(JSON.parse(p.window.localStorage.getItem('corral.m.quick')), ['Shared']);
+  assert.equal(p.api.called('POST', '/api/quick').length, 0);
+  p.api.routes['GET /api/quick'] = { replies: ['Edited on the iPad'] };
+  p.window.document.dispatchEvent(new p.window.Event('visibilitychange'));
+  await settle();
+  assert.deepEqual(p.$$('#quick button').map((b) => b.textContent), ['Edited on the iPad', 'Edit']);
+});
+
+test('a Mac with no quick replies yet takes an edited list from this device, but not the default', async () => {
+  const p = await phone([], { storage: { 'corral.m.quick': ['Mine'] } });
+  assert.deepEqual(p.api.called('POST', '/api/quick').map((c) => c.body), [{ replies: ['Mine'] }]);
+  unloadPage();
+  const q = await phone([], { routes: { 'POST /api/quick': new Error('offline') } });
+  assert.equal(q.api.called('POST', '/api/quick').length, 0);
+  assert.equal(q.$$('#quick button')[0].textContent, 'Continue');
+  unloadPage();
+  const r = await phone([], { storage: { 'corral.m.quick': ['Mine'] }, routes: { 'POST /api/quick': new Error('offline') } });
+  assert.equal(r.api.called('POST', '/api/quick').length, 1);
+  assert.equal(r.$$('#quick button')[0].textContent, 'Mine');
+});
+
+test('a Mac that cannot be read keeps this device\'s copy, and a save it refuses keeps the editor open', async () => {
+  const p = await phone([], { storage: { 'corral.m.quick': ['Mine'] }, routes: { 'GET /api/quick': new Error('offline'), 'POST /api/quick': { __reply: true, status: 400, body: { error: 'bad quick replies' } } } });
+  assert.deepEqual(p.$$('#quick button').map((b) => b.textContent), ['Mine', 'Edit']);
+  p.button('Edit', p.$('#quick')).click();
+  p.$('#genbody textarea').value = 'x'.repeat(501);
+  p.button('Save').click();
+  await settle();
+  assert.equal(p.sheetTitle(), 'Quick replies');
+  assert.equal(p.button('Save').disabled, false);
+  assert.equal(p.toast(), 'Could not save on the Mac. A reply can be at most 500 characters.');
+  assert.deepEqual(p.$$('#quick button').map((b) => b.textContent), ['Mine', 'Edit']);
 });

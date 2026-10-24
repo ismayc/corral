@@ -5,6 +5,11 @@ in `package.json`.
 
 ## Development version
 
+- **Quick replies are the same on every device.** The list that **Edit**
+  saves is now kept on the Mac, in `~/.local/share/corral/quick-replies.json`,
+  so a change on the iPhone shows on the iPad the next time its page loads
+  or comes back to the front. The first device to open the page with a list
+  of its own edits gives that list to the Mac.
 - **Press and hold a `! command` to copy it.** In the phone's Chat view, a
   code span or code block in Claude's reply that starts with `! ` (Claude
   Code's prefix for a shell command) is outlined after half a second of

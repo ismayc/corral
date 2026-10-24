@@ -79,6 +79,29 @@ test('categories can be read and replaced, and a bad document is refused', async
   assert.equal((await req('POST', '/api/categories', { raw: '{nope' })).status, 400);
 });
 
+test('quick replies are kept on the Mac, cleaned, and a bad list is refused', async (t) => {
+  const { req, home } = await world(t);
+  assert.deepEqual((await req('GET', '/api/quick')).json, { replies: null });
+  const saved = await req('POST', '/api/quick', { body: { replies: ['  Continue ', '', 'Ship it'] } });
+  assert.deepEqual([saved.status, saved.json], [200, { replies: ['Continue', 'Ship it'] }]);
+  assert.deepEqual((await req('GET', '/api/quick')).json, { replies: ['Continue', 'Ship it'] });
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, '.local/share/corral/quick-replies.json'), 'utf8')), { version: 1, replies: ['Continue', 'Ship it'] });
+  for (const body of [{}, { replies: 'x' }, { replies: [1] }, { replies: Array(21).fill('a') }, { replies: ['x'.repeat(501)] }]) {
+    const bad = await req('POST', '/api/quick', { body });
+    assert.deepEqual([bad.status, bad.json], [400, { error: 'bad quick replies' }]);
+  }
+  assert.equal((await req('POST', '/api/quick', { raw: '{nope' })).status, 400);
+  assert.deepEqual((await req('GET', '/api/quick')).json, { replies: ['Continue', 'Ship it'] });
+});
+
+test('saving quick replies reports a disk failure', async (t) => {
+  quiet(t);
+  const { req } = await world(t);
+  t.mock.method(fs, 'renameSync', () => { throw new Error('full'); });
+  const r = await req('POST', '/api/quick', { body: { replies: ['a'] } });
+  assert.deepEqual([r.status, r.json], [500, { error: 'could not save' }]);
+});
+
 test('saving categories reports a disk failure', async (t) => {
   quiet(t);
   const { req } = await world(t);
