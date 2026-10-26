@@ -1159,15 +1159,16 @@ function saveUpload(body) {
   return { status: 201, path: file };
 }
 
-// A file dropped on a Mac window from Finder: the browser knows only its name, size, and modified time,
-// never its path. This finds it: the usual folders first, then Spotlight. Only a file whose size and time
-// both match counts, so a different file with the same name is never pasted in its place.
+// A file or folder dropped on a Mac window from Finder: the browser knows only its name, size, and modified
+// time, never its path. This finds it: the usual folders first, then Spotlight. Only an entry whose size and
+// time both match counts, so a different one with the same name is never pasted in its place. Chrome gives
+// a dropped folder the size and time that stat reports for it, so a folder matches the same way.
 const LOCATE_DIRS = ['Downloads', 'Desktop', 'Documents', ''];
 function locateFile(name, size, modified) {
   return new Promise((resolve) => {
     if (!name || name.includes('/') || !Number.isFinite(size) || !Number.isFinite(modified)) return resolve(null);
     const fits = (p) => {
-      try { const st = fs.statSync(p); return st.isFile() && st.size === size && Math.abs(st.mtimeMs - modified) < 2000; } catch { return false; }
+      try { const st = fs.statSync(p); return (st.isFile() || st.isDirectory()) && st.size === size && Math.abs(st.mtimeMs - modified) < 2000; } catch { return false; }
     };
     const home = os.homedir();
     const near = LOCATE_DIRS.map((d) => path.join(home, d, name)).find(fits);

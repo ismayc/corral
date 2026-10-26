@@ -275,8 +275,8 @@ function setFocus(id) {
 }
 
 // quiet: a window started elsewhere goes straight to the bottom bar and does not take the keyboard.
-// ---- Files dropped on a window: the browser never sees a dropped file's path on the Mac, only its name,
-// size, and modified time. The server finds the file from those (see locateFile) and its path is pasted,
+// ---- Files and folders dropped on a window: the browser never sees a dropped file's path on the Mac, only
+// its name, size, and modified time. The server finds it from those (see locateFile) and its path is pasted,
 // escaped the way Terminal.app pastes a dropped file, so Claude Code reads it, and attaches an image as
 // [Image #n]. An image the server cannot find (dragged from a screenshot's thumbnail, say) is uploaded to
 // Corral's data folder instead, as the phone's photos are, and that copy's path pasted.
@@ -336,7 +336,7 @@ function attach(info, quiet) {
   term.open(el.querySelector('.term'));
 
   const w = { term, fit, el, slot, info, ws: null, muted: false };
-  // Drop a file from Finder or the Desktop on the window to give its path to Claude Code (see addFiles).
+  // Drop a file or folder from Finder or the Desktop on the window to give its path to Claude Code (see addFiles).
   el.addEventListener('dragover', (e) => { if (filesIn(e)) { e.preventDefault(); el.classList.add('filedrop'); } });
   el.addEventListener('dragleave', () => el.classList.remove('filedrop'));
   el.addEventListener('drop', (e) => {

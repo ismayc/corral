@@ -5,6 +5,10 @@ in `package.json`.
 
 ## Development version
 
+- **A folder dropped on a Mac window pastes its path.** Drag a folder from
+  Finder onto a window, and its path goes into Claude Code's prompt, escaped
+  the way Terminal.app pastes it, as a dropped file's path already did.
+  Before, a folder got the toast "Could not find" and nothing was pasted.
 - **Quick replies are the same on every device.** The list that **Edit**
   saves is now kept on the Mac, in `~/.local/share/corral/quick-replies.json`,
   so a change on the iPhone shows on the iPad the next time its page loads

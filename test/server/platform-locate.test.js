@@ -34,7 +34,17 @@ test('locateFile asks Spotlight for a file elsewhere, and takes only an exact na
   assert.deepEqual(asked, ['-onlyin', h.home, '-name', 'data.csv']);
 });
 
-test('locateFile answers null for a bad question, a failed or empty search, or a folder', async () => {
+test('locateFile finds a dropped folder by the size and time stat gives it', async () => {
+  const h = loadServer({ exec: { mdfind: () => path.join(h.home, 'repos', 'my app') } });
+  const dir = path.join(h.home, 'repos', 'my app');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.utimesSync(dir, T / 1000, T / 1000);
+  const { size } = fs.statSync(dir);
+  assert.equal(await h.srv.locateFile('my app', size, T), dir);
+  assert.equal(await h.srv.locateFile('my app', size, T - 60000), null); // same name, wrong time
+});
+
+test('locateFile answers null for a bad question, a failed or empty search, or a mismatched folder', async () => {
   let reply = new Error('mdfind failed');
   const h = loadServer({ exec: { mdfind: () => { if (reply instanceof Error) throw reply; return reply; } } });
   assert.equal(await h.srv.locateFile(null, 1, T), null);
@@ -45,7 +55,7 @@ test('locateFile answers null for a bad question, a failed or empty search, or a
   reply = '';
   assert.equal(await h.srv.locateFile('x', 1, T), null);
   fs.mkdirSync(path.join(h.home, 'Desktop', 'folder'), { recursive: true });
-  assert.equal(await h.srv.locateFile('folder', 64, T), null);
+  assert.equal(await h.srv.locateFile('folder', 1, T), null);
 });
 
 test('GET /api/locate answers the Mac\'s own page with a path or 404, and refuses the tailnet', async (t) => {
