@@ -21,6 +21,19 @@ test('cleanEnv drops the variables that tie a shell to another Claude Code, herd
   assert.equal(srv.cleanEnv().TERM, process.env.TERM);
 });
 
+test('cleanEnv adds a UTF-8 LANG only when no locale is set, so tmux does not draw symbols as underscores', (t) => {
+  const { srv } = loadServer();
+  const saved = { LANG: process.env.LANG, LC_ALL: process.env.LC_ALL, LC_CTYPE: process.env.LC_CTYPE };
+  t.after(() => { for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v; });
+  for (const k of Object.keys(saved)) delete process.env[k];
+  assert.equal(srv.cleanEnv().LANG, 'en_US.UTF-8');
+  process.env.LC_CTYPE = 'de_DE.UTF-8';
+  assert.equal('LANG' in srv.cleanEnv(), false);
+  delete process.env.LC_CTYPE;
+  process.env.LANG = 'fr_FR.UTF-8';
+  assert.equal(srv.cleanEnv().LANG, 'fr_FR.UTF-8');
+});
+
 test('tmux runs a subcommand on the corral socket and returns its output', (t) => {
   const { srv, tmux } = loadServer();
   tmux.add('wt-a');
@@ -88,7 +101,7 @@ test('attachPty attaches to tmux, runs a program in a login shell, or starts a p
   const T = srv.constants.TMUX;
   srv.attachPty('abc', os.tmpdir(), true);
   assert.equal(ptys[0].file, T);
-  assert.deepEqual(ptys[0].args, ['-L', 'corral', 'attach-session', '-t', 'wt-abc']);
+  assert.deepEqual(ptys[0].args, ['-u', '-L', 'corral', 'attach-session', '-t', 'wt-abc']);
   assert.equal(ptys[0].opts.env.CORRAL_SESSION, 'abc');
   assert.equal(ptys[0].opts.env.TERM, 'xterm-256color');
   assert.equal(ptys[0].opts.cwd, os.tmpdir());
@@ -157,7 +170,7 @@ test('createSession starts a tmux session that changes into the folder, labels i
   assert.equal(s.tmux, true);
   assert.equal(s.cwd, dir);
   assert.equal(ptys.length, 1);
-  assert.deepEqual(ptys[0].args.slice(0, 3), ['-L', 'corral', 'attach-session']);
+  assert.deepEqual(ptys[0].args.slice(0, 4), ['-u', '-L', 'corral', 'attach-session']);
 });
 
 test('createSession falls back to home for a missing or non-folder path, and names the window after the folder', () => {

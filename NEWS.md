@@ -5,6 +5,12 @@ in `package.json`.
 
 ## Development version
 
+- **Symbols no longer turn into underscores after a restart.** A server
+  started from the Dock tile had no locale, so tmux drew every non-ASCII
+  character (Claude Code's bullets, spinners, and context bar) as `_`. The
+  server now gives its children `LANG=en_US.UTF-8` when no locale is set,
+  attaches tmux with `-u`, and the Dock launcher sets the same `LANG` for
+  the herdr server.
 - **A folder dropped on a Mac window pastes its path.** Drag a folder from
   Finder onto a window, and its path goes into Claude Code's prompt, escaped
   the way Terminal.app pastes it, as a dropped file's path already did.

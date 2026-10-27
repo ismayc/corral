@@ -157,9 +157,12 @@ let counter = 0;
 // a Claude Code started there would think it is a child of that session, and a HERDR_PANE_ID
 // would make herdr attribute its state to the wrong pane. TMUX would break nested attach.
 const LEAKY_ENV = /^(CLAUDECODE|CLAUDE_CODE_.*|CLAUDE_PID|CLAUDE_EFFORT|HERDR_.*|TMUX|TMUX_PANE)$/;
+// Started from the Dock launcher, the server has no LANG at all. A tmux client without a UTF-8 locale
+// draws every non-ASCII character as "_", so Claude Code's symbols and context bar turn into underscores.
 function cleanEnv(extra = {}) {
   const env = {};
   for (const [k, v] of Object.entries(process.env)) if (!LEAKY_ENV.test(k)) env[k] = v;
+  if (!env.LC_ALL && !env.LC_CTYPE && !env.LANG) env.LANG = 'en_US.UTF-8';
   return { ...env, ...extra };
 }
 
@@ -222,7 +225,7 @@ function attachPty(id, dir, useTmux, agent, resume, prompt) {
   const shell = process.env.SHELL || '/bin/zsh';
   const program = programFor(agent, resume, prompt);
   const [file, args] = useTmux
-    ? [TMUX, ['-L', TMUX_SOCKET, 'attach-session', '-t', SESSION_PREFIX + id]]
+    ? [TMUX, ['-u', '-L', TMUX_SOCKET, 'attach-session', '-t', SESSION_PREFIX + id]]
     : program ? [shell, ['-lc', `${program}; exec ${shell} -l`]] : [shell, ['-l']];
   return pty.spawn(file, args, { name: 'xterm-256color', cols: 100, rows: 30, cwd: dir, env });
 }
@@ -1895,7 +1898,7 @@ server.on('upgrade', (req, socket, head) => {
     if (own) {
       const size = (v, max, d) => Math.min(Math.max(Number(v) || d, 10), max);
       try {
-        target = pty.spawn(TMUX, ['-L', TMUX_SOCKET, 'attach-session', '-t', SESSION_PREFIX + s.id], {
+        target = pty.spawn(TMUX, ['-u', '-L', TMUX_SOCKET, 'attach-session', '-t', SESSION_PREFIX + s.id], {
           name: 'xterm-256color', cols: size(url.searchParams.get('cols'), 500, 80), rows: size(url.searchParams.get('rows'), 200, 24),
           cwd: os.homedir(), env: cleanEnv({ TERM: 'xterm-256color', COLORTERM: 'truecolor', CORRAL_SESSION: s.id }),
         });

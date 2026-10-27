@@ -9,6 +9,9 @@ set -u
 herdr_bin="${HERDR_BIN:-}"   # the one HERDR_* value to keep: the documented override
 unset CLAUDECODE CLAUDE_PID CLAUDE_EFFORT TMUX TMUX_PANE
 unset -m 'CLAUDE_CODE_*' 'HERDR_*'
+# A Dock launch also has no locale. Without one, tmux clients and shells in both servers' panes draw every
+# non-ASCII character as "_" (seen after a restart on 2026-10-27), so give them UTF-8.
+[[ -z "${LC_ALL:-}${LC_CTYPE:-}${LANG:-}" ]] && export LANG=en_US.UTF-8
 
 REPO="${CORRAL_REPO:-${0:A:h:h}}"
 PORT="${CORRAL_PORT:-8777}"

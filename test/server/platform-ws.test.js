@@ -121,7 +121,7 @@ test('a socket with own=1 gets its own tmux client, sized from the request and c
   const c = await connect(`id=${s.id}&own=1&cols=9999&rows=1`);
   await until(() => ptys.length === 2, 'the second pty');
   const own = ptys[1];
-  assert.deepEqual(own.args, ['-L', 'corral', 'attach-session', '-t', `wt-${s.id}`]);
+  assert.deepEqual(own.args, ['-u', '-L', 'corral', 'attach-session', '-t', `wt-${s.id}`]);
   assert.equal(own.file, srv.constants.TMUX);
   assert.deepEqual([own.opts.cols, own.opts.rows, own.opts.cwd], [500, 10, os.homedir()]);
   assert.equal(own.opts.env.CORRAL_SESSION, s.id);
