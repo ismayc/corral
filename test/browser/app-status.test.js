@@ -137,6 +137,16 @@ test('each window is colored by what it is doing: working, your turn, or cut off
   p.set('a', { claude: { status: 'idle' } });
   await p.poll();
   assert.deepEqual(seen(), ['idle', 'dot idle', 'Your turn: Claude finished.']);
+  // A finished /wrap-up is blue until something else is typed; one still running stays yellow.
+  p.set('a', { claude: { status: 'busy', lastPrompt: '/wrap-up' } });
+  await p.poll();
+  assert.deepEqual(seen(), ['working', 'dot working', 'Claude is working.']);
+  p.set('a', { claude: { status: 'idle', lastPrompt: '/wrap-up --since 2w' } });
+  await p.poll();
+  assert.deepEqual(seen(), ['wrapped', 'dot wrapped', 'Wrapped up: /wrap-up finished.']);
+  p.set('a', { claude: { status: 'idle', lastPrompt: '/wrap-upper' } });
+  await p.poll();
+  assert.deepEqual(seen(), ['idle', 'dot idle', 'Your turn: Claude finished.']);
   p.set('a', { claude: { status: 'waiting', waitingFor: 'permission prompt' } });
   await p.poll();
   assert.deepEqual(seen(), ['idle', 'dot idle', 'Claude is asking for permission.']);

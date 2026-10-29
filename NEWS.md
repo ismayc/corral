@@ -5,6 +5,10 @@ in `package.json`.
 
 ## Development version
 
+- **A window that finished `/wrap-up` turns blue on the Mac page.** Its
+  border, title dot, bottom-bar chip, and sidebar dot are blue while Claude
+  is idle and the last thing typed was `/wrap-up`. Typing anything else
+  brings back the usual colors.
 - **Symbols no longer turn into underscores after a restart.** A server
   started from the Dock tile had no locale, so tmux drew every non-ASCII
   character (Claude Code's bullets, spinners, and context bar) as `_`. The

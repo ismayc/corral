@@ -1292,13 +1292,15 @@ async function watchStatus() {
 }
 
 // What a window is doing, as a color and a line to hover: yellow while Claude works, green when it is your
-// turn (finished, or asking), red when the window lost its connection or its shell ended. A plain shell has none.
+// turn (finished, or asking), blue when it finished a /wrap-up with nothing typed since, red when the window
+// lost its connection or its shell ended. A plain shell has none.
 function stateOf(w) {
   if (w.exited) return ['blocked', 'The shell ended. Close this window.'];
   if (w.down) return ['blocked', 'Disconnected from Corral. Reconnecting…'];
   const st = w.claude?.status;
   if (st === 'busy') return ['working', 'Claude is working.'];
   if (st === 'waiting') return ['idle', w.claude.waitingFor === 'permission prompt' ? 'Claude is asking for permission.' : 'Claude is waiting on a prompt.'];
+  if (st === 'idle' && /^\/wrap-up\b/.test(w.claude.lastPrompt || '')) return ['wrapped', 'Wrapped up: /wrap-up finished.'];
   if (st === 'idle') return ['idle', 'Your turn: Claude finished.'];
   return ['', ''];
 }

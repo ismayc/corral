@@ -16,7 +16,7 @@
   :root {
     --ground:#1b1823; --panel:#24202d; --raise:#2d2838; --rail:#3a3446; --text:#eee9f6; --muted:#9d94ad;
     --fence:#8b7cf6; --lavender:#c9c1ff; --term:#100e15;
-    --working:#e5a93d; --idle:#4cc38a; --blocked:#e5584d; --unknown:#5d566b;
+    --working:#e5a93d; --idle:#4cc38a; --blocked:#e5584d; --unknown:#5d566b; --wrapped:#4fa3e8;
     --brand:'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, sans-serif;
   }
   * { box-sizing:border-box; }
@@ -85,7 +85,7 @@
            box-shadow:0 12px 32px rgba(8,6,14,.6); }
   #toast button { padding:2px 10px; border-color:var(--fence); color:var(--lavender); background:transparent; }
   .dot { width:8px; height:8px; border-radius:50%; flex:none; background:var(--unknown); }
-  .dot.working { background:var(--working); } .dot.idle { background:var(--idle); } .dot.blocked { background:var(--blocked); }
+  .dot.working { background:var(--working); } .dot.idle { background:var(--idle); } .dot.blocked { background:var(--blocked); } .dot.wrapped { background:var(--wrapped); }
   .chev { width:14px; flex:none; color:var(--muted); text-align:center; cursor:pointer; user-select:none; }
   .chev:hover { color:var(--text); }
   .tree { padding:0 0 4px 34px; font:12px Menlo, Monaco, monospace; min-width:max-content; }
@@ -184,6 +184,7 @@
   .win[data-state=working] { border-color:var(--working); box-shadow:0 0 0 1px var(--working); }
   .win[data-state=idle] { border-color:var(--idle); box-shadow:0 0 0 1px var(--idle); }
   .win[data-state=blocked] { border-color:var(--blocked); box-shadow:0 0 0 1px var(--blocked); }
+  .win[data-state=wrapped] { border-color:var(--wrapped); box-shadow:0 0 0 1px var(--wrapped); }
   /* A permission prompt in this window: its answers, under the title bar, in the green of "your turn". */
   .win .ask { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:6px 8px; background:#16301f;
               border-bottom:1px solid var(--idle); font-size:12.5px; }
