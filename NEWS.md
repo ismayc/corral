@@ -5,6 +5,11 @@ in `package.json`.
 
 ## Development version
 
+- **Tapping a notification on an iPhone opens its window.** iOS could wake
+  the phone page on the window it showed last and drop the message saying
+  which one was tapped. The page now looks for the tap for a few seconds,
+  and if it still has not taken it, the service worker reloads the page at
+  that window's link. A window newer than the page's list opens too.
 - **A window that finished `/wrap-up` turns blue on the Mac page.** Its
   border, title dot, bottom-bar chip, and sidebar dot are blue while Claude
   is idle and the last thing typed was `/wrap-up`. Typing anything else

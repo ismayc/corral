@@ -157,6 +157,56 @@ test('a tap is left in Cache Storage before the page is told, in case the messag
   assert.deepEqual(phone.posted, [{ open: '7', stored: true }]);
 });
 
+// The page has TAP_WAIT to take the tap; these run that wait at once.
+async function quickWait(fn) {
+  const real = globalThis.setTimeout;
+  globalThis.setTimeout = (f) => real(f, 0);
+  try { return await fn(); } finally { globalThis.setTimeout = real; }
+}
+const navigable = (url, extra) => {
+  const c = win(url, { navigated: [], navigate: async (u) => { c.navigated.push(u); return 'navigated'; }, ...extra });
+  return c;
+};
+
+test('a tap the page never takes loads the page again at the window link', () => quickWait(async () => {
+  const phone = navigable(`${ORIGIN}/m`);
+  const { handlers } = boot({ windows: [phone], caches: fakeCaches() });
+  const { e } = click('', { url: '/m?w=7' });
+  handlers.notificationclick(e);
+  const [res] = await settle(e);
+  assert.equal(res, 'focused');
+  assert.deepEqual(phone.navigated, [`${ORIGIN}/m?w=7`]);
+}));
+
+test('a tap the page takes in time is left alone', () => quickWait(async () => {
+  const caches = fakeCaches();
+  const phone = navigable(`${ORIGIN}/m`);
+  phone.postMessage = () => { caches.entries.delete('/tap'); };
+  const { handlers } = boot({ windows: [phone], caches });
+  const { e } = click('', { url: '/m?w=7' });
+  handlers.notificationclick(e);
+  await settle(e);
+  assert.deepEqual(phone.navigated, []);
+}));
+
+test('a page that cannot be reloaded, or a cache that fails on the second look, is left as it is', () => quickWait(async () => {
+  const phone = navigable(`${ORIGIN}/m`, { navigate: async () => { throw new Error('no'); } });
+  let r = boot({ windows: [phone], caches: fakeCaches() });
+  let c = click('', { url: '/m?w=7' });
+  r.handlers.notificationclick(c.e);
+  assert.deepEqual(await settle(c.e), ['focused']);
+  const caches = fakeCaches();
+  const open = caches.open;
+  let n = 0;
+  caches.open = async (name) => { if (n++) throw new Error('gone'); return open(name); };
+  const other = navigable(`${ORIGIN}/m`);
+  r = boot({ windows: [other], caches });
+  c = click('', { url: '/m?w=7' });
+  r.handlers.notificationclick(c.e);
+  await settle(c.e);
+  assert.deepEqual(other.navigated, []);
+}));
+
 test('with no window in the link nothing is stored, and without Cache Storage the tap still opens', async () => {
   const caches = fakeCaches();
   let r = boot({ windows: [win(`${ORIGIN}/m`)], caches });
