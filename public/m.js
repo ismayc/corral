@@ -726,13 +726,14 @@ window.addEventListener('popstate', () => {
 });
 
 // iOS drops the socket while the page is in the background; reconnect when it comes back. A tapped
-// notification can wake the page before sw.js has left the tap, so look again a second later.
+// notification can wake the page before sw.js has left the tap (iOS may take seconds to start it), so
+// look again over the next few seconds.
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   refresh();
   loadQuick();
   if (current && current.ws?.readyState !== 1) connect();
-  checkTap(); setTimeout(checkTap, 1000);
+  lookForTap();
 });
 
 function setFont(n) {
@@ -1234,6 +1235,7 @@ async function checkTap() {
   const id = await takeTap();
   if (id) openById(id);
 }
+function lookForTap() { for (const ms of [0, 1000, 2000, 4000]) setTimeout(checkTap, ms); }
 const keyBytes = (b64) => Uint8Array.from(atob(b64.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
 
 async function renderNotify() {
@@ -1303,8 +1305,9 @@ $('#notify').onclick = (e) => { if (e.target.id === 'notify') $('#notify').hidde
 // A tapped notification opens the page at /m?w=<window>; go straight to that window.
 async function openById(id) {
   if (current?.info.id === id) return; // the message and the stored tap can both arrive
-  if (!windows.length) await refresh();
-  const w = windows.find((x) => x.id === id);
+  // The list can be from before the page slept, and the window newer than it.
+  let w = windows.find((x) => x.id === id);
+  if (!w) { await refresh(); w = windows.find((x) => x.id === id); }
   if (w) openTerm(w); else toast('That window is no longer open.');
 }
 
@@ -1374,7 +1377,7 @@ $('#termview').addEventListener('touchend', (e) => {
 setVh();
 refresh().then(() => {
   const w = new URLSearchParams(location.search).get('w');
-  if (w) { history.replaceState(null, '', '/m'); takeTap(); openById(w); } else checkTap();
+  if (w) { history.replaceState(null, '', '/m'); takeTap(); openById(w); } else lookForTap();
 });
 checkRestore();
 setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 4000);

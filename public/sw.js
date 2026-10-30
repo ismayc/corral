@@ -38,8 +38,15 @@ async function answer(n, action) {
 // window it showed last. So the tapped window is also left in Cache Storage, and the page takes it from
 // there when it comes back (takeTap in m.js).
 async function remember(id) {
-  try { await (await caches.open('corral-tap')).put('/tap', new Response(JSON.stringify({ id, t: Date.now() }))); } catch {}
+  try { await (await caches.open('corral-tap')).put('/tap', new Response(JSON.stringify({ id, t: Date.now() }))); return true; } catch { return false; }
 }
+// Whether the tap is still waiting there; the page deletes it when it opens the window.
+async function untaken() {
+  try { return Boolean(await (await caches.open('corral-tap')).match('/tap')); } catch { return false; }
+}
+// If the page has not taken the tap after this long, neither the message nor its own look reached it,
+// so it is loaded again at the window's link.
+const TAP_WAIT = 2500;
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
@@ -47,12 +54,17 @@ self.addEventListener('notificationclick', (e) => {
   const url = new URL(e.notification.data?.url || '/m', self.location.origin).href;
   const w = new URL(url).searchParams.get('w');
   e.waitUntil((async () => {
-    if (w) await remember(w);
+    const stored = w ? await remember(w) : false;
     const open = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const c of open) {
       if (new URL(c.url).pathname === '/m' && 'focus' in c) {
         c.postMessage({ open: w });
-        return c.focus();
+        const focused = await c.focus();
+        if (stored && 'navigate' in c) {
+          await new Promise((r) => setTimeout(r, TAP_WAIT));
+          if (await untaken()) await c.navigate(url).catch(() => {});
+        }
+        return focused;
       }
     }
     return self.clients.openWindow(url);

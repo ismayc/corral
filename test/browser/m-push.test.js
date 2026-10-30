@@ -224,6 +224,14 @@ test('a tapped notification before the list has loaded waits for it', async () =
   assert.equal(p.text('#ttitle'), 'late');
 });
 
+test('a tapped notification for a window newer than the page list looks again before giving up', async () => {
+  const p = await phone([win('a')]);
+  p.api.routes['GET /api/overview'] = { machine: 'M', sessions: [win('a'), win('new')] };
+  p.sw.emit('message', { open: 'new' });
+  await settle();
+  assert.equal(p.text('#ttitle'), 'new');
+});
+
 // What sw.js leaves in Cache Storage when a notification is tapped, for when its message never arrives.
 const tapped = (id, ago = 0) => fakeCaches(new Map([['/tap', JSON.stringify({ id, t: Date.now() - ago })]]));
 const withCaches = (caches) => ({ setup: (w) => { w.caches = caches; } });
