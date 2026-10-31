@@ -77,6 +77,10 @@ class FakeTmux {
         s.options['window-size'] = 'manual';
         return '';
       }
+      case 'list-clients': { // each client as [width, height]
+        const s = this.sessions.get(target());
+        return (s?.clients || []).map(([w, h]) => `${w} ${h}`).join('\n');
+      }
       case 'list-panes':
         return [...this.sessions].map(([n, s]) => `${n}\t${s.panePid}\t${s.activity}`).join('\n');
       case 'display-message': {

@@ -1027,12 +1027,26 @@ function questionPrompt(id, screen, styled) {
 // window-size latest, the phone's client took the window back whenever it typed or resized, so the answers
 // came and went, and a tap on one that had gone was refused.) Unsetting window-size when the question closes
 // gives the window back to its latest client at once. Checked with two node-pty clients on tmux 3.7.
+// A window bigger than a client shows that client only the part around the cursor, which Claude Code hides
+// above the answers: on October 31, 2026 the Mac page's 96x29 view of a window held at 100x50 showed the
+// question but not its answers or footer. So when a roomy client (ROOMY or more, as the Mac page or an iPad
+// is) views the window, the window is held at the size of the biggest one, and the phones read the question
+// from the server. QUESTION_SIZE is only for a window that phones alone view.
 const QUESTION_SIZE = { cols: 100, rows: 50 };
+const ROOMY = { cols: 80, rows: 24 };
 function fitQuestion(s, asking) {
   const target = SESSION_PREFIX + s.id;
   if (asking && !s.grown) {
     s.grown = true;
     try {
+      let roomy = null;
+      try {
+        for (const line of tmux('list-clients', '-t', target, '-F', '#{client_width} #{client_height}').split('\n')) {
+          const [cw, ch] = line.trim().split(' ').map(Number);
+          if (cw >= ROOMY.cols && ch >= ROOMY.rows && (!roomy || cw * ch > roomy[0] * roomy[1])) roomy = [cw, ch];
+        }
+      } catch {}
+      if (roomy) return tmux('resize-window', '-t', target, '-x', String(roomy[0]), '-y', String(roomy[1]));
       const [w, h] = tmux('display-message', '-p', '-t', target, '#{window_width} #{window_height}').trim().split(' ').map(Number);
       if (w >= QUESTION_SIZE.cols && h >= QUESTION_SIZE.rows) return;
       tmux('resize-window', '-t', target, '-x', String(Math.max(w, QUESTION_SIZE.cols)), '-y', String(Math.max(h, QUESTION_SIZE.rows)));

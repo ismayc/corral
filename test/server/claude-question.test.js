@@ -220,11 +220,26 @@ test('overview grows only the short side, leaves a big window alone, and survive
   const fails = asking('single');
   fails.c.tmux.fail.add('resize-window');
   fails.c.tmux.fail.add('set-option');
+  fails.c.tmux.fail.add('list-clients');
   fails.c.srv.overview();
   assert.equal(fails.s.grown, true);
   fails.c.claude(fails.s, { status: 'idle', statusUpdatedAt: 78 });
   fails.c.srv.overview();
   assert.equal(fails.s.grown, false);
+});
+
+test('overview holds the window at the biggest roomy client, so the Mac page sees the whole question', () => {
+  // As tally on October 31, 2026: the Mac page's 96x29 view of a window held at 100x50 showed no answers.
+  const mac = asking('single');
+  Object.assign(mac.c.tmux.sessions.get(mac.target), { width: 39, height: 60, clients: [[39, 60], [96, 29], [90, 30], [200, 20]] });
+  mac.c.srv.overview();
+  const w = mac.c.tmux.sessions.get(mac.target);
+  assert.deepEqual([w.width, w.height, w.options['window-size']], [96, 29, 'manual']);
+  // Phones alone still get QUESTION_SIZE.
+  const phones = asking('single');
+  phones.c.tmux.sessions.get(phones.target).clients = [[39, 60], [160, 9]];
+  phones.c.srv.overview();
+  assert.deepEqual([phones.c.tmux.sessions.get(phones.target).width, phones.c.tmux.sessions.get(phones.target).height], [100, 50]);
 });
 
 test('GET /prompt returns the open question, and POST /answer with question: true answers it', async () => {

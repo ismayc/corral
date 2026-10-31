@@ -22,9 +22,13 @@ in `package.json`.
   under the cursor, and the answers came and went as the phone and the Mac
   took turns sizing the window, so a tap could be refused with "that is not
   one of the answers". Corral now reads a wrapped footer, holds the window
-  at least 100 by 50 while a question is open (no device can change that
-  size until the question closes), and keeps a label that wrapped, such as
-  "(Recommended)", out of the answer's description.
+  at a fixed size while a question is open (no device can change that size
+  until the question closes), and keeps a label that wrapped, such as
+  "(Recommended)", out of the answer's description. The fixed size is the
+  size of the biggest Mac or iPad view of the window (80 by 24 or more), so
+  the Mac page shows the whole question, or 100 by 50 when only phones view
+  it. (Holding every window at 100 by 50 hid the answers from a Mac view
+  only 29 rows high.)
 - **Corral can come back on its own after a restart or power loss.**
   `scripts/install-launcher.sh --login` adds a login item that starts Corral
   and herdr at login without opening the page. Started that way, or by
