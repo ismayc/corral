@@ -164,7 +164,7 @@ test('verdict names the problem and the fix', () => {
   assert.match(asleep.detail, /Tailscale last saw it at/);
   const never = v({ peer: null }, { up: false }, null, false);
   assert.equal(never.fix, undefined);
-  assert.equal(never.detail, 'It does not answer on the home network.');
+  assert.match(never.detail, /^It does not answer on the home network\. After a power loss, a Mac with FileVault waits/);
 });
 
 test('status: asleep or away, with Tailscale last seen and a known wake address', async () => {
@@ -276,11 +276,11 @@ test('reconnecting Tailscale runs the fix over SSH and passes on a login link', 
   assert.deepEqual(r2, { ok: false, output: 'timed out', login: null });
 });
 
-test('restarting Corral runs the launcher without opening the page', async () => {
+test('restarting Corral runs the launcher without opening the page, restoring lost windows', async () => {
   const run = fakeRun({ ping: PING_OK, ssh: { ok: true, out: '', err: '' } });
   const w = W.createWatch(cfgFor(tmp(), { WATCH_CORRAL_REPO: '$HOME/src/corral' }), { run });
   assert.deepEqual(await w.actions.corral(), { ok: true, output: 'Corral is running.' });
-  assert.equal(run.calls.find((c) => c.cmd === 'ssh').args[5], 'CORRAL_NO_OPEN=1 "$HOME/src/corral/scripts/corral-launcher.sh" 2>&1');
+  assert.equal(run.calls.find((c) => c.cmd === 'ssh').args[5], 'CORRAL_NO_OPEN=1 CORRAL_AUTO_RESTORE=1 "$HOME/src/corral/scripts/corral-launcher.sh" 2>&1');
   const fail = W.createWatch(cfgFor(tmp()), { run: fakeRun({ ping: PING_OK, ssh: { ok: false, out: '', err: '' } }) });
   assert.deepEqual(await fail.actions.corral(), { ok: false, output: 'The launcher failed.' });
   const said = W.createWatch(cfgFor(tmp()), { run: fakeRun({ ping: PING_OK, ssh: { ok: false, out: 'corral-launcher: node was not found.', err: '' } }) });

@@ -1407,6 +1407,18 @@ function restoreWindows() {
   return { sessions: restored, notResumed: plain };
 }
 
+// With CORRAL_AUTO_RESTORE=1 (the login item, or a restart from corral-watch.js), a start that finds windows
+// a restart took away reopens them without waiting for the Restore button, and tells the phone.
+function autoRestore() {
+  if (process.env.CORRAL_AUTO_RESTORE !== '1' || !restoreList().windows.length) return null;
+  const r = restoreWindows();
+  const n = r.sessions.length;
+  const body = `Reopened ${n} window${n === 1 ? '' : 's'} after a restart.${r.notResumed.length ? ` Started fresh: ${r.notResumed.join(', ')}.` : ''}`;
+  console.log(`auto-restore: ${body}`);
+  pushAll({ title: 'Corral is back', body, tag: 'restore', url: '/m' });
+  return r;
+}
+
 // Creates a herdr space for a ledger project, then re-sorts the spaces alphabetically with the
 // existing herdr-sort-spaces script (best effort; the new space is kept either way).
 // Makes a herdr space for a project in the ledger, or for one of the new repos.
@@ -1946,6 +1958,7 @@ function start(port = PORT) {
   loadCategories();
   loadOpenWith();
   loadPush();
+  autoRestore(); // after loadPush, so the phone hears about it
   setInterval(watchWindows, 3000).unref();
   pruneUploads();
   setInterval(pruneUploads, 6 * 3600000).unref();
@@ -1981,7 +1994,7 @@ module.exports = {
   sendCardKey, renameWindow, transcriptFile, restState, lastPrompt, promptList, tailLines, lastReply, typedText, conversation, windowHistory, rejoin,
   permissionPrompt, readPlan, promptKey, windowClaude, answerPrompt, questionPrompt, questionKey, answerQuestion, frontMatter, slashCommands, git, windowChanges, saveUpload, loadPush, savePush,
   vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, pruneUploads,
-  locateFile, cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows,
+  locateFile, cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows, autoRestore,
   reopenProject, newRepos, hideRepo, identityRoots, herdrSnapshot, rootFor, listDir, loadOpenWith, saveOpenWith, fileKind, spaceFile,
   appsFor, openChoices, openFile, appName, send, serveFile, readJson,
 };

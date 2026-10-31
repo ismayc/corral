@@ -128,13 +128,15 @@ Settings, all optional, by environment variable:
 | `CORRAL_TAILSCALE` | on | Set to `0` to refuse every request through Tailscale |
 | `CORRAL_TAILSCALE_PORT` | `8443` | The HTTPS port `tailscale serve` uses for Corral |
 | `CORRAL_TAILSCALE_USERS` | the login that owns this Mac in Tailscale | Comma-separated Tailscale logins allowed in |
+| `CORRAL_AUTO_RESTORE` | off | Set to `1` to reopen the windows a restart took away when the server starts (the login item sets it) |
+| `CORRAL_WATCH_FILE` | `~/.config/corral/watch-url` | File naming the Corral watch page the phone offers when this Mac does not answer |
 
 To use Corral from your phone or another computer, see the next section.
 
 ### Start it from the Dock (macOS)
 
-Corral has no login item, so after a restart the server is gone and the page
-cannot connect. `scripts/install-launcher.sh` builds `~/Applications/Corral.app`,
+Unless you add the login item (below), after a restart the server is gone
+and the page cannot connect. `scripts/install-launcher.sh` builds `~/Applications/Corral.app`,
 a Dock launcher that starts the herdr server (`herdr server`, headless) and the
 Corral server when they are not running, waits for Corral, and then opens the page (the Chrome web app for `http://127.0.0.1:8777`
 if you have one, otherwise the URL in your browser). It takes the Chrome app's
@@ -142,6 +144,37 @@ icon and its place in the Dock; `--no-dock` builds the app without touching
 the Dock. The app only calls `scripts/corral-launcher.sh`, so re-run the
 installer after moving the repo, and start the launcher's log from
 `~/.local/share/corral/server.log` if the page still does not open.
+
+### Come back after a restart or power loss
+
+```sh
+scripts/install-launcher.sh --login             # with the Dock tile
+scripts/install-launcher.sh --login --no-dock   # login item only
+```
+
+`--login` also installs a LaunchAgent that runs the launcher at login
+without opening the page, so Corral and herdr are back as soon as you are
+logged in. Started that way (or by **Restart Corral** on the watch page,
+below), Corral reopens the windows a restart took away without waiting for
+the Restore button, resuming each Claude conversation, and sends the phone
+"Corral is back". Its log is `~/.local/share/corral/login.log`. Anything
+Claude was in the middle of when the power went is lost; the conversation
+resumes from its last saved message. Remove it with
+`launchctl bootout gui/$(id -u)/com.github.ismayc.corral` and delete
+`~/Library/LaunchAgents/com.github.ismayc.corral.plist`.
+
+For this to happen with no one at the Mac:
+
+- **FileVault** (on by default) makes a Mac that lost power wait at its
+  startup password screen, off the network, until someone types the
+  password. Nothing, including Tailscale and the watch page's Wake button,
+  can get past that screen remotely. With FileVault off, turn on automatic
+  login in **System Settings > Users & Groups**; whether that trade is worth
+  it is your call.
+- **Tailscale** must start at login: turn on **Launch at login** in its
+  settings.
+- **A MacBook** cannot restart after power loss until it has power again,
+  and may need its lid opened or power button pressed to start.
 
 ## Remote control from your phone, with Tailscale
 

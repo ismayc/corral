@@ -3,12 +3,15 @@
 # if needed, then open the page), and puts it in the Dock in place of the Chrome web app's icon.
 #   scripts/install-launcher.sh            build the app and update the Dock
 #   scripts/install-launcher.sh --no-dock  build the app only
+#   scripts/install-launcher.sh --login    also start Corral at login, without opening the page, reopening the
+#                                          windows a restart took away (a LaunchAgent; add --no-dock to skip the Dock)
 # Re-run after moving the repo. The app only calls the script, so edits to the script need no reinstall.
 set -eu
 REPO="${0:A:h:h}"
 APP="$HOME/Applications/Corral.app"
 CHROME_APP="$HOME/Applications/Chrome Apps.localized/Corral.app"
-DOCK="${1:-}"
+DOCK=""; LOGIN=""
+for arg in "$@"; do case "$arg" in --no-dock) DOCK=--no-dock ;; --login) LOGIN=1 ;; *) echo "unknown option: $arg" >&2; exit 2 ;; esac; done
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -48,6 +51,33 @@ else
 fi
 codesign --force --sign - "$APP" 2>/dev/null || true
 echo "built $APP"
+
+# The login item: launchd runs the launcher once at login. AbandonProcessGroup keeps the servers it starts
+# running after it exits (launchd otherwise kills what a finished job left behind).
+if [[ -n "$LOGIN" ]]; then
+  LABEL=com.github.ismayc.corral
+  AGENT="$HOME/Library/LaunchAgents/$LABEL.plist"
+  mkdir -p "${AGENT:h}" "$HOME/.local/share/corral"
+  cat > "$AGENT" <<AGENT
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$LABEL</string>
+  <key>ProgramArguments</key><array><string>/bin/zsh</string><string>$REPO/scripts/corral-launcher.sh</string></array>
+  <key>EnvironmentVariables</key>
+  <dict><key>CORRAL_NO_OPEN</key><string>1</string><key>CORRAL_AUTO_RESTORE</key><string>1</string></dict>
+  <key>RunAtLoad</key><true/>
+  <key>AbandonProcessGroup</key><true/>
+  <key>StandardOutPath</key><string>$HOME/.local/share/corral/login.log</string>
+  <key>StandardErrorPath</key><string>$HOME/.local/share/corral/login.log</string>
+</dict>
+</plist>
+AGENT
+  launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+  launchctl bootstrap "gui/$(id -u)" "$AGENT"
+  echo "login item: $AGENT (starts Corral at login and reopens windows a restart took away)"
+fi
 
 [[ "$DOCK" == "--no-dock" ]] && exit 0
 

@@ -2,7 +2,8 @@
 // Corral watch: runs on another Mac on the same tailnet and home network (a Mac mini that stays on, say) and
 // finds out why the Mac that runs Corral cannot be reached from the phone. It asks Tailscale here whether that
 // Mac is online, pings it on the home network, and, over SSH, reads its Tailscale state and whether Corral
-// answers. Its page offers the fix: wake the Mac, reconnect its Tailscale, or restart Corral.
+// answers. Its page offers the fix: wake the Mac, reconnect its Tailscale, or restart Corral (which also
+// reopens the windows a restart took away).
 //   WATCH_TARGET=<the Mac's Tailscale machine name> node scripts/corral-watch.js
 //   tailscale serve --bg --https=8444 http://127.0.0.1:8778     (once, on this Mac)
 // Like Corral, it listens on loopback only and accepts tailnet requests only with an allowed Tailscale login.
@@ -118,7 +119,7 @@ function verdict(name, ts, lan, ssh, canWake) {
   if (lan.up) return { level: 'warn', title: `${name} is awake on the home network, but SSH did not get in`, detail: `${ssh?.err ? `SSH said: ${ssh.err} ` : ''}Check Remote Login on the Mac and this Mac's key there.` };
   const when = peer?.lastSeen ? ` Tailscale last saw it at ${new Date(peer.lastSeen).toLocaleString()}.` : '';
   if (peer?.online) return { level: 'warn', title: `Tailscale sees ${name} online, but it does not answer on the home network`, detail: 'It may be away from home. This Mac can only look over the home network.' };
-  return { level: 'down', title: `${name} is asleep, off, or away from home`, detail: `It does not answer on the home network.${when}`, ...(canWake ? { fix: 'wake' } : {}) };
+  return { level: 'down', title: `${name} is asleep, off, or away from home`, detail: `It does not answer on the home network.${when} After a power loss, a Mac with FileVault waits at its startup password screen, off the network, until someone types the password.`, ...(canWake ? { fix: 'wake' } : {}) };
 }
 
 function createWatch(cfg, deps = {}) {
@@ -187,7 +188,7 @@ function createWatch(cfg, deps = {}) {
     },
     async corral() {
       const lan = await lanView(lanHost());
-      const r = await ssh(lan, `CORRAL_NO_OPEN=1 "${cfg.repo}/scripts/corral-launcher.sh" 2>&1`, 40000);
+      const r = await ssh(lan, `CORRAL_NO_OPEN=1 CORRAL_AUTO_RESTORE=1 "${cfg.repo}/scripts/corral-launcher.sh" 2>&1`, 40000);
       return { ok: r.ok, output: `${r.out}${r.err}`.trim() || (r.ok ? 'Corral is running.' : 'The launcher failed.') };
     },
   };
