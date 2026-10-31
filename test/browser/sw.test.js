@@ -50,9 +50,9 @@ test.afterEach(() => {
   delete require.cache[require.resolve(SW)];
 });
 
-test('registers exactly install, activate, push, and notificationclick', () => {
+test('registers exactly install, activate, push, notificationclick, and fetch', () => {
   const { handlers } = boot();
-  assert.deepEqual(Object.keys(handlers).sort(), ['activate', 'install', 'notificationclick', 'push']);
+  assert.deepEqual(Object.keys(handlers).sort(), ['activate', 'fetch', 'install', 'notificationclick', 'push']);
 });
 
 test('install skips waiting; activate claims clients and waits on it', async () => {
@@ -303,3 +303,52 @@ test('a network failure says the Mac could not be reached', async () => {
   const rec = await answered('allow', () => { throw new TypeError('offline'); });
   assert.equal(rec.shown[0].body, 'Could not reach the Mac.');
 });
+
+// ---- Page loads when the Mac does not answer ----
+function load(handlers, request) {
+  let p = null;
+  handlers.fetch({ request, respondWith: (x) => { p = x; } });
+  return p;
+}
+const NAV = { mode: 'navigate', url: `${ORIGIN}/m` };
+
+test('only page loads are handled, and an answer from the Mac passes straight through', async () => {
+  const { handlers } = boot();
+  assert.equal(load(handlers, { mode: 'cors' }), null);
+  const page = new Response('the page');
+  let seen;
+  globalThis.fetch = async (req, o) => { seen = [req, o.signal]; return page; };
+  assert.equal(await load(handlers, NAV), page);
+  assert.equal(seen[0], NAV);
+  assert.equal(seen[1].aborted, false);
+});
+
+test('a page load that fails gets a page saying the Mac does not answer, linking to the watch page', async () => {
+  const caches = fakeCaches(new Map([['/watch', 'https://mini.example.ts.net:8444/?a=1&b="2"']]));
+  const { handlers } = boot({ caches });
+  globalThis.fetch = async () => { throw new TypeError('Load failed'); };
+  const r = await load(handlers, NAV);
+  assert.equal(r.headers.get('Content-Type'), 'text/html; charset=utf-8');
+  const html = await r.text();
+  assert.match(html, /The Mac running Corral does not answer/);
+  assert.match(html, /href="https:\/\/mini\.example\.ts\.net:8444\/\?a=1&#38;b=&#34;2&#34;">See why on the watching Mac/);
+  assert.deepEqual(caches.opened, ['corral-watch']);
+});
+
+test('with no watch page known, or no Cache Storage, the page says how to get one', async () => {
+  for (const caches of [fakeCaches(), undefined]) {
+    const { handlers } = boot({ caches });
+    if (!caches) delete globalThis.caches;
+    globalThis.fetch = async () => { throw new TypeError('Load failed'); };
+    const html = await (await load(handlers, NAV)).text();
+    assert.doesNotMatch(html, /See why/);
+    assert.match(html, /corral-watch\.js on another Mac/);
+  }
+});
+
+test('a page load with no answer in time is given up on', () => quickWait(async () => {
+  const { handlers } = boot({ caches: fakeCaches() });
+  globalThis.fetch = (req, o) => new Promise((_, reject) => o.signal.addEventListener('abort', () => reject(new Error('aborted'))));
+  const html = await (await load(handlers, NAV)).text();
+  assert.match(html, /does not answer/);
+}));

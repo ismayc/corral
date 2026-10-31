@@ -1,7 +1,7 @@
 #!/bin/zsh
 # The Dock launcher's logic: start the herdr server and the Corral server when they are not running, wait
 # for Corral, then open the Corral page. scripts/install-launcher.sh wraps this in ~/Applications/Corral.app.
-# Run it by hand to test: CORRAL_REPO, CORRAL_PORT, and HERDR_BIN override the defaults.
+# Run it by hand to test: CORRAL_REPO, CORRAL_PORT, and HERDR_BIN override the defaults; CORRAL_NO_OPEN=1 skips the page.
 set -u
 # Run by hand from inside a Claude Code or herdr terminal, these would make the servers' children think they
 # belong to that session (the same list as LEAKY_ENV in server.js). A Dock launch has none of them.
@@ -26,7 +26,8 @@ listening() { lsof -tiTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; }
 
 fail() {
   echo "corral-launcher: $1" >&2
-  osascript -e "display dialog \"$1\" with title \"Corral\" buttons {\"OK\"} default button 1 with icon stop" >/dev/null 2>&1
+  # No dialog for a run with no one at the screen to dismiss it (see CORRAL_NO_OPEN below).
+  [[ -z "${CORRAL_NO_OPEN:-}" ]] && osascript -e "display dialog \"$1\" with title \"Corral\" buttons {\"OK\"} default button 1 with icon stop" >/dev/null 2>&1
   exit 1
 }
 
@@ -73,4 +74,6 @@ if [[ -n "$HERDR" ]]; then
   herdr_running || echo "corral-launcher: herdr server not running after 5s, see $LOG_HERDR" >> "$LOG"
 fi
 
+# CORRAL_NO_OPEN=1 (from scripts/corral-watch.js over SSH, say) starts the servers without opening the page.
+[[ -n "${CORRAL_NO_OPEN:-}" ]] && exit 0
 if [[ -d "$PAGE_APP" ]]; then open "$PAGE_APP"; else open "$URL"; fi

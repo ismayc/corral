@@ -5,6 +5,23 @@ in `package.json`.
 
 ## Development version
 
+- **Corral can come back on its own after a restart or power loss.**
+  `scripts/install-launcher.sh --login` adds a login item that starts Corral
+  and herdr at login without opening the page. Started that way, or by
+  Restart Corral on the watch page, Corral reopens the windows the restart
+  took away, resuming their Claude conversations, and tells the phone
+  "Corral is back" (`CORRAL_AUTO_RESTORE=1`). The README explains what
+  FileVault and Tailscale need for it to work with no one at the Mac.
+- **Another Mac can find out why the phone cannot reach Corral.**
+  `scripts/corral-watch.js` runs on a Mac that stays on at home and serves a
+  page saying whether the Corral Mac is asleep or away, has Tailscale off,
+  logged out, or not running, or has Corral stopped. It offers Wake,
+  Reconnect Tailscale (with the login link when one is needed), and Restart
+  Corral. `scripts/install-watch.sh` sets it up. When a page load to the
+  Corral Mac fails or gets no answer in 10 seconds, the phone shows a page
+  saying so, linking to the watch page from `~/.config/corral/watch-url`.
+  `CORRAL_NO_OPEN=1` makes `corral-launcher.sh` start the servers without
+  opening the page.
 - **Tapping a notification on an iPhone opens its window.** iOS could wake
   the phone page on the window it showed last and drop the message saying
   which one was tapped. The page now looks for the tap for a few seconds,

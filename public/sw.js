@@ -1,6 +1,6 @@
 // Corral's service worker: shows the pushes the Mac sends (a window's turn, or a permission prompt) and,
 // when one is tapped, opens the phone page on that window. It caches nothing; the page always comes live
-// from the Mac.
+// from the Mac, and when the Mac cannot be reached a page load gets a page saying so.
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 
@@ -69,4 +69,35 @@ self.addEventListener('notificationclick', (e) => {
     }
     return self.clients.openWindow(url);
   })());
+});
+
+// A page load that fails, or has no answer in NAV_WAIT (the Mac asleep, or its Tailscale off), gets a short
+// page saying so instead of the browser's error, linking to the Corral watch page on another Mac when the
+// phone page has left its address (rememberWatch in m.js).
+const NAV_WAIT = 10000;
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+async function unreachable() {
+  let watch = null;
+  try { watch = await (await (await caches.open('corral-watch')).match('/watch'))?.text(); } catch {}
+  const link = watch ? `<p><a class="b" href="${esc(watch)}">See why on the watching Mac</a></p>`
+    : '<p>scripts/corral-watch.js on another Mac at home can find out why, and wake this one.</p>';
+  return new Response(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corral: the Mac does not answer</title><style>:root{color-scheme:light dark;--bg:#1b1823;--fg:#ecebf2;--muted:#a9a4b8}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.5 -apple-system,system-ui,sans-serif}main{max-width:32rem;padding:3rem 16px}
+h1{font-size:1.3rem;line-height:1.3}p{color:var(--muted)}a{color:inherit}.b,button{display:inline-block;font:inherit;color:var(--bg);background:var(--fg);border:0;border-radius:10px;padding:.55rem .9rem;text-decoration:none}</style>
+</head><body><main><h1>The Mac running Corral does not answer</h1><p>It may be asleep or away, or Tailscale on it may be off.</p>${link}
+<p><button onclick="location.reload()">Try again</button></p></main></body></html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+}
+
+async function load(req) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), NAV_WAIT);
+  const r = await fetch(req, { signal: ctl.signal }).catch(() => null);
+  clearTimeout(t);
+  return r || unreachable();
+}
+
+self.addEventListener('fetch', (e) => {
+  if (e.request.mode === 'navigate') e.respondWith(load(e.request));
 });

@@ -8,7 +8,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..', '..');
 const check = process.argv.includes('--check');
 const only = process.argv.slice(2).find((a) => !a.startsWith('--'));
-const SCOPE = ['server.js', 'public/app.js', 'public/m.js', 'public/sw.js', 'scripts/apps-for-file.js'];
+const SCOPE = ['server.js', 'public/app.js', 'public/m.js', 'public/sw.js', 'scripts/apps-for-file.js', 'scripts/corral-watch.js'];
 const lcov = fs.readFileSync(path.join(ROOT, 'coverage', 'lcov.info'), 'utf8');
 let total = 0;
 for (const rec of lcov.split('end_of_record')) {

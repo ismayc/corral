@@ -507,8 +507,17 @@ async function doRestore() {
 
 $('#todesk').onclick = () => { location.href = '/?desktop'; };
 
+// The Corral watch page on another Mac, kept where sw.js finds it when this Mac cannot be reached.
+async function rememberWatch(u) {
+  try {
+    const c = await caches.open('corral-watch');
+    if (/^https?:\/\//i.test(u || '')) await c.put('/watch', new Response(u)); else await c.delete('/watch');
+  } catch {}
+}
+
 // A link to the page that lists every page on the tailnet, when the server knows its address.
 api('/api/hub').then((r) => {
+  rememberWatch(r.watch);
   if (!/^https?:\/\//i.test(r.url || '')) return;
   $('#hub').href = r.url;
   $('#hub').hidden = false;

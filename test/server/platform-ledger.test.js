@@ -287,6 +287,27 @@ test('restoreWindows skips a window that cannot start and still clears the resto
   assert.deepEqual(srv.restoreWindows(), { sessions: [], notResumed: [] }); // nothing to unlink the second time
 });
 
+test('autoRestore reopens the restore list only when CORRAL_AUTO_RESTORE=1, and says so', (t) => {
+  const out = quiet(t);
+  let { srv, home } = loadServer();
+  writeFile(data(home, 'restore.json'), JSON.stringify({ windows: [{ label: 'x', cwd: home }] }));
+  assert.equal(srv.autoRestore(), null); // not asked for
+  assert.equal(fs.existsSync(data(home, 'restore.json')), true);
+  ({ srv, home } = loadServer({ env: { CORRAL_AUTO_RESTORE: '1' } }));
+  srv.loadPush(); // as start() does first; with no phones signed up, nothing is sent
+  assert.equal(srv.autoRestore(), null); // nothing to restore
+  writeFile(path.join(home, `.claude/projects/p/${UUID1}.jsonl`), '');
+  writeFile(data(home, 'restore.json'), JSON.stringify({ windows: [{ label: 'One', cwd: home, claudeSession: UUID1 }] }));
+  assert.deepEqual(srv.autoRestore().sessions.map((s) => s.label), ['One']);
+  assert.equal(fs.existsSync(data(home, 'restore.json')), false);
+  writeFile(data(home, 'restore.json'), JSON.stringify({ windows: [{ label: 'A', cwd: home }, { label: 'B', cwd: home, claudeSession: UUID2 }] }));
+  assert.deepEqual(srv.autoRestore().notResumed, ['B']);
+  assert.deepEqual(out.logs.filter((l) => l.startsWith('auto-restore')), [
+    'auto-restore: Reopened 1 window after a restart.',
+    'auto-restore: Reopened 2 windows after a restart. Started fresh: B.',
+  ]);
+});
+
 test('openWith defaults load from their file, ignoring junk, and save back', (t) => {
   const out = quiet(t);
   const { srv, home } = loadServer();
