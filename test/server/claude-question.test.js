@@ -191,40 +191,40 @@ test('overview reads the question from the styled screen', async () => {
   assert.ok(c.tmux.calls.some((a) => a.includes('capture-pane') && a.includes('-e')));
 });
 
-test('overview makes a window too small for its question 100x50 until it closes, then puts the size back', () => {
-  const { c, s } = asking('cut');
-  s.pty.resize(39, 29);
+test('overview holds a small window at 100x50 while a question is open, then gives it back to its clients', () => {
+  const { c, s, target } = asking('cut');
+  const win = () => c.tmux.sessions.get(target);
   c.srv.overview();
-  assert.deepEqual(s.pty.sizes, [[39, 29], [100, 50]]);
-  c.srv.overview(); // grown once, not again
-  assert.equal(s.pty.sizes.length, 2);
-  c.screen(s, fixture('single'));
+  assert.deepEqual([win().width, win().height, win().options['window-size']], [100, 50, 'manual']);
+  // Every poll while the question is open leaves the held size alone: a phone that types or resizes does not
+  // win it back, so the answers stay put.
+  const resizes = () => c.tmux.calls.filter((a) => a[0] === 'resize-window').length;
+  c.srv.overview();
+  assert.equal(resizes(), 1);
   c.claude(s, { status: 'idle', statusUpdatedAt: 78 });
   c.srv.overview();
-  assert.deepEqual(s.pty.sizes.at(-1), [39, 29]);
-  assert.equal(s.grown, null);
+  assert.equal('window-size' in win().options, false);
+  assert.equal(s.grown, false);
 });
 
-test('overview leaves a big enough window, a readable question, and a failed resize alone', () => {
-  const big = asking('cut');
-  big.c.srv.overview(); // 100x30: too short, so it grows only the rows
-  assert.deepEqual(big.s.pty.sizes, [[100, 50]]);
-  const tall = asking('cut');
-  tall.s.pty.resize(120, 60);
-  tall.c.srv.overview();
-  assert.deepEqual(tall.s.pty.sizes, [[120, 60]]);
-  const read = asking('single');
-  read.s.pty.resize(39, 29);
-  read.c.srv.overview();
-  assert.equal(read.s.pty.sizes.length, 1);
-  const fails = asking('cut');
-  fails.s.pty.cols = 39;
-  fails.s.pty.throwOnResize = true;
+test('overview grows only the short side, leaves a big window alone, and survives tmux failing', () => {
+  const short = asking('single');
+  short.c.tmux.sessions.get(short.target).width = 160;
+  short.c.tmux.sessions.get(short.target).height = 9; // as the phone left tv-game-starter: one answer showed
+  short.c.srv.overview();
+  assert.deepEqual([short.c.tmux.sessions.get(short.target).width, short.c.tmux.sessions.get(short.target).height], [160, 50]);
+  const big = asking('single');
+  Object.assign(big.c.tmux.sessions.get(big.target), { width: 120, height: 60 });
+  big.c.srv.overview();
+  assert.equal(big.c.tmux.calls.some((a) => a[0] === 'resize-window'), false);
+  const fails = asking('single');
+  fails.c.tmux.fail.add('resize-window');
+  fails.c.tmux.fail.add('set-option');
   fails.c.srv.overview();
-  assert.deepEqual(fails.s.grown, { cols: 39, rows: 30 });
+  assert.equal(fails.s.grown, true);
   fails.c.claude(fails.s, { status: 'idle', statusUpdatedAt: 78 });
   fails.c.srv.overview();
-  assert.equal(fails.s.grown, null);
+  assert.equal(fails.s.grown, false);
 });
 
 test('GET /prompt returns the open question, and POST /answer with question: true answers it', async () => {

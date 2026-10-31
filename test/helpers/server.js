@@ -67,7 +67,14 @@ class FakeTmux {
       }
       case 'set-option': {
         const s = this.sessions.get(target());
-        if (s) s.options[rest[rest.length - 2]] = rest[rest.length - 1];
+        if (s && rest.includes('-u')) delete s.options[rest[rest.length - 1]];
+        else if (s) s.options[rest[rest.length - 2]] = rest[rest.length - 1];
+        return '';
+      }
+      case 'resize-window': { // as tmux does, a set size makes the window's window-size manual
+        const s = this.sessions.get(target());
+        Object.assign(s, { width: Number(rest[rest.indexOf('-x') + 1]), height: Number(rest[rest.indexOf('-y') + 1]) });
+        s.options['window-size'] = 'manual';
         return '';
       }
       case 'list-panes':
@@ -75,6 +82,7 @@ class FakeTmux {
       case 'display-message': {
         const s = this.sessions.get(target());
         if (!s) throw new Error("can't find session");
+        if (rest.includes('#{window_width} #{window_height}')) return `${s.width ?? 39} ${s.height ?? 29}\n`;
         return `${s.panePid}\n`;
       }
       case 'capture-pane': {

@@ -18,9 +18,12 @@ in `package.json`.
 - **Questions stay readable in a small window.** In a window the size of a
   phone (39 columns), Claude Code's question dialog lost its answers on the
   phone page: its footer wrapped onto several lines, and a long question was
-  cut off at the top of the screen. Corral now reads a wrapped footer, makes
-  the window at least 100 by 50 while a question it cannot read is open (and
-  puts the size back after), and keeps a label that wrapped, such as
+  cut off at the top of the screen. A short window showed only the answer
+  under the cursor, and the answers came and went as the phone and the Mac
+  took turns sizing the window, so a tap could be refused with "that is not
+  one of the answers". Corral now reads a wrapped footer, holds the window
+  at least 100 by 50 while a question is open (no device can change that
+  size until the question closes), and keeps a label that wrapped, such as
   "(Recommended)", out of the answer's description.
 - **Corral can come back on its own after a restart or power loss.**
   `scripts/install-launcher.sh --login` adds a login item that starts Corral

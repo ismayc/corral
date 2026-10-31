@@ -584,7 +584,7 @@ function overview({ screens = true } = {}) {
     const rest = screens && claude ? restState(claude) : null;
     const asking = Boolean(screen) && claude.waitingFor === 'input needed';
     const question = asking ? withQuestionKey(questionPrompt(s.id, screen, screenLines(s.id, true)), claude) : null;
-    if (screens && s.tmux && !s.exited) fitQuestion(s, asking, question);
+    if (screens && s.tmux && !s.exited) fitQuestion(s, asking);
     return {
       ...publicSession(s),
       activity: p ? p.activity : null,
@@ -1018,20 +1018,28 @@ function questionPrompt(id, screen, styled) {
   return { text: text.join('\n'), review, multi: answers.some((o) => 'checked' in o), options: answers };
 }
 
-// A question dialog taller than its window is cut at the top: Claude Code draws it on the alternate screen,
-// so the first answers are in no scrollback, and the transcript gets the question only once it is answered.
-// A window left at a phone's size (39x29) cut long questions that way (October 31, 2026). While a question
-// is open and cannot be read, Corral's own tmux client for the window is made at least QUESTION_SIZE, and
-// put back when the question closes, unless a page has sized the window since (resize() clears `grown`).
+// A question dialog that does not fit its window loses answers: Claude Code draws it on the alternate screen
+// and cuts it at the top (so the first answers are in no scrollback), or, in a short window, shows only the
+// answer under the cursor. The transcript gets the question only once it is answered. On October 31, 2026
+// a 39x29 window lost answer 1, and a 160x9 one showed only the purple top answer.
+// So while a question is open, the window is held at least QUESTION_SIZE with `resize-window`, which sets
+// its window-size to manual: no client changes it then. (Growing only Corral's own client did not hold: with
+// window-size latest, the phone's client took the window back whenever it typed or resized, so the answers
+// came and went, and a tap on one that had gone was refused.) Unsetting window-size when the question closes
+// gives the window back to its latest client at once. Checked with two node-pty clients on tmux 3.7.
 const QUESTION_SIZE = { cols: 100, rows: 50 };
-function fitQuestion(s, asking, q) {
-  const p = s.pty;
-  if (asking && !q && !s.grown && (p.cols < QUESTION_SIZE.cols || p.rows < QUESTION_SIZE.rows)) {
-    s.grown = { cols: p.cols, rows: p.rows };
-    try { p.resize(Math.max(p.cols, QUESTION_SIZE.cols), Math.max(p.rows, QUESTION_SIZE.rows)); } catch {}
+function fitQuestion(s, asking) {
+  const target = SESSION_PREFIX + s.id;
+  if (asking && !s.grown) {
+    s.grown = true;
+    try {
+      const [w, h] = tmux('display-message', '-p', '-t', target, '#{window_width} #{window_height}').trim().split(' ').map(Number);
+      if (w >= QUESTION_SIZE.cols && h >= QUESTION_SIZE.rows) return;
+      tmux('resize-window', '-t', target, '-x', String(Math.max(w, QUESTION_SIZE.cols)), '-y', String(Math.max(h, QUESTION_SIZE.rows)));
+    } catch {}
   } else if (!asking && s.grown) {
-    try { p.resize(s.grown.cols, s.grown.rows); } catch {}
-    s.grown = null;
+    s.grown = false;
+    try { tmux('set-option', '-w', '-u', '-t', target, 'window-size'); } catch {}
   }
 }
 
@@ -1975,7 +1983,6 @@ server.on('upgrade', (req, socket, head) => {
       if (m.t === 'in' && typeof m.d === 'string') target.write(m.d);
       else if (m.t === 'resize' && m.cols > 0 && m.rows > 0) {
         try { target.resize(Math.min(m.cols, 500), Math.min(m.rows, 200)); } catch {}
-        if (target === s.pty) s.grown = null; // the page's size wins over one fitQuestion() set
       }
     });
     // Killing a tmux attach client only detaches it; the window keeps running.
