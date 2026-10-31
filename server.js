@@ -953,7 +953,13 @@ function questionPrompt(id, screen) {
   const lines = screen || screenLines(id);
   if (!lines) return null;
   const opt = (l) => l.match(/^\s*(?:❯\s*)?(\d+)\.\s+(.*)$/);
-  let end = lines.findLastIndex((l) => /^\s*Enter to select\b.*Esc to cancel\s*$/.test(l));
+  // In a narrow window (a phone is about 39 columns) the footer wraps onto two or three lines, so it is
+  // found by its last words and then followed up to "Enter to select".
+  let end = -1;
+  const last = lines.findLastIndex((l) => /Esc to cancel\s*$/.test(l));
+  for (let j = last; j >= 0 && last - j < 4 && lines[j].trim(); j--) {
+    if (/^\s*Enter to select\b/.test(lines[j])) { end = j; break; }
+  }
   const review = end < 0;
   if (review) {
     const ready = lines.findLastIndex((l) => /^\s*Ready to submit your answers\?/.test(l));

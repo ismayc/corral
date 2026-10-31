@@ -51,6 +51,20 @@ test('questionPrompt joins a question the terminal wrapped, and drops the box bo
   assert.equal(top.text, 'Asked at the top?');
 });
 
+// A 39-column window (a phone) wraps the footer onto two or three lines. Before the fix the question
+// came back null, so the phone showed its answers for a moment and then lost them (October 31, 2026).
+test('questionPrompt reads a question whose footer a narrow window wrapped', () => {
+  const { srv } = setup();
+  const q = srv.questionPrompt('x', lines('narrow'));
+  assert.equal(q.text, 'Which YouTube TV game should be the first live lookahead test? (The TV would run about 2 minutes behind live.)');
+  assert.deepEqual(q.options.map((o) => o.label),
+    ['Thunder at Rockets, today 17:30', '76ers at Hornets, today 15:00', 'Mavericks at Spurs, Nov 4 19:30', 'Type something.', 'Chat about this']);
+  const three = srv.questionPrompt('x', ['Pick', '❯ 1. A', '  2. B', '', 'Enter to select · Tab/Arrow keys to',
+    'navigate · ctrl+g to edit in VS Code ·', 'Esc to cancel']);
+  assert.deepEqual(three.options.map((o) => o.label), ['A', 'B']);
+  assert.equal(srv.questionPrompt('x', ['Pick', '❯ 1. A', 'Enter to select', '', 'Esc to cancel']), null);
+});
+
 test('questionPrompt is null with no dialog, no answer 1, or a review line under its answers', () => {
   const { srv } = setup();
   assert.equal(srv.questionPrompt('x', ['❯ ', 'Esc to cancel']), null);
