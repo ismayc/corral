@@ -291,3 +291,19 @@ test('a tap for the window already on screen leaves it as it is', async () => {
   await settle();
   assert.equal(p.terms.length, 1);
 });
+
+test('the phone keeps the watch page address where sw.js can find it, and forgets one that is gone', async () => {
+  const caches = fakeCaches(new Map([['/watch', 'https://old.example/']]));
+  let p = await phone([], { routes: { 'GET /api/hub': { url: null, watch: 'https://mini.example.ts.net:8444/' } }, ...withCaches(caches) });
+  await settle();
+  assert.equal(caches.entries.get('/watch'), 'https://mini.example.ts.net:8444/');
+  unloadPage();
+  p = await phone([], { routes: { 'GET /api/hub': { url: null, watch: 'javascript:alert(1)' } }, ...withCaches(caches) });
+  await settle();
+  assert.equal(caches.entries.has('/watch'), false);
+  unloadPage();
+  // Without Cache Storage nothing is kept, and the page carries on.
+  p = await phone([], { routes: { 'GET /api/hub': { url: 'https://hub.example/', watch: null } } });
+  await settle();
+  assert.equal(p.$('#hub').hidden, false);
+});

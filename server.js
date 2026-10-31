@@ -415,9 +415,12 @@ const NEW_REPO_DAYS = 14;
 // The page that lists every page on the tailnet. Its address lives in a file outside the repo, one line, so it
 // is read per request; only an http(s) address counts, and anything else (or no file) means no link.
 const HUB_FILE = process.env.CORRAL_HUB_FILE || path.join(os.homedir(), '.config', 'tailnet-hub', 'url');
-function hubUrl() {
+// The Corral watch page on another Mac (scripts/corral-watch.js), in a file of the same form. The phone keeps
+// it, to offer when this Mac cannot be reached.
+const WATCH_FILE = process.env.CORRAL_WATCH_FILE || path.join(os.homedir(), '.config', 'corral', 'watch-url');
+function urlFile(file) {
   let line = '';
-  try { line = fs.readFileSync(HUB_FILE, 'utf8').split('\n')[0].trim(); } catch {}
+  try { line = fs.readFileSync(file, 'utf8').split('\n')[0].trim(); } catch {}
   return /^https?:\/\/\S+$/i.test(line) ? line : null;
 }
 const HIDDEN_REPOS_FILE = path.join(DATA_DIR, 'hidden-repos.json');
@@ -1748,7 +1751,7 @@ const server = http.createServer(async (req, res) => {
     const found = await locateFile(q.get('name'), Number(q.get('size')), Number(q.get('modified')));
     return found ? send(res, 200, { path: found }) : send(res, 404, { error: 'not found on this Mac' });
   }
-  if (url.pathname === '/api/hub' && req.method === 'GET') return send(res, 200, { url: hubUrl() });
+  if (url.pathname === '/api/hub' && req.method === 'GET') return send(res, 200, { url: urlFile(HUB_FILE), watch: urlFile(WATCH_FILE) });
   if (url.pathname === '/api/remote' && req.method === 'GET') {
     return send(res, 200, { url: tailnet?.served ? tailnet.url : null, machine: tailnet?.machine || null, remote: Boolean(access.remote) });
   }

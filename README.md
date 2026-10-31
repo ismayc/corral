@@ -319,6 +319,64 @@ tailscale serve --https=8443 off
 Or start Corral with `CORRAL_TAILSCALE=0`, which refuses every request that
 comes through Tailscale.
 
+### When the phone cannot reach the Mac
+
+If the Mac that runs Corral is asleep, or Tailscale on it is off or logged
+out, the phone cannot reach it, and neither can anything else on your
+tailnet. Another Mac that stays on at home (a Mac mini, say) can still find
+out why over the home network and often fix it. `scripts/corral-watch.js`
+runs there and serves a page that shows:
+
+- whether Tailscale sees the Corral Mac online, and when it last did;
+- whether the Corral Mac answers a ping on the home network (awake) or not
+  (asleep, off, or away);
+- over SSH: whether its Tailscale is connected, turned off, logged out, or
+  not running, and whether Corral answers.
+
+It names the problem and offers the fix: **Wake** (a Wake-on-LAN packet),
+**Reconnect Tailscale** (opens the app, then connects it or starts a login
+and links to it, so you can sign the Mac back in from the phone), or
+**Restart Corral** (runs `scripts/corral-launcher.sh` without opening the
+page). When a page load to the Corral Mac fails or gets no answer in 10
+seconds, the phone shows a page saying so, with a link to the watch page.
+
+To set it up:
+
+1. On the **Corral Mac**, turn on **System Settings > General > Sharing >
+   Remote Login**, and **Wake for network access** in **Battery** (or
+   **Energy**) settings. A MacBook usually wakes for it only on power.
+2. On the **watching Mac**, clone this repo and make sure SSH to the Corral
+   Mac works with no prompt: `ssh <you>@<Corral Mac>.local true`. Use a key
+   with no passphrase, or one stored in the keychain (`ssh-add
+   --apple-use-keychain`), and answer the host key question once.
+3. Still there, run the installer with the Corral Mac's Tailscale machine
+   name (and the SSH user and host if they differ from yours and
+   `<name>.local`):
+
+   ```sh
+   scripts/install-watch.sh Chesters-MacBook-Pro you@Chesters-MacBook-Pro.local
+   ```
+
+   It installs a LaunchAgent that keeps the watcher running, runs
+   `tailscale serve --bg --https=8444 http://127.0.0.1:8778`, and prints the
+   page's address.
+4. On the Corral Mac, put that address in `~/.config/corral/watch-url` (the
+   installer prints the command), then open Corral once on the phone so it
+   remembers it. You may also want to add it to your tailnet page list.
+
+The watcher learns the Corral Mac's network address for Wake-on-LAN the first
+time it sees it awake; `WATCH_MAC` sets it instead. Other settings, read when
+it starts: `WATCH_LAN_HOST` (default `<Tailscale name>.local`), `WATCH_SSH`,
+`WATCH_CORRAL_REPO` (on the Corral Mac, default `$HOME/repos/corral`),
+`WATCH_CORRAL_PORT`, `WATCH_BROADCAST`, `WATCH_PORT`,
+`WATCH_TAILSCALE_PORT`, and `WATCH_USERS` (Tailscale logins allowed in;
+default the one that owns the watching Mac). Like Corral, it listens on
+`127.0.0.1` only, takes tailnet requests only with an allowed login, and
+runs its actions only for requests from its own page. Its log is
+`~/.local/share/corral/watch.log`.
+
+Away from home, the watching Mac can tell you only what Tailscale last saw.
+
 ## Security
 
 A browser terminal is remote code execution by design, so Corral is strict
@@ -386,6 +444,12 @@ about who can reach it:
   holds an `http://` or `https://` address, both pages show an "All tailnet
   pages" link to it. Corral only reads this file. `CORRAL_HUB_FILE` points it
   elsewhere.
+- `~/.config/corral/watch-url` (optional, one line, written by you): the
+  Corral watch page on another Mac, which the phone offers when this Mac
+  does not answer. `CORRAL_WATCH_FILE` points it elsewhere.
+- On a Mac running `scripts/corral-watch.js`: `~/.local/share/corral/watch.json`
+  (the Corral Mac's network address, for Wake-on-LAN) and
+  `~/.local/share/corral/watch.log`.
 - `~/.local/share/corral/quick-replies.json`: the phone page's quick replies,
   shared by every device. Each device also keeps a copy in its browser
   storage to show them at once.
