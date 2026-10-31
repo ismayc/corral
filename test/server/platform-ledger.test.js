@@ -161,13 +161,16 @@ test('ledgerView marks open and missing folders and lists the most recently seen
 test('cleanCategories accepts a well-formed document and rejects each kind of bad one', () => {
   const { srv } = loadServer();
   const ok = srv.cleanCategories({ categories: [{ name: ' Work ', collapsed: 1 }, { name: 'Play' }], uncatCollapsed: 1, assign: { '/a': 'Work', '/b': 'Nope', '/c': 5, ['x'.repeat(1024)]: 'Play' } });
-  assert.deepEqual(ok, { version: 1, categories: [{ name: 'Work', collapsed: true }, { name: 'Play', collapsed: false }], uncatCollapsed: true, assign: { '/a': 'Work' }, todo: [] });
+  assert.deepEqual(ok, { version: 1, categories: [{ name: 'Work', collapsed: true }, { name: 'Play', collapsed: false }], uncatCollapsed: true, assign: { '/a': 'Work' }, todo: [], later: [] });
   assert.equal(srv.cleanCategories({ categories: [], assign: {} }).uncatCollapsed, false);
   // TO-DO: strings only, no repeats, at most 200, and a file without one reads as empty.
   const todo = srv.cleanCategories({ categories: [], assign: {}, todo: ['/a', '/a', 5, '', 'x'.repeat(1024), '/b'] }).todo;
   assert.deepEqual(todo, ['/a', '/b']);
   assert.equal(srv.cleanCategories({ categories: [], assign: {}, todo: Array.from({ length: 300 }, (_, i) => `/p${i}`) }).todo.length, 200);
   assert.deepEqual(srv.cleanCategories({ categories: [], assign: {}, todo: 'x' }).todo, []);
+  // Later: cleaned the same way, and a folder also in TO-DO stays in TO-DO only.
+  const both = srv.cleanCategories({ categories: [], assign: {}, todo: ['/a'], later: ['/a', '/b', '/b', 7] });
+  assert.deepEqual([both.todo, both.later], [['/a'], ['/b']]);
   const proto = srv.cleanCategories(JSON.parse('{"categories":[{"name":"W"}],"assign":{"__proto__":"W"}}'));
   assert.equal(Object.getPrototypeOf(proto.assign), Object.prototype);
   assert.equal(Object.hasOwn(proto.assign, '__proto__'), true);

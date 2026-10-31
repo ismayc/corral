@@ -1,0 +1,18 @@
+───────────────────────────────────────
+ ☐ Game
+
+TEST: which game?
+
+[38;5;153m❯[39m [38;5;246m1.[39m [38;5;153mThunder at Rockets, today 17:30 [39m
+     [38;5;153m(Recommended)[39m
+     [38;5;246mNBA TV, Saturday.[39m
+  [38;5;246m2.[39m 76ers at Hornets, today 15:00
+     at the Spectrum Center
+     [38;5;246mNBA TV, later.[39m
+     [38;5;246mSee ]8;;https://nba.com\nba.com]8;;\ for more.[39m
+  [38;5;246m3. Type something.[39m
+───────────────────────────────────────
+  [38;5;246m4. Chat about this[39m
+
+Enter to select · ↑/↓ to navigate · Esc
+to cancel

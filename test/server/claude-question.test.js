@@ -156,6 +156,77 @@ test('overview gives a window with an open question the question and its key, an
   assert.equal(c.srv.overview().find((r) => r.id === s.id).question, null);
 });
 
+// Real screens from October 31, 2026, in a 39x29 window: a long question lost its first answers off the
+// top of the screen, and its footer wrapped between "Esc" and "to cancel".
+test('questionPrompt reads a footer wrapped at any word, and is null when answer 1 is cut off', () => {
+  const { srv } = setup();
+  const q = srv.questionPrompt('x', ['Pick', '❯ 1. A', '  2. B', '', 'Enter to select · ↑/↓ to navigate · Esc', 'to cancel']);
+  assert.deepEqual(q.options.map((o) => o.label), ['A', 'B']);
+  assert.equal(srv.questionPrompt('x', lines('cut')), null);
+});
+
+// Color codes as Claude Code drew them on October 31, 2026: the selected label in 153, descriptions in 246.
+test('questionPrompt with the styled screen keeps a wrapped label whole and drops link codes', () => {
+  const { srv } = setup();
+  const styled = lines('styled');
+  const q = srv.questionPrompt('x', null, styled);
+  assert.deepEqual(q.options.slice(0, 2).map((o) => [o.label, o.detail]), [
+    ['Thunder at Rockets, today 17:30 (Recommended)', 'NBA TV, Saturday.'],
+    ['76ers at Hornets, today 15:00 at the Spectrum Center', 'NBA TV, later. See nba.com for more.']]);
+  assert.equal(q.options[2].free, true);
+  // A plain screen (no color codes) reads as before: the wrapped part goes into the description.
+  const plain = srv.questionPrompt('x', styled.map((l) => l.replace(/\x1b\[[0-9;]*m|\x1b\][^\x1b]*\x1b\\/g, '')));
+  assert.equal(plain.options[0].detail, '(Recommended) NBA TV, Saturday.');
+  // A number with its own color codes before the dot gives no label color; an uncolored next line then
+  // still joins the label.
+  const odd = srv.questionPrompt('x', null, ['Pick', '\x1b[1m1\x1b[22m. A', '  rest of A', '  \x1b[2mabout A\x1b[22m',
+    'Enter to select · Esc to cancel']);
+  assert.deepEqual([odd.options[0].label, odd.options[0].detail], ['A rest of A', 'about A']);
+});
+
+test('overview reads the question from the styled screen', async () => {
+  const { c, s } = asking('single');
+  c.tmux.sessions.get(`wt-${s.id}`).screen = fixture('styled');
+  assert.equal(c.srv.overview().find((r) => r.id === s.id).question.options[0].label, 'Thunder at Rockets, today 17:30 (Recommended)');
+  assert.ok(c.tmux.calls.some((a) => a.includes('capture-pane') && a.includes('-e')));
+});
+
+test('overview makes a window too small for its question 100x50 until it closes, then puts the size back', () => {
+  const { c, s } = asking('cut');
+  s.pty.resize(39, 29);
+  c.srv.overview();
+  assert.deepEqual(s.pty.sizes, [[39, 29], [100, 50]]);
+  c.srv.overview(); // grown once, not again
+  assert.equal(s.pty.sizes.length, 2);
+  c.screen(s, fixture('single'));
+  c.claude(s, { status: 'idle', statusUpdatedAt: 78 });
+  c.srv.overview();
+  assert.deepEqual(s.pty.sizes.at(-1), [39, 29]);
+  assert.equal(s.grown, null);
+});
+
+test('overview leaves a big enough window, a readable question, and a failed resize alone', () => {
+  const big = asking('cut');
+  big.c.srv.overview(); // 100x30: too short, so it grows only the rows
+  assert.deepEqual(big.s.pty.sizes, [[100, 50]]);
+  const tall = asking('cut');
+  tall.s.pty.resize(120, 60);
+  tall.c.srv.overview();
+  assert.deepEqual(tall.s.pty.sizes, [[120, 60]]);
+  const read = asking('single');
+  read.s.pty.resize(39, 29);
+  read.c.srv.overview();
+  assert.equal(read.s.pty.sizes.length, 1);
+  const fails = asking('cut');
+  fails.s.pty.cols = 39;
+  fails.s.pty.throwOnResize = true;
+  fails.c.srv.overview();
+  assert.deepEqual(fails.s.grown, { cols: 39, rows: 30 });
+  fails.c.claude(fails.s, { status: 'idle', statusUpdatedAt: 78 });
+  fails.c.srv.overview();
+  assert.equal(fails.s.grown, null);
+});
+
 test('GET /prompt returns the open question, and POST /answer with question: true answers it', async () => {
   const { c, s, key } = asking();
   const h = await listen(c.srv);

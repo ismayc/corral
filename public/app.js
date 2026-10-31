@@ -512,14 +512,14 @@ function renderSpaces() { buildRows(); arrange(); }
 // Puts spaces with an open window first, latest change on top (those last cleared with /clear in their own
 // section after), then the rest alphabetical (herdr's own order). Moves the existing elements, so expanded file trees survive.
 // ---- Categories: the user's own groups. Saved on the server, keyed by project folder. ----
-let cats = { categories: [], uncatCollapsed: false, assign: {}, todo: [] };
+let cats = { categories: [], uncatCollapsed: false, assign: {}, todo: [], later: [] };
 let saveTimer = null;
 function saveCats() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => api('/api/categories', { method: 'POST', body: cats }).catch(() => {}), 250);
 }
 async function loadCats() {
-  try { const c = await api('/api/categories'); if (c.categories) cats = { ...c, todo: c.todo || [] }; } catch {}
+  try { const c = await api('/api/categories'); if (c.categories) cats = { ...c, todo: c.todo || [], later: c.later || [] }; } catch {}
   arrange();
 }
 const catOf = (s) => (s.root && Object.hasOwn(cats.assign, s.root) ? cats.assign[s.root] : null);
@@ -538,19 +538,29 @@ function assignTo(list, name) {
   });
 }
 
-// TO-DO: spaces still to work on, listed above Open windows. Kept by project folder, like categories.
-// A space whose window was cleared with /clear is done: it leaves TO-DO and sits under Parked windows.
+// TO-DO: spaces still to work on, listed above Open windows. Later: spaces to look at another time, listed
+// under Parked windows. Both are kept by project folder, like categories, and a space is in one at most.
+// A space whose window was cleared with /clear is done: it leaves either list and sits under Parked windows.
+const MARKS = { todo: 'TO-DO', later: 'Later' };
 const isTodo = (s) => Boolean(s.root) && cats.todo.includes(s.root);
-function setTodo(list, on) {
-  const moved = list.filter((s) => s.root && isTodo(s) !== on);
+const isLater = (s) => Boolean(s.root) && cats.later.includes(s.root);
+function setMark(list, key, on) {
+  const has = key === 'todo' ? isTodo : isLater;
+  const moved = list.filter((s) => s.root && has(s) !== on);
   if (!moved.length) return;
+  const before = { todo: cats.todo, later: cats.later };
   const roots = new Set(moved.map((s) => s.root));
-  cats.todo = on ? [...cats.todo, ...roots] : cats.todo.filter((r) => !roots.has(r));
+  for (const k of Object.keys(MARKS)) cats[k] = cats[k].filter((r) => !roots.has(r));
+  if (on) cats[key] = [...cats[key], ...roots];
   selected.clear();
   saveCats(); arrange();
   const what = moved.length === 1 ? moved[0].label : `${moved.length} spaces`;
-  toast(`${on ? 'Added' : 'Removed'} ${what} ${on ? 'to' : 'from'} TO-DO`, () => setTodo(moved, !on));
+  toast(`${on ? 'Added' : 'Removed'} ${what} ${on ? 'to' : 'from'} ${MARKS[key]}`, () => {
+    Object.assign(cats, before);
+    saveCats(); arrange();
+  });
 }
+const setTodo = (list, on) => setMark(list, 'todo', on);
 
 // Selection: Cmd/Ctrl-click toggles a space, Shift-click selects a run; moves then apply to all of them.
 const selected = new Set();
@@ -614,11 +624,14 @@ function catMenu(list, anchor) {
   };
   for (const c of cats.categories) item(c.name, c.name, c.name === cur);
   item('Uncategorized', null, list.length === 1 && !cur);
-  const todoBtn = document.createElement('button');
-  const allTodo = list.every(isTodo);
-  todoBtn.textContent = `${allTodo ? '✓ ' : ''}TO-DO`;
-  todoBtn.onclick = () => { closeMenu(); setTodo(list, !allTodo); };
-  m.append(Object.assign(document.createElement('div'), { className: 'msep' }), todoBtn);
+  m.append(Object.assign(document.createElement('div'), { className: 'msep' }));
+  for (const [key, label] of Object.entries(MARKS)) {
+    const b = document.createElement('button');
+    const all = list.every(key === 'todo' ? isTodo : isLater);
+    b.textContent = `${all ? '✓ ' : ''}${label}`;
+    b.onclick = () => { closeMenu(); setMark(list, key, !all); };
+    m.append(b);
+  }
   const inp = document.createElement('input');
   inp.placeholder = 'New category, then Enter';
   inp.onkeydown = (e) => {
@@ -782,12 +795,17 @@ function arrange() {
   const q = $('#filter').value.trim().toLowerCase();
   const shown = shownSpaces(q);
   const openSpaces = openFirst(shown);
-  // A cleared window finishes its TO-DO item.
-  const done = spaces.filter((s) => isTodo(s) && hasWindow(s) && isCleared(s));
-  if (done.length) { const gone = new Set(done.map((s) => s.root)); cats.todo = cats.todo.filter((r) => !gone.has(r)); saveCats(); }
-  const todo = shown.filter(isTodo).sort((a, b) => (hasWindow(b) ? lastChange(b) : 0) - (hasWindow(a) ? lastChange(a) : 0));
+  // A cleared window finishes its TO-DO or Later item.
+  const done = spaces.filter((s) => (isTodo(s) || isLater(s)) && hasWindow(s) && isCleared(s));
+  if (done.length) {
+    const gone = new Set(done.map((s) => s.root));
+    cats.todo = cats.todo.filter((r) => !gone.has(r)); cats.later = cats.later.filter((r) => !gone.has(r));
+    saveCats();
+  }
+  const newest = (a, b) => (hasWindow(b) ? lastChange(b) : 0) - (hasWindow(a) ? lastChange(a) : 0);
+  const todo = shown.filter(isTodo).sort(newest), later = shown.filter(isLater).sort(newest);
   drawn = { q, order: orderKey(openSpaces) };
-  const rest = shown.filter((s) => !openSpaces.includes(s) && !todo.includes(s));
+  const rest = shown.filter((s) => !openSpaces.includes(s) && !todo.includes(s) && !later.includes(s));
   rows.forEach((wrap) => wrap.remove());
   box.querySelectorAll('.sec, .note').forEach((n) => n.remove());
   const sec = (t) => { const h = document.createElement('div'); h.className = 'sec'; h.textContent = t; box.append(h); };
@@ -799,11 +817,18 @@ function arrange() {
     wireCatDrop(box.lastChild, null, (l) => setTodo(l, true));
     put(todo);
   }
-  const working = openSpaces.filter((s) => !todo.includes(s) && !isCleared(s) && !isCompacted(s));
-  const compacted = openSpaces.filter((s) => !todo.includes(s) && isCompacted(s)), cleared = openSpaces.filter(isCleared);
+  const marked = (s) => todo.includes(s) || later.includes(s);
+  const working = openSpaces.filter((s) => !marked(s) && !isCleared(s) && !isCompacted(s));
+  const compacted = openSpaces.filter((s) => !marked(s) && isCompacted(s)), cleared = openSpaces.filter(isCleared);
   if (working.length) { sec(`Open windows (${working.length})`); put(working); }
   if (compacted.length) { sec(`Auto-compacted windows (${compacted.length})`); put(compacted); }
   if (cleared.length) { sec(`Parked windows (${cleared.length})`); put(cleared); }
+  if (later.length) {
+    sec(`Later (${later.length})`);
+    box.lastChild.classList.add('later');
+    wireCatDrop(box.lastChild, null, (l) => setMark(l, 'later', true));
+    put(later);
+  }
   if (!cats.categories.length) {
     if (openSpaces.length && rest.length) sec(`All spaces (${rest.length})`);
     put(rest);

@@ -67,7 +67,7 @@ test('GET /api/herdr returns the snapshot, or says herdr is unavailable', async 
 test('categories can be read and replaced, and a bad document is refused', async (t) => {
   const { req, home } = await world(t);
   const first = await req('GET', '/api/categories');
-  assert.deepEqual(first.json, { version: 1, categories: [], uncatCollapsed: false, assign: {}, todo: [] });
+  assert.deepEqual(first.json, { version: 1, categories: [], uncatCollapsed: false, assign: {}, todo: [], later: [] });
   const doc = { categories: [{ name: 'Work', collapsed: true }], uncatCollapsed: true, assign: { '/a': 'Work', '/b': 'Nope' } };
   const saved = await req('POST', '/api/categories', { body: doc });
   assert.equal(saved.status, 200);

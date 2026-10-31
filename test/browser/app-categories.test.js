@@ -194,7 +194,7 @@ test('the ⋯ menu files a space, marks its current category, and offers Undo', 
   const menu = p.$('.catmenu');
   assert.equal(menu.style.left, '0px');
   assert.equal(menu.style.top, '4px');
-  assert.deepEqual([...menu.querySelectorAll('button')].map((b) => b.textContent), ['✓ Work', 'Play', 'Uncategorized', 'TO-DO']);
+  assert.deepEqual([...menu.querySelectorAll('button')].map((b) => b.textContent), ['✓ Work', 'Play', 'Uncategorized', 'TO-DO', 'Later']);
   assert.equal(menu.querySelector('.mhead'), null);
   assert.equal(p.doc.activeElement, menu.querySelector('input'));
   [...menu.querySelectorAll('button')][1].click();
@@ -206,7 +206,7 @@ test('the ⋯ menu files a space, marks its current category, and offers Undo', 
   assert.deepEqual(p.secs(), ['▾ Work 1', '▸ Play 1', '▾ Uncategorized 2']);
   // Undo for a space that had no category takes it out again.
   p.row('c').querySelector('.more').click();
-  assert.deepEqual([...p.$$('.catmenu button')].map((b) => b.textContent), ['Work', 'Play', '✓ Uncategorized', 'TO-DO']);
+  assert.deepEqual([...p.$$('.catmenu button')].map((b) => b.textContent), ['Work', 'Play', '✓ Uncategorized', 'TO-DO', 'Later']);
   p.$$('.catmenu button')[0].click();
   assert.deepEqual(p.secs(), ['▾ Work 2', '▸ Play 1', '▾ Uncategorized 1']);
   p.$('#toast button').click();
@@ -224,7 +224,7 @@ test('right-clicking a selected space files the whole selection from a menu at t
   assert.equal(menu.style.left, '1180px');
   assert.equal(menu.style.top, '892px');
   assert.equal(menu.querySelector('.mhead').textContent, 'Move 2 spaces to');
-  assert.deepEqual([...menu.querySelectorAll('button')].map((b) => b.textContent), ['Work', 'Play', 'Uncategorized', 'TO-DO']);
+  assert.deepEqual([...menu.querySelectorAll('button')].map((b) => b.textContent), ['Work', 'Play', 'Uncategorized', 'TO-DO', 'Later']);
   menu.querySelector('button').click();
   assert.equal(p.toast(), 'Moved 2 spaces to Work');
   assert.equal(p.$$('#spaces .space.sel').length, 0);

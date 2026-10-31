@@ -21,6 +21,7 @@ const realExecFile = cp.execFile;
 class FakePty {
   constructor(file, args, opts) {
     Object.assign(this, { file, args, opts, pid: 50000 + FakePty.count++, written: [], sizes: [], killed: false });
+    this.cols = opts?.cols; this.rows = opts?.rows; // node-pty keeps the current size in these
     this.dataCbs = []; this.exitCbs = [];
   }
   onData(cb) { this.dataCbs.push(cb); }
@@ -28,7 +29,7 @@ class FakePty {
   emitData(d) { for (const cb of this.dataCbs) cb(d); }
   emitExit(exitCode = 0) { for (const cb of this.exitCbs) cb({ exitCode }); }
   write(d) { this.written.push(d); }
-  resize(c, r) { if (this.throwOnResize) throw new Error('resize failed'); this.sizes.push([c, r]); }
+  resize(c, r) { if (this.throwOnResize) throw new Error('resize failed'); this.sizes.push([c, r]); this.cols = c; this.rows = r; }
   kill() { if (this.throwOnKill) throw new Error('kill failed'); this.killed = true; }
 }
 FakePty.count = 0;

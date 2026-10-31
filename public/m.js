@@ -15,13 +15,22 @@ function h(tag, attrs = {}, ...kids) {
   return el;
 }
 
-let toastTimer;
-function toast(msg) {
+// A notice at the top. With `open`, a tap on it runs open (a notice about another window opens that
+// window); without, a tap only hides it.
+let toastTimer, toastOpen = null;
+function toast(msg, open) {
   const t = $('#toast');
-  t.textContent = msg; t.hidden = false;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 4000);
+  t.textContent = open ? `${msg}. Tap to open it.` : msg; t.hidden = false;
+  t.classList.toggle('tap', Boolean(open));
+  toastOpen = open || null;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, open ? 6000 : 4000);
 }
-$('#toast').onclick = () => { $('#toast').hidden = true; };
+$('#toast').onclick = () => {
+  $('#toast').hidden = true;
+  const open = toastOpen;
+  toastOpen = null;
+  if (open) open();
+};
 
 // iOS shrinks the visual viewport, not the layout one, when the keyboard opens; follow it.
 const vv = window.visualViewport;
@@ -59,32 +68,41 @@ function statusOf(w) {
 }
 const needsYou = (w) => statusOf(w).rank === 0;
 
-// TO-DO: project folders to work on next, kept on the Mac in categories.json and shared with the Mac page.
-// A window in one of those folders is listed first, in its own group, until it is cleared with /clear.
-let todoRoots = [];
-const TODO_RANK = 5;
-const isTodoWin = (w) => Boolean(w.cwd) && todoRoots.includes(w.cwd) && !(w.claude?.status === 'idle' && w.claude.cleared);
-const rankOf = (w) => (isTodoWin(w) ? TODO_RANK : statusOf(w).rank);
-async function saveTodo(doc, roots) {
-  todoRoots = roots;
-  await api('/api/categories', { method: 'POST', body: { ...doc, todo: roots } });
+// TO-DO: project folders to work on next. Later: folders to look at another time. Both are kept on the Mac
+// in categories.json and shared with the Mac page, and a folder is in one at most. A window in a TO-DO
+// folder is listed first, and one in a Later folder last, each in its own group, until it is cleared with /clear.
+let marks = { todo: [], later: [] };
+const MARKS = { todo: 'TO-DO', later: 'Later' };
+const TODO_RANK = 5, LATER_RANK = 6;
+const isCleared = (w) => w.claude?.status === 'idle' && w.claude.cleared;
+const markOf = (w) => (!w.cwd || isCleared(w) ? null : Object.keys(MARKS).find((k) => marks[k].includes(w.cwd)) || null);
+const isTodoWin = (w) => markOf(w) === 'todo';
+const rankOf = (w) => ({ todo: TODO_RANK, later: LATER_RANK }[markOf(w)] ?? statusOf(w).rank);
+async function saveMarks(doc, next) {
+  marks = next;
+  await api('/api/categories', { method: 'POST', body: { ...doc, ...next } });
 }
 async function loadTodo() {
   try {
     const doc = await api('/api/categories');
-    todoRoots = doc.todo || [];
-    // A cleared window finishes its TO-DO item.
-    const done = windows.filter((w) => w.cwd && todoRoots.includes(w.cwd) && w.claude?.status === 'idle' && w.claude.cleared).map((w) => w.cwd);
-    if (done.length) await saveTodo(doc, todoRoots.filter((r) => !done.includes(r)));
+    marks = { todo: doc.todo || [], later: doc.later || [] };
+    // A cleared window finishes its TO-DO or Later item.
+    const done = windows.filter((w) => w.cwd && isCleared(w)).map((w) => w.cwd);
+    if (done.some((r) => marks.todo.includes(r) || marks.later.includes(r))) {
+      await saveMarks(doc, { todo: marks.todo.filter((r) => !done.includes(r)), later: marks.later.filter((r) => !done.includes(r)) });
+    }
   } catch {}
 }
-async function toggleTodo(w) {
+async function toggleMark(w, key) {
   closeSheet();
   try {
     const doc = await api('/api/categories');
-    const on = !(doc.todo || []).includes(w.cwd);
-    await saveTodo(doc, on ? [...(doc.todo || []), w.cwd] : doc.todo.filter((r) => r !== w.cwd));
-    toast(on ? `${w.label} is in TO-DO.` : `${w.label} is out of TO-DO.`);
+    const now = { todo: doc.todo || [], later: doc.later || [] };
+    const on = !now[key].includes(w.cwd);
+    const next = { todo: now.todo.filter((r) => r !== w.cwd), later: now.later.filter((r) => r !== w.cwd) };
+    if (on) next[key].push(w.cwd);
+    await saveMarks(doc, next);
+    toast(on ? `${w.label} is in ${MARKS[key]}.` : `${w.label} is out of ${MARKS[key]}.`);
   } catch { toast('Could not change that.'); }
   refresh();
 }
@@ -283,7 +301,8 @@ function windowMenu(w) {
     item('Open the window', () => { closeSheet(); openTerm(w); }),
     claude ? item('Last reply', () => showLastReply(w)) : null,
     claude && w.claude.status !== 'waiting' ? item(`Next mode${w.claude.mode ? ` (now ${modeName(w.claude.mode)})` : ''}`, () => { closeSheet(); cardKey(w, 'mode'); }) : null,
-    w.cwd ? item(isTodoWin(w) ? 'Remove from TO-DO' : 'Add to TO-DO', () => toggleTodo(w)) : null,
+    w.cwd ? item(isTodoWin(w) ? 'Remove from TO-DO' : 'Add to TO-DO', () => toggleMark(w, 'todo')) : null,
+    w.cwd ? item(markOf(w) === 'later' ? 'Remove from Later' : 'Add to Later', () => toggleMark(w, 'later')) : null,
     item(w.muted ? 'Notify me about this window again' : 'Mute notifications for this window', () => setMuted(w, !w.muted)),
     item('Rename', () => renameSheet(w)),
     item('Close the window', () => closeSheetFor(w), 'danger')));
@@ -380,8 +399,9 @@ async function refresh() {
     const now = w.claude?.status;
     const was = lastStatus.get(w.id);
     if (was && was !== now && current?.info.id !== w.id) {
-      if (now === 'waiting') toast(`${w.label} needs you to answer a prompt`);
-      else if (was === 'busy' && now === 'idle') toast(`${w.label} is waiting for you`);
+      const open = () => { closeSheet(); openTerm(w); };
+      if (now === 'waiting') toast(`${w.label} needs you to answer a prompt`, open);
+      else if (was === 'busy' && now === 'idle') toast(`${w.label} is waiting for you`, open);
     }
     lastStatus.set(w.id, now);
   }
@@ -459,7 +479,7 @@ function renderList() {
 // started waiting on you most recently. tmux's activity time is no use for that, since an idle Claude still
 // redraws its screen; it orders only the shells, which have no Claude status.
 const lastChange = (w) => w.claude?.since || w.activity || 0;
-const GROUP_ORDER = [TODO_RANK, 0, 1, 2, 3, 4];
+const GROUP_ORDER = [TODO_RANK, 0, 1, 2, 3, 4, LATER_RANK];
 const listOrder = () => [...windows].sort((a, b) => GROUP_ORDER.indexOf(rankOf(a)) - GROUP_ORDER.indexOf(rankOf(b)) || lastChange(b) - lastChange(a));
 
 // The groups, in list order.
@@ -470,6 +490,7 @@ const GROUPS = [
   { title: 'Auto-compacted windows', chip: 'Compacted', cls: '' },
   { title: 'Parked windows', chip: 'Parked', cls: '' },
   { title: 'TO-DO', chip: 'TO-DO', cls: '' },
+  { title: 'Later', chip: 'Later', cls: '' },
 ];
 // Where an element sits in the list's own scroll position. A stuck header reports where it is stuck,
 // so jumping measures the first window under the header, which never sticks.

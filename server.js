@@ -446,7 +446,7 @@ function hideRepo(root) {
 // Categories: the user's own groups for the sidebar. A space belongs to at most one, keyed by its
 // project folder so the grouping survives a space being closed and reopened.
 const CATEGORIES_FILE = path.join(DATA_DIR, 'categories.json');
-let categories = { version: 1, categories: [], uncatCollapsed: false, assign: {}, todo: [] };
+let categories = { version: 1, categories: [], uncatCollapsed: false, assign: {}, todo: [], later: [] };
 
 // Accepts only a well-formed whole document; returns the cleaned copy or null.
 function cleanCategories(body) {
@@ -463,9 +463,12 @@ function cleanCategories(body) {
   // fromEntries makes plain own properties, so a folder called "__proto__" cannot touch the prototype.
   const assign = Object.fromEntries(Object.entries(body.assign)
     .filter(([root, name]) => root.length < 1024 && typeof name === 'string' && names.has(name)));
-  // TO-DO: project folders to work on next, shown above Open windows. Older files have none.
-  const todo = [...new Set(Array.isArray(body.todo) ? body.todo.filter((r) => typeof r === 'string' && r && r.length < 1024) : [])].slice(0, 200);
-  return { version: 1, categories: list, uncatCollapsed: Boolean(body.uncatCollapsed), assign, todo };
+  // TO-DO: project folders to work on next, shown above Open windows. Later: folders to look at another
+  // time, shown under Parked windows. Older files have neither; a folder in both stays in TO-DO only.
+  const roots = (v) => [...new Set(Array.isArray(v) ? v.filter((r) => typeof r === 'string' && r && r.length < 1024) : [])].slice(0, 200);
+  const todo = roots(body.todo);
+  const later = roots(body.later).filter((r) => !todo.includes(r));
+  return { version: 1, categories: list, uncatCollapsed: Boolean(body.uncatCollapsed), assign, todo, later };
 }
 
 function loadCategories() {
@@ -579,6 +582,9 @@ function overview({ screens = true } = {}) {
     const claude = s.exited ? null : claudeUnder(p ? p.pid : s.pty.pid, children);
     const screen = screens && claude && s.tmux ? screenLines(s.id) : null;
     const rest = screens && claude ? restState(claude) : null;
+    const asking = Boolean(screen) && claude.waitingFor === 'input needed';
+    const question = asking ? withQuestionKey(questionPrompt(s.id, screen, screenLines(s.id, true)), claude) : null;
+    if (screens && s.tmux && !s.exited) fitQuestion(s, asking, question);
     return {
       ...publicSession(s),
       activity: p ? p.activity : null,
@@ -586,7 +592,7 @@ function overview({ screens = true } = {}) {
         cleared: rest === 'cleared', compacted: rest === 'compacted', lastPrompt: screens ? lastPrompt(claude) : null } : null,
       askKey: claude?.waitingFor === 'permission prompt' ? promptKey(claude) : null,
       prompt: screen && claude.waitingFor === 'permission prompt' ? withKey(permissionPrompt(s.id, screen), claude) : null,
-      question: screen && claude.waitingFor === 'input needed' ? withQuestionKey(questionPrompt(s.id, screen), claude) : null,
+      question,
       muted: Boolean(push.muted[s.id]),
     };
   });
@@ -595,8 +601,9 @@ function overview({ screens = true } = {}) {
 const withKey = (p, claude) => (p ? { ...p, key: promptKey(claude) } : null);
 const withQuestionKey = (q, claude) => (q ? { ...q, key: questionKey(claude, q) } : null);
 
-function screenLines(id) {
-  try { return tmux('capture-pane', '-p', '-t', SESSION_PREFIX + id).split('\n').map((l) => l.trimEnd()); } catch { return null; }
+// With `styled`, the lines keep their color codes (capture-pane -e).
+function screenLines(id, styled) {
+  try { return tmux('capture-pane', '-p', ...(styled ? ['-e'] : []), '-t', SESSION_PREFIX + id).split('\n').map((l) => l.trimEnd()); } catch { return null; }
 }
 
 // Claude Code's permission mode, from the line under its input box: "⏵⏵ auto mode on (shift+tab to cycle)",
@@ -949,16 +956,26 @@ function answerPrompt(s, choice, key) {
 // multi-select question, or opens the box of "Type something" (type, then Enter); Right moves on from a
 // multi-select question; Esc cancels. The box of "Type something" on a multi-select question did not take
 // keys sent this way.
-function questionPrompt(id, screen) {
-  const lines = screen || screenLines(id);
+// With `styled` (the screen with its color codes), an answer's label that wrapped stays whole: its next
+// line keeps the label's color, while a description is grey (seen on October 31, 2026 in a 39-column
+// window, where "(Recommended)" wrapped and read as the start of the description).
+const SGR = /\x1b\[[0-9;]*m/g;
+const OSC = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g; // OSC 8 links, which capture-pane -e keeps too
+const leadSgr = (l) => l.match(/^\s*((?:\x1b\[[0-9;]*m)*)/)[1];
+const labelSgr = (l) => l.match(/\d+\.(?:\x1b\[[0-9;]*m)*\s+((?:\x1b\[[0-9;]*m)*)/)?.[1] ?? '';
+function questionPrompt(id, screen, styled) {
+  const sty = styled?.some((l) => l.includes('\x1b[')) ? styled : null;
+  const lines = sty ? sty.map((l) => l.replace(SGR, '').replace(OSC, '').trimEnd()) : screen || screenLines(id);
   if (!lines) return null;
   const opt = (l) => l.match(/^\s*(?:❯\s*)?(\d+)\.\s+(.*)$/);
-  // In a narrow window (a phone is about 39 columns) the footer wraps onto two or three lines, so it is
-  // found by its last words and then followed up to "Enter to select".
+  // In a narrow window (a phone is about 39 columns) the footer wraps onto two or three lines, at any
+  // word ("Esc" can end one line and "to cancel" start the next), so the last lines are joined and read
+  // as one, up to "Enter to select".
   let end = -1;
-  const last = lines.findLastIndex((l) => /Esc to cancel\s*$/.test(l));
+  const last = lines.findLastIndex((l) => l.trim());
   for (let j = last; j >= 0 && last - j < 4 && lines[j].trim(); j--) {
-    if (/^\s*Enter to select\b/.test(lines[j])) { end = j; break; }
+    const joined = lines.slice(j, last + 1).map((l) => l.trim()).join(' ');
+    if (/^Enter to select\b.*\bEsc to cancel$/.test(joined)) { end = j; break; }
   }
   const review = end < 0;
   if (review) {
@@ -973,10 +990,11 @@ function questionPrompt(id, screen) {
   for (let j = first; j < end; j++) {
     const m = opt(lines[j]);
     const t = lines[j].trim();
-    if (m && Number(m[1]) === options.length + 1) options.push({ n: m[1], label: m[2].trim(), detail: '' });
+    if (m && Number(m[1]) === options.length + 1) options.push({ n: m[1], label: m[2].trim(), detail: '', sgr: sty && labelSgr(sty[j]) });
     else if (t && !/^─{20,}$/.test(t) && t !== 'Submit') {
       const o = options[options.length - 1];
-      o.detail = o.detail ? rejoin(o.detail, t) : t;
+      if (sty && !o.detail && leadSgr(sty[j]) === o.sgr) o.label = rejoin(o.label, t);
+      else o.detail = o.detail ? rejoin(o.detail, t) : t;
     }
   }
   // The question runs up to the row of tabs, or to the rule over the dialog when there are none.
@@ -998,6 +1016,23 @@ function questionPrompt(id, screen) {
       ...(/^Type something\.?$/.test(label) ? { free: true } : {}) };
   });
   return { text: text.join('\n'), review, multi: answers.some((o) => 'checked' in o), options: answers };
+}
+
+// A question dialog taller than its window is cut at the top: Claude Code draws it on the alternate screen,
+// so the first answers are in no scrollback, and the transcript gets the question only once it is answered.
+// A window left at a phone's size (39x29) cut long questions that way (October 31, 2026). While a question
+// is open and cannot be read, Corral's own tmux client for the window is made at least QUESTION_SIZE, and
+// put back when the question closes, unless a page has sized the window since (resize() clears `grown`).
+const QUESTION_SIZE = { cols: 100, rows: 50 };
+function fitQuestion(s, asking, q) {
+  const p = s.pty;
+  if (asking && !q && !s.grown && (p.cols < QUESTION_SIZE.cols || p.rows < QUESTION_SIZE.rows)) {
+    s.grown = { cols: p.cols, rows: p.rows };
+    try { p.resize(Math.max(p.cols, QUESTION_SIZE.cols), Math.max(p.rows, QUESTION_SIZE.rows)); } catch {}
+  } else if (!asking && s.grown) {
+    try { p.resize(s.grown.cols, s.grown.rows); } catch {}
+    s.grown = null;
+  }
 }
 
 // Names one question. The session file's time stays the same while you go from one question of a dialog
@@ -1787,7 +1822,7 @@ const server = http.createServer(async (req, res) => {
       const c = windowClaude(s);
       return send(res, 200, {
         prompt: c?.waitingFor === 'permission prompt' ? withKey(permissionPrompt(s.id), c) : null,
-        question: c?.waitingFor === 'input needed' ? withQuestionKey(questionPrompt(s.id), c) : null,
+        question: c?.waitingFor === 'input needed' ? withQuestionKey(questionPrompt(s.id, null, screenLines(s.id, true)), c) : null,
       });
     }
     if (act[2] === 'answer' && req.method === 'POST') {
@@ -1940,6 +1975,7 @@ server.on('upgrade', (req, socket, head) => {
       if (m.t === 'in' && typeof m.d === 'string') target.write(m.d);
       else if (m.t === 'resize' && m.cols > 0 && m.rows > 0) {
         try { target.resize(Math.min(m.cols, 500), Math.min(m.rows, 200)); } catch {}
+        if (target === s.pty) s.grown = null; // the page's size wins over one fitQuestion() set
       }
     });
     // Killing a tmux attach client only detaches it; the window keeps running.

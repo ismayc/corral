@@ -5,6 +5,23 @@ in `package.json`.
 
 ## Development version
 
+- **A Later section for spaces to look at another time.** On the Mac page,
+  the space menu has a "Later" entry under "TO-DO", and spaces can be
+  dragged onto the Later header. The section sits under Parked windows. A
+  space is in TO-DO or Later, not both. As with TO-DO, a space whose window
+  is cleared with /clear leaves Later and goes under Parked windows. On the
+  phone page, a card's menu has "Add to Later", and those windows form the
+  last group. The list is saved on the Mac with the categories.
+- **A tap on a phone notice opens its window.** The notice that another
+  window is waiting for you, or needs an answer, now says "Tap to open it",
+  and a tap opens that window.
+- **Questions stay readable in a small window.** In a window the size of a
+  phone (39 columns), Claude Code's question dialog lost its answers on the
+  phone page: its footer wrapped onto several lines, and a long question was
+  cut off at the top of the screen. Corral now reads a wrapped footer, makes
+  the window at least 100 by 50 while a question it cannot read is open (and
+  puts the size back after), and keeps a label that wrapped, such as
+  "(Recommended)", out of the answer's description.
 - **Corral can come back on its own after a restart or power loss.**
   `scripts/install-launcher.sh --login` adds a login item that starts Corral
   and herdr at login without opening the page. Started that way, or by

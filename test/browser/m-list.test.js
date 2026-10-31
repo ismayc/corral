@@ -241,12 +241,19 @@ test('a window that finishes or starts asking while you look elsewhere gets a no
   p.api.routes['GET /api/overview'] = overview(win('a', { claude: claude('idle') }), win('b', { claude: claude('busy') }), win('c', { claude: claude('idle') }));
   p.window.document.dispatchEvent(new p.window.Event('visibilitychange'));
   await settle();
-  assert.equal(p.toast(), 'a is waiting for you');
+  assert.equal(p.toast(), 'a is waiting for you. Tap to open it.');
   p.api.routes['GET /api/overview'] = overview(win('a', { claude: claude('idle') }), win('b', { claude: claude('waiting') }), win('c', { claude: claude('idle') }));
   p.window.document.dispatchEvent(new p.window.Event('visibilitychange'));
   await settle();
-  assert.equal(p.toast(), 'b needs you to answer a prompt');
-  p.$('#toast').hidden = true;
+  assert.equal(p.toast(), 'b needs you to answer a prompt. Tap to open it.');
+  // A tap on the notice opens the window it is about.
+  p.$('#toast').click();
+  await settle();
+  assert.equal(p.$('#toast').hidden, true);
+  assert.equal(p.$('#termview').hidden, false);
+  assert.equal(p.$('#ttitle').textContent, 'b');
+  p.window.history.back();
+  await settle();
   p.api.routes['GET /api/overview'] = overview(win('a', { claude: claude('idle') }), win('b', { claude: claude('waiting') }), win('c', { claude: claude('busy') }));
   p.window.document.dispatchEvent(new p.window.Event('visibilitychange'));
   await settle();

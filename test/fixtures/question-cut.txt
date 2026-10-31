@@ -1,0 +1,19 @@
+     message and does nothing when you
+     tap it.
+  2. Phone toast only
+     A tap on the toast at the top of
+     the phone page opens the space
+     directly on the phone.
+  3. Both notices
+     A tap on either notice opens the
+     space on the device where you
+     tapped it.
+  4. Neither notice
+     Both notices only tell you that
+     something changed.
+  5. Type something.
+───────────────────────────────────────
+  6. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc
+to cancel
