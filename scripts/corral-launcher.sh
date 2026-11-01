@@ -90,6 +90,12 @@ fi
 # CORRAL_NO_OPEN=1 (from scripts/corral-watch.js over SSH, say) starts the servers without opening the page.
 [[ -n "${CORRAL_NO_OPEN:-}" ]] && exit 0
 if [[ -d "$PAGE_APP" ]]; then open "$PAGE_APP"; else open "$URL"; fi
-# The list of windows from before the restart, to compare with what came back.
-[[ -n "$made_page" ]] && open "$BEFORE_PAGE"
+# The list of windows from before the restart, to compare with what came back. In its own browser window,
+# in front: a plain `open` added it as one tab among the ones Chrome restored after the reboot of
+# November 1, 2026, behind the Corral window, and it went unseen. Chrome hands the arguments of a second
+# instance to the running one, so this opens a new window there without starting another Chrome.
+if [[ -n "$made_page" ]]; then
+  if [[ -d "/Applications/Google Chrome.app" ]]; then open -na "Google Chrome" --args --new-window "file://$BEFORE_PAGE"
+  else open "$BEFORE_PAGE"; fi
+fi
 exit 0

@@ -85,18 +85,20 @@ test('programFor picks a resume command first, then a fixed agent name, else not
   assert.equal(srv.programFor(null), null);
 });
 
-test('startCommand wraps the program in a login shell that stays open afterward', (t) => {
+// Interactive (-i) as well as login: only .zshrc puts ~/.local/bin, where claude lives, on PATH, and a
+// server started from the Dock or launchd has no PATH of its own to pass on.
+test('startCommand wraps the program in an interactive login shell that stays open afterward', (t) => {
   const { srv } = loadServer();
   assert.deepEqual(srv.startCommand(null), { shell: '/bin/zsh', command: null });
   const c = srv.startCommand('claude');
   assert.equal(c.shell, '/bin/zsh');
-  assert.equal(c.command, `/bin/zsh -lc 'claude; exec /bin/zsh -l'`);
+  assert.equal(c.command, `/bin/zsh -lic 'claude; exec /bin/zsh -l'`);
   delete process.env.SHELL;
   t.after(() => { process.env.SHELL = '/bin/zsh'; });
   assert.equal(srv.startCommand(null).shell, '/bin/zsh');
 });
 
-test('attachPty attaches to tmux, runs a program in a login shell, or starts a plain login shell', () => {
+test('attachPty attaches to tmux, runs a program in an interactive login shell, or starts a plain login shell', () => {
   const { srv, ptys } = loadServer();
   const T = srv.constants.TMUX;
   srv.attachPty('abc', os.tmpdir(), true);
@@ -107,7 +109,7 @@ test('attachPty attaches to tmux, runs a program in a login shell, or starts a p
   assert.equal(ptys[0].opts.cwd, os.tmpdir());
 
   srv.attachPty('abc', os.tmpdir(), false, 'claude');
-  assert.deepEqual([ptys[1].file, ptys[1].args], ['/bin/zsh', ['-lc', 'claude; exec /bin/zsh -l']]);
+  assert.deepEqual([ptys[1].file, ptys[1].args], ['/bin/zsh', ['-lic', 'claude; exec /bin/zsh -l']]);
 
   srv.attachPty('abc', os.tmpdir(), false);
   assert.deepEqual([ptys[2].file, ptys[2].args], ['/bin/zsh', ['-l']]);
@@ -164,7 +166,7 @@ test('createSession starts a tmux session that changes into the folder, labels i
   assert.equal(t.path, dir);
   assert.equal(t.options['@corral_label'], 'My label');
   assert.equal(t.options['@corral_space'], 'sp1');
-  assert.deepEqual(t.command.slice(-3), ['/bin/sh', '-c', `/bin/zsh -lc 'claude; exec /bin/zsh -l'`]);
+  assert.deepEqual(t.command.slice(-3), ['/bin/sh', '-c', `/bin/zsh -lic 'claude; exec /bin/zsh -l'`]);
   assert.ok(t.command.includes('/bin/zsh') && t.command.includes('-fc'));
   assert.equal(tmux.calls.some((c) => c[0] === 'source-file' && c[1].endsWith('corral.tmux.conf')), true);
   assert.equal(s.tmux, true);
@@ -208,7 +210,7 @@ test('createSession without tmux starts a plain shell and records the label from
   const s = srv.createSession(os.tmpdir(), null, null, 'claude-continue');
   assert.equal(s.tmux, false);
   assert.deepEqual(tmux.calls, []);
-  assert.deepEqual(ptys[0].args, ['-lc', 'claude --continue; exec /bin/zsh -l']);
+  assert.deepEqual(ptys[0].args, ['-lic', 'claude --continue; exec /bin/zsh -l']);
   assert.equal(srv.publicSession(s).persistent, false);
 });
 
@@ -216,7 +218,7 @@ test('createSession passes a Claude resume id through and schedules a backup soo
   const { srv, tmux } = loadServer();
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const s = srv.createSession(os.tmpdir(), 'r', null, null, UUID1);
-  assert.equal(tmux.sessions.get(`wt-${s.id}`).command.at(-1), `/bin/zsh -lc 'claude --resume ${UUID1}; exec /bin/zsh -l'`);
+  assert.equal(tmux.sessions.get(`wt-${s.id}`).command.at(-1), `/bin/zsh -lic 'claude --resume ${UUID1}; exec /bin/zsh -l'`);
   const backup = path.join(process.env.HOME, '.local/share/corral/open-sessions.json');
   assert.equal(fs.existsSync(backup), false);
   t.mock.timers.tick(1000);

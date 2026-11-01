@@ -5,6 +5,15 @@ in `package.json`.
 
 ## Development version
 
+- **Claude Code starts in a window when Corral was started from the Dock or
+  at login.** Corral ran a window's program in a login shell, which reads
+  `.zprofile` but not `.zshrc`, where `~/.local/bin` (Claude Code's install)
+  and nvm join PATH. Started from a terminal, Corral passed its own full PATH
+  on, so this went unseen. Started from the Dock or by launchd, with the bare
+  system PATH, every window restored after a reboot read
+  `zsh:1: command not found: claude`. The program now runs in an interactive
+  login shell, the shell a terminal gives, so PATH comes from the startup
+  files either way.
 - **A question's window follows the Mac page's view at any size.** Corral
   took a Mac view smaller than 80 by 24 for a phone and held the window at
   100 by 50, which cut off the answers on the Mac. It now finds the Mac

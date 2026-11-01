@@ -20,9 +20,9 @@ test('programFor, startCommand, and attachPty put an opening prompt on Claude Co
   assert.equal(srv.programFor('claude', '00000000-aaaa-4bbb-8ccc-dddddddddddd', 'again'), `claude --resume 00000000-aaaa-4bbb-8ccc-dddddddddddd 'again'`);
   assert.equal(srv.programFor(null, null, 'go'), null); // a plain shell takes no prompt
   assert.equal(srv.programFor('claude', null, null), 'claude');
-  assert.equal(srv.startCommand('claude', null, 'go').command, `/bin/zsh -lc 'claude '\\''go'\\''; exec /bin/zsh -l'`);
+  assert.equal(srv.startCommand('claude', null, 'go').command, `/bin/zsh -lic 'claude '\\''go'\\''; exec /bin/zsh -l'`);
   srv.attachPty('abc', os.tmpdir(), false, 'claude', null, 'go');
-  assert.deepEqual([ptys[0].file, ptys[0].args], ['/bin/zsh', ['-lc', `claude 'go'; exec /bin/zsh -l`]]);
+  assert.deepEqual([ptys[0].file, ptys[0].args], ['/bin/zsh', ['-lic', `claude 'go'; exec /bin/zsh -l`]]);
 });
 
 test('POST /api/sessions with a prompt starts Claude Code with it, cleaned to one line of at most 4000 characters', () => withServer({}, async (c, req) => {

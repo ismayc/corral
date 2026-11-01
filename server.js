@@ -191,11 +191,18 @@ function programFor(agent, resume, prompt) {
   const program = resume ? `claude --resume ${resume}` : AGENTS[agent] || null;
   return program && prompt ? `${program} ${shq(prompt)}` : program;
 }
+// The program runs in an interactive login shell (-lic), the shell a terminal gives, so it gets the PATH
+// the user's startup files build. A login shell alone (-lc) reads only .zprofile, not .zshrc, which is
+// where ~/.local/bin (claude) and nvm join PATH here. Started from the Dock or by launchd, the server
+// and its tmux server have a bare PATH, and with -lc every window restored after the November 1, 2026
+// reboot read "zsh:1: command not found: claude". Started from a terminal, the full PATH was inherited
+// and hid the gap.
+const SHELL_FLAGS = '-lic';
 function startCommand(agent, resume, prompt) {
   const shell = process.env.SHELL || '/bin/zsh';
   const program = programFor(agent, resume, prompt);
   if (!program) return { shell, command: null };
-  return { shell, command: `${shell} -lc ${shq(`${program}; exec ${shell} -l`)}` };
+  return { shell, command: `${shell} ${SHELL_FLAGS} ${shq(`${program}; exec ${shell} -l`)}` };
 }
 
 // An opening prompt from a request: one line of printable text, at most PROMPT_MAX characters.
@@ -226,7 +233,7 @@ function attachPty(id, dir, useTmux, agent, resume, prompt) {
   const program = programFor(agent, resume, prompt);
   const [file, args] = useTmux
     ? [TMUX, ['-u', '-L', TMUX_SOCKET, 'attach-session', '-t', SESSION_PREFIX + id]]
-    : program ? [shell, ['-lc', `${program}; exec ${shell} -l`]] : [shell, ['-l']];
+    : program ? [shell, [SHELL_FLAGS, `${program}; exec ${shell} -l`]] : [shell, ['-l']];
   return pty.spawn(file, args, { name: 'xterm-256color', cols: 100, rows: 30, cwd: dir, env });
 }
 
