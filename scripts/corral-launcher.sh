@@ -26,6 +26,9 @@ HERDR="${herdr_bin:-$HOME/.local/bin/herdr}"
 [[ -x "$HERDR" ]] || HERDR="$(command -v herdr 2>/dev/null || true)"
 PAGE_APP="$HOME/Applications/Chrome Apps.localized/Corral.app"   # the Chrome web app, if installed
 URL="http://127.0.0.1:$PORT/"
+BACKUP="$HOME/.local/share/corral/open-sessions.json"
+BEFORE_PAGE="$HOME/.local/share/corral/before-restart.html"
+made_page=""   # set when this run wrote BEFORE_PAGE
 
 listening() { lsof -tiTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; }
 
@@ -53,6 +56,11 @@ start_server() {
   [[ -f "$REPO/server.js" ]] || fail "server.js is missing from $REPO."
   mkdir -p "${LOG:h}"
   echo "corral-launcher: starting $node server.js in $REPO ($(date '+%Y-%m-%d %H:%M:%S'))" >> "$LOG"
+  # The server rewrites the backup every 30 seconds, so make the page of the windows from before now.
+  if [[ -z "$made_page" ]] && "$node" "$REPO/scripts/sessions-page.js" "$BACKUP" "$BEFORE_PAGE" 2>> "$LOG"; then
+    made_page=1
+    echo "corral-launcher: wrote $BEFORE_PAGE" >> "$LOG"
+  fi
   (cd "$REPO" && nohup "$node" server.js >> "$LOG" 2>&1 &)
   for i in {1..40}; do listening && return 0; sleep 0.25; done
   return 1
@@ -82,3 +90,6 @@ fi
 # CORRAL_NO_OPEN=1 (from scripts/corral-watch.js over SSH, say) starts the servers without opening the page.
 [[ -n "${CORRAL_NO_OPEN:-}" ]] && exit 0
 if [[ -d "$PAGE_APP" ]]; then open "$PAGE_APP"; else open "$URL"; fi
+# The list of windows from before the restart, to compare with what came back.
+[[ -n "$made_page" ]] && open "$BEFORE_PAGE"
+exit 0

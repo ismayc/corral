@@ -77,9 +77,9 @@ class FakeTmux {
         s.options['window-size'] = 'manual';
         return '';
       }
-      case 'list-clients': { // each client as [width, height]
+      case 'list-clients': { // each client as [width, height, pid]
         const s = this.sessions.get(target());
-        return (s?.clients || []).map(([w, h]) => `${w} ${h}`).join('\n');
+        return (s?.clients || []).map(([w, h, pid = 0]) => `${pid} ${w} ${h}`).join('\n');
       }
       case 'list-panes':
         return [...this.sessions].map(([n, s]) => `${n}\t${s.panePid}\t${s.activity}`).join('\n');

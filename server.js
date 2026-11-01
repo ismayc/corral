@@ -1032,21 +1032,35 @@ function questionPrompt(id, screen, styled) {
 // question but not its answers or footer. So when a roomy client (ROOMY or more, as the Mac page or an iPad
 // is) views the window, the window is held at the size of the biggest one, and the phones read the question
 // from the server. QUESTION_SIZE is only for a window that phones alone view.
+// The Mac page shares Corral's own client (s.pty), and phones get their own, so the Mac page's view counts
+// whatever its size while the page shows the window: on November 1, 2026 its 63x27 view of nfl-survivor was
+// taken for a phone, and the window held at 100x50 cut off the answers there.
 const QUESTION_SIZE = { cols: 100, rows: 50 };
 const ROOMY = { cols: 80, rows: 24 };
+// The Mac views are checked on every poll while the question is open, and the window follows them when they
+// change: the Mac page can connect after the question opened (it did after a server restart on November 1,
+// 2026, and the window stayed at 100x30 for a 63x27 view). s.grown is the held size, or 'phone' for the
+// QUESTION_SIZE hold, which a later Mac view replaces but nothing else changes.
 function fitQuestion(s, asking) {
   const target = SESSION_PREFIX + s.id;
-  if (asking && !s.grown) {
-    s.grown = true;
+  if (asking) {
     try {
       let roomy = null;
       try {
-        for (const line of tmux('list-clients', '-t', target, '-F', '#{client_width} #{client_height}').split('\n')) {
-          const [cw, ch] = line.trim().split(' ').map(Number);
-          if (cw >= ROOMY.cols && ch >= ROOMY.rows && (!roomy || cw * ch > roomy[0] * roomy[1])) roomy = [cw, ch];
+        for (const line of tmux('list-clients', '-t', target, '-F', '#{client_pid} #{client_width} #{client_height}').split('\n')) {
+          const [pid, cw, ch] = line.trim().split(' ').map(Number);
+          const mac = pid === s.pty.pid && s.clients.size > 0;
+          if ((mac || (cw >= ROOMY.cols && ch >= ROOMY.rows)) && (!roomy || cw * ch > roomy[0] * roomy[1])) roomy = [cw, ch];
         }
       } catch {}
-      if (roomy) return tmux('resize-window', '-t', target, '-x', String(roomy[0]), '-y', String(roomy[1]));
+      if (roomy) {
+        const held = `${roomy[0]}x${roomy[1]}`;
+        if (s.grown === held) return;
+        s.grown = held;
+        return tmux('resize-window', '-t', target, '-x', String(roomy[0]), '-y', String(roomy[1]));
+      }
+      if (s.grown) return;
+      s.grown = 'phone';
       const [w, h] = tmux('display-message', '-p', '-t', target, '#{window_width} #{window_height}').trim().split(' ').map(Number);
       if (w >= QUESTION_SIZE.cols && h >= QUESTION_SIZE.rows) return;
       tmux('resize-window', '-t', target, '-x', String(Math.max(w, QUESTION_SIZE.cols)), '-y', String(Math.max(h, QUESTION_SIZE.rows)));

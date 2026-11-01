@@ -5,6 +5,17 @@ in `package.json`.
 
 ## Development version
 
+- **A question's window follows the Mac page's view at any size.** Corral
+  took a Mac view smaller than 80 by 24 for a phone and held the window at
+  100 by 50, which cut off the answers on the Mac. It now finds the Mac
+  page's view by its tmux client, and checks the size on every poll, so a
+  page that connects after the question opened gets the right size too. A
+  question taller than the Mac view still loses rows; make the window bigger.
+- **A list of the windows from before a restart.** When the Dock launcher
+  starts Corral, it first writes
+  `~/.local/share/corral/before-restart.html` from the backup and opens it
+  after the Corral page: each window, its folder, and the
+  `claude --resume` command for its conversation, with a Copy button.
 - **The Dock launcher reopens your windows after a restart.** When a click
   on the Dock tile starts Corral, Corral now reopens the windows the restart
   took away, each resuming its Claude conversation, as the login item does.

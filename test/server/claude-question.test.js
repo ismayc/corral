@@ -222,7 +222,7 @@ test('overview grows only the short side, leaves a big window alone, and survive
   fails.c.tmux.fail.add('set-option');
   fails.c.tmux.fail.add('list-clients');
   fails.c.srv.overview();
-  assert.equal(fails.s.grown, true);
+  assert.equal(fails.s.grown, 'phone');
   fails.c.claude(fails.s, { status: 'idle', statusUpdatedAt: 78 });
   fails.c.srv.overview();
   assert.equal(fails.s.grown, false);
@@ -235,6 +235,29 @@ test('overview holds the window at the biggest roomy client, so the Mac page see
   mac.c.srv.overview();
   const w = mac.c.tmux.sessions.get(mac.target);
   assert.deepEqual([w.width, w.height, w.options['window-size']], [96, 29, 'manual']);
+  // The Mac page's own client counts at any size while the page shows the window, as nfl-survivor's 63x27
+  // view on November 1, 2026; with no page open, the same client counts only when roomy.
+  const small = asking('single');
+  const sw = small.c.tmux.sessions.get(small.target);
+  Object.assign(sw, { width: 39, height: 60, clients: [[39, 60], [63, 27, small.s.pty.pid]] });
+  small.s.clients.add({ readyState: 1, send() {} });
+  small.c.srv.overview();
+  assert.deepEqual([sw.width, sw.height, sw.options['window-size']], [63, 27, 'manual']);
+  // Polls with the same Mac view leave the hold alone; a bigger Mac view moves it.
+  const resizes = () => small.c.tmux.calls.filter((a) => a[0] === 'resize-window').length;
+  small.c.srv.overview();
+  assert.equal(resizes(), 1);
+  sw.clients = [[39, 60], [90, 40, small.s.pty.pid]];
+  small.c.srv.overview();
+  assert.deepEqual([sw.width, sw.height, resizes()], [90, 40, 2]);
+  const closed = asking('single');
+  closed.c.tmux.sessions.get(closed.target).clients = [[63, 27, closed.s.pty.pid]];
+  closed.c.srv.overview();
+  assert.deepEqual([closed.c.tmux.sessions.get(closed.target).width, closed.c.tmux.sessions.get(closed.target).height], [100, 50]);
+  // The page connects after the question opened (as after a server restart): the hold moves to its view.
+  closed.s.clients.add({ readyState: 1, send() {} });
+  closed.c.srv.overview();
+  assert.deepEqual([closed.c.tmux.sessions.get(closed.target).width, closed.c.tmux.sessions.get(closed.target).height], [63, 27]);
   // Phones alone still get QUESTION_SIZE.
   const phones = asking('single');
   phones.c.tmux.sessions.get(phones.target).clients = [[39, 60], [160, 9]];
