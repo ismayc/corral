@@ -1265,7 +1265,12 @@ async function checkTap() {
   const id = await takeTap();
   if (id) openById(id);
 }
-function lookForTap() { for (const ms of [0, 1000, 2000, 4000]) setTimeout(checkTap, ms); }
+// The first look runs at once, not from a 0 ms timer: a timer waits at least 1 ms, and the tests' settle()
+// could finish before it fired (13 of 30 runs of m-push.test.js failed that way on November 1, 2026).
+function lookForTap() {
+  checkTap();
+  for (const ms of [1000, 2000, 4000]) setTimeout(checkTap, ms);
+}
 const keyBytes = (b64) => Uint8Array.from(atob(b64.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
 
 async function renderNotify() {
