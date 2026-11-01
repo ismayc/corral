@@ -12,6 +12,11 @@ unset -m 'CLAUDE_CODE_*' 'HERDR_*'
 # A Dock launch also has no locale. Without one, tmux clients and shells in both servers' panes draw every
 # non-ASCII character as "_" (seen after a restart on 2026-10-27), so give them UTF-8.
 [[ -z "${LC_ALL:-}${LC_CTYPE:-}${LANG:-}" ]] && export LANG=en_US.UTF-8
+# This script starts the server only when none is listening, so a start here follows a restart or a stop.
+# Reopen the windows that went away, each resuming its Claude conversation, without waiting for the Restore
+# button. Before this, a Dock click after the restarts of 2026-10-27 and 2026-10-31 left them closed.
+# CORRAL_AUTO_RESTORE=0 turns it off.
+export CORRAL_AUTO_RESTORE="${CORRAL_AUTO_RESTORE:-1}"
 
 REPO="${CORRAL_REPO:-${0:A:h:h}}"
 PORT="${CORRAL_PORT:-8777}"

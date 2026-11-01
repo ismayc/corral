@@ -128,7 +128,7 @@ Settings, all optional, by environment variable:
 | `CORRAL_TAILSCALE` | on | Set to `0` to refuse every request through Tailscale |
 | `CORRAL_TAILSCALE_PORT` | `8443` | The HTTPS port `tailscale serve` uses for Corral |
 | `CORRAL_TAILSCALE_USERS` | the login that owns this Mac in Tailscale | Comma-separated Tailscale logins allowed in |
-| `CORRAL_AUTO_RESTORE` | off | Set to `1` to reopen the windows a restart took away when the server starts (the login item sets it) |
+| `CORRAL_AUTO_RESTORE` | off | Set to `1` to reopen the windows a restart took away when the server starts (the Dock launcher and the login item set it; set `0` to turn it off there) |
 | `CORRAL_WATCH_FILE` | `~/.config/corral/watch-url` | File naming the Corral watch page the phone offers when this Mac does not answer |
 
 To use Corral from your phone or another computer, see the next section.
@@ -139,7 +139,9 @@ Unless you add the login item (below), after a restart the server is gone
 and the page cannot connect. `scripts/install-launcher.sh` builds `~/Applications/Corral.app`,
 a Dock launcher that starts the herdr server (`herdr server`, headless) and the
 Corral server when they are not running, waits for Corral, and then opens the page (the Chrome web app for `http://127.0.0.1:8777`
-if you have one, otherwise the URL in your browser). It takes the Chrome app's
+if you have one, otherwise the URL in your browser). When it starts Corral,
+Corral reopens the windows a restart took away, each resuming its Claude
+conversation, without waiting for the Restore button. It takes the Chrome app's
 icon and its place in the Dock; `--no-dock` builds the app without touching
 the Dock. The app only calls `scripts/corral-launcher.sh`, so re-run the
 installer after moving the repo, and start the launcher's log from

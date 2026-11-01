@@ -5,6 +5,12 @@ in `package.json`.
 
 ## Development version
 
+- **The Dock launcher reopens your windows after a restart.** When a click
+  on the Dock tile starts Corral, Corral now reopens the windows the restart
+  took away, each resuming its Claude conversation, as the login item does.
+  Before, the windows waited for the Restore button, so after the restarts of
+  October 27 and October 31, 2026 no Claude conversation came back on its
+  own. Set `CORRAL_AUTO_RESTORE=0` to keep the old behavior.
 - **A Later section for spaces to look at another time.** On the Mac page,
   the space menu has a "Later" entry under "TO-DO", and spaces can be
   dragged onto the Later header. The section sits under Parked windows. A
