@@ -211,6 +211,9 @@ function loadPage(page, opts = {}) {
     Object.defineProperty(globalThis, name, { value: track(set, clear), configurable: true, writable: true });
   }
   const file = path.join(ROOT, 'public', page === 'm' ? 'm.js' : 'app.js');
+  const logFile = path.join(ROOT, 'public', 'clientlog.js');
+  delete require.cache[logFile];
+  require(logFile);
   delete require.cache[file];
   current = { dom, window, api, saved, timers, file, notifications, sw, clipboard, observers, Notification, terms: FakeTerminal.instances, sockets: FakeWebSocket.instances };
   current.exports = require(file);

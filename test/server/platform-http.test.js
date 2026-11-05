@@ -94,6 +94,41 @@ test('quick replies are kept on the Mac, cleaned, and a bad list is refused', as
   assert.deepEqual((await req('GET', '/api/quick')).json, { replies: ['Continue', 'Ship it'] });
 });
 
+test('the client log appends cleaned events, moves a full file aside, and refuses a bad batch', async (t) => {
+  const { req, home } = await world(t);
+  const file = path.join(home, '.local/share/corral/client-log.jsonl');
+  const events = [
+    { kind: 'copy', at: 'not the time', ok: false, err: 'NotAllowedError', n: 2, nested: { no: 1 }, none: null, long: 'x'.repeat(2000) },
+    { kind: '' }, { kind: 'k'.repeat(41) }, { kind: 3 }, null,
+  ];
+  const r = await req('POST', '/api/clientlog', { body: { page: '/m', events }, headers: { 'user-agent': 'iPhone' } });
+  assert.deepEqual([r.status, r.json], [200, { kept: 1 }]);
+  const line = JSON.parse(fs.readFileSync(file, 'utf8').trim());
+  assert.equal(line.long.length, 1000);
+  assert.ok(!('nested' in line) && !('none' in line));
+  assert.deepEqual([line.page, line.kind, line.ok, line.err, line.n], ['/m', 'copy', false, 'NotAllowedError', 2]);
+  assert.ok(Date.parse(line.at) > 0);
+  assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+  await req('POST', '/api/clientlog', { body: { page: '/m', events: [{ kind: 'second' }] } });
+  assert.equal(fs.readFileSync(file, 'utf8').trim().split('\n').length, 2);
+  fs.writeFileSync(file, 'x'.repeat(5 * 1024 * 1024 + 1));
+  await req('POST', '/api/clientlog', { body: { events: [{ kind: 'third' }] } });
+  assert.equal(fs.statSync(`${file}.1`).size, 5 * 1024 * 1024 + 1);
+  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).kind, 'third');
+  for (const body of [{}, { events: 'x' }, { events: Array(51).fill({ kind: 'a' }) }]) {
+    assert.deepEqual((await req('POST', '/api/clientlog', { body })).json, { error: 'bad client log' });
+  }
+  assert.equal((await req('POST', '/api/clientlog', { raw: '{nope' })).status, 400);
+});
+
+test('the client log reports a disk failure', async (t) => {
+  quiet(t);
+  const { req } = await world(t);
+  t.mock.method(fs, 'appendFileSync', () => { throw new Error('full'); });
+  const r = await req('POST', '/api/clientlog', { body: { events: [{ kind: 'a' }] } });
+  assert.deepEqual([r.status, r.json], [500, { error: 'could not save' }]);
+});
+
 test('saving quick replies reports a disk failure', async (t) => {
   quiet(t);
   const { req } = await world(t);

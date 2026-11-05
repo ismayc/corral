@@ -212,10 +212,10 @@ network between your own devices.
 - **Read the last reply.** Press and hold a card, or use Last reply in its
   menu, to read what Claude last said, taken from Claude Code's own
   transcript, without opening the window.
-- **Copy a `! command`.** In Chat, press and hold a code span or code
-  block that starts with `! ` until it is outlined, then lift your finger
-  to copy all of it. In Terminal, hold a line with a `! ` command until a
-  toast names it, then lift. On the Mac page, hold the mouse still for half a
+- **Copy a `! command`.** In Chat, tap a code span or code block that starts
+  with `! ` to copy all of it. In Terminal, tap a line with a `! ` command.
+  iOS can refuse a copy made by pressing and holding, so if you hold one, a
+  sheet may ask you to tap Copy. On the Mac page, hold the mouse still for half a
   second on a terminal line with a `! ` command to copy the command.
 - **Allow or deny from the list.** A session stopped at a permission prompt
   goes to the top with a red **Needs permission** label. Its card shows what
@@ -488,6 +488,10 @@ about who can reach it:
 - `~/.local/share/corral/quick-replies.json`: the phone page's quick replies,
   shared by every device. Each device also keeps a copy in its browser
   storage to show them at once.
+- `~/.local/share/corral/client-log.jsonl`: what the pages report going wrong,
+  one JSON object per line: uncaught errors, failed requests by path and
+  status, and each clipboard copy's result, never the text (owner-only
+  permissions). At 5 MB the file moves to `client-log.jsonl.1`.
 - `~/.local/share/corral/uploads/`: photos sent from the phone (owner-only
   permissions). Corral deletes each one after 14 days.
 - Your browser's local storage: window layout, which windows are open or

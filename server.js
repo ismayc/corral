@@ -506,6 +506,22 @@ function cleanQuick(body) {
   return replies.length <= 20 && replies.every((r) => r.length <= 500) ? replies : null;
 }
 
+// What the pages report going wrong (public/clientlog.js), one JSON object per line. At 5 MB the file moves to
+// client-log.jsonl.1, so the two files stay under about 10 MB.
+const CLIENT_LOG_FILE = path.join(DATA_DIR, 'client-log.jsonl');
+const CLIENT_LOG_MAX_BYTES = 5 * 1024 * 1024;
+// An event's kind (at most 40 characters) and up to 12 short fields of plain values; null for anything else.
+function cleanClientEvent(e) {
+  if (typeof e?.kind !== 'string' || !e.kind || e.kind.length > 40) return null;
+  const kept = Object.entries(e).slice(0, 12).filter(([, v]) => ['string', 'number', 'boolean'].includes(typeof v));
+  return Object.fromEntries(kept.map(([k, v]) => [k.slice(0, 40), typeof v === 'string' ? v.slice(0, 1000) : v]));
+}
+function appendClientLog(lines) {
+  fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+  if (fs.statSync(CLIENT_LOG_FILE, { throwIfNoEntry: false })?.size > CLIENT_LOG_MAX_BYTES) fs.renameSync(CLIENT_LOG_FILE, `${CLIENT_LOG_FILE}.1`);
+  fs.appendFileSync(CLIENT_LOG_FILE, lines.map((l) => `${JSON.stringify(l)}\n`).join(''), { mode: 0o600 });
+}
+
 // Backup of the open windows, so they can be brought back after the tmux server or the Mac restarts.
 // open-sessions.json always mirrors what is open now, with the Claude Code conversation running in each
 // window. At startup, windows in it that are no longer running move to restore.json, where they wait for
@@ -1736,6 +1752,15 @@ const server = http.createServer(async (req, res) => {
     if (!replies) return send(res, 400, { error: 'bad quick replies' });
     try { writeJson(QUICK_FILE, { version: 1, replies }); } catch (e) { console.error('quick replies save failed:', e.message); return send(res, 500, { error: 'could not save' }); }
     return send(res, 200, { replies });
+  }
+  if (url.pathname === '/api/clientlog' && req.method === 'POST') {
+    const body = await readJson(req);
+    if (!Array.isArray(body?.events) || body.events.length > 50) return send(res, 400, { error: 'bad client log' });
+    const at = new Date().toISOString();
+    const lines = body.events.map(cleanClientEvent).filter(Boolean)
+      .map((e) => ({ ...e, at, page: String(body.page).slice(0, 100), ua: (req.headers['user-agent'] || '').slice(0, 200) }));
+    try { appendClientLog(lines); } catch (e) { console.error('client log write failed:', e.message); return send(res, 500, { error: 'could not save' }); }
+    return send(res, 200, { kept: lines.length });
   }
   if (url.pathname === '/api/projects' && req.method === 'GET') {
     await herdrSnapshot(); // keeps the open/inactive split current

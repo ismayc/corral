@@ -375,10 +375,52 @@ test('a tap, a drag, a cancel, or a press on other text copies nothing, and a re
   fire(chat, 'pointerup');
   await settle();
   assert.equal(p.clipboard.text, null);
-  p.clipboard.fail = true;
-  fire(inline, 'pointerdown', { clientX: 10, clientY: 10 });
-  await wait(600);
-  fire(inline, 'pointerup');
+});
+
+test('tapping a ! command copies it, and tapping other text copies nothing', async () => {
+  const p = await md(BANGS);
+  fire(p.$$('#chat pre')[1], 'click');
+  fire(p.$('#chat .msg.claude p'), 'click');
   await settle();
+  assert.equal(p.clipboard.text, null);
+  const [inline, block] = p.$$('#chat .bang');
+  fire(inline, 'click');
+  await settle();
+  assert.equal(p.clipboard.text, '! zsh ~/run.sh');
+  assert.equal(p.toast(), 'Copied: ! zsh ~/run.sh');
+  fire(block.firstChild, 'click');
+  await settle();
+  assert.equal(p.clipboard.text, '! zsh a.sh\necho b');
+  assert.equal(p.toast(), 'Copied the block.');
+});
+
+test('a refused copy opens a sheet whose Copy button tries again, and a second refusal says to select', async () => {
+  const p = await md(BANGS);
+  const inline = p.$('#chat .bang');
+  const refused = async () => {
+    fire(inline, 'pointerdown', { clientX: 10, clientY: 10 });
+    await wait(600);
+    fire(inline, 'pointerup');
+    await settle();
+    assert.equal(p.$('#gen').hidden, false);
+    assert.equal(p.$('#gentitle').textContent, 'Copy this command?');
+    assert.equal(p.$('#genbody .ptext').textContent, '! zsh ~/run.sh');
+  };
+  const button = (name) => p.$$('#genbody button').find((b) => b.textContent === name);
+  p.clipboard.fail = true;
+  await refused();
+  fire(button('Copy'), 'click');
+  await settle();
+  assert.equal(p.$('#gen').hidden, false, 'the text stays up to select');
   assert.equal(p.toast(), 'Could not copy. Select the text instead.');
+  p.clipboard.fail = false;
+  fire(button('Copy'), 'click');
+  await settle();
+  assert.equal(p.$('#gen').hidden, true);
+  assert.equal(p.clipboard.text, '! zsh ~/run.sh');
+  assert.equal(p.toast(), 'Copied: ! zsh ~/run.sh');
+  p.clipboard.fail = true;
+  await refused();
+  fire(button('Cancel'), 'click');
+  assert.equal(p.$('#gen').hidden, true);
 });

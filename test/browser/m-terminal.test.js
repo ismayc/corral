@@ -321,4 +321,12 @@ test('holding a terminal line with a ! command names it, and lifting copies it',
   await settle();
   assert.equal(p.clipboard.text, '! zsh ~/.claude/run-next.sh');
   assert.equal(p.toast(), 'Copied: ! zsh ~/.claude/run-next.sh');
+  // A tap copies too; a tap on a line with no command does nothing.
+  p.clipboard.text = null;
+  fire(el, 'click', { clientX: 20, clientY: 105 });
+  await settle();
+  assert.equal(p.clipboard.text, null);
+  fire(el, 'click', { clientX: 20, clientY: 115 });
+  await settle();
+  assert.equal(p.clipboard.text, '! zsh ~/.claude/run-next.sh');
 });

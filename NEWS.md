@@ -5,6 +5,14 @@ in `package.json`.
 
 ## Development version
 
+- **Tap a `! command` to copy it on an iPhone.** A long press gives a page no
+  permission to write to the clipboard, so a hold copied only if a tap came a
+  few seconds before it, and the page often answered "Could not copy". A tap
+  now copies, in Chat and in Terminal. A hold still works, and if iOS refuses
+  it, a sheet shows the command with a Copy button.
+- **The pages report errors to a log on the Mac.** Uncaught errors, failed
+  requests, and each clipboard copy's result go to
+  `~/.local/share/corral/client-log.jsonl`, over the page's own connection.
 - **Claude Code starts in a window when Corral was started from the Dock or
   at login.** Corral ran a window's program in a login shell, which reads
   `.zprofile` but not `.zshrc`, where `~/.local/bin` (Claude Code's install)

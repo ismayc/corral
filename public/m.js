@@ -1059,8 +1059,10 @@ function chatItems(r) {
   return els;
 }
 
-// Press and hold a `! command` in a reply to copy it, ready to paste into Claude Code's prompt. The copy is
-// made when the finger lifts, since iOS writes to the clipboard only inside the touch's own events.
+// Tap a `! command` in a reply to copy it, ready to paste into Claude Code's prompt. A tap is what iOS accepts:
+// a long press gives no user activation (navigator.userActivation stayed false through the whole touch), so a
+// hold copies only if a tap came a few seconds before it. A hold still works, and if iOS refuses, a sheet
+// offers a Copy button to tap.
 let bangTimer = null, bangHeld = null, bangStart = null;
 function dropBang() {
   clearTimeout(bangTimer);
@@ -1081,12 +1083,33 @@ $('#chat').addEventListener('pointercancel', dropBang);
 $('#chat').addEventListener('pointerup', () => {
   const text = bangHeld?.textContent.trim();
   dropBang();
-  if (text) copyBang(text);
+  if (text) copyBang(text, 'hold');
 });
-function copyBang(text) {
-  navigator.clipboard.writeText(text)
-    .then(() => toast(text.includes('\n') ? 'Copied the block.' : `Copied: ${text}`))
-    .catch(() => toast('Could not copy. Select the text instead.'));
+$('#chat').addEventListener('click', (e) => {
+  const el = e.target.closest('.bang');
+  if (el) copyBang(el.textContent.trim(), 'tap');
+});
+const copiedMsg = (text) => (text.includes('\n') ? 'Copied the block.' : `Copied: ${text}`);
+// Writes to the clipboard and logs how that went: what asked for it (tap, hold, or the sheet's button), the event,
+// whether iOS counted a user gesture, and the result.
+function clipWrite(text, from) {
+  const how = { from, event: window.event?.type, act: navigator.userActivation?.isActive };
+  return navigator.clipboard.writeText(text).then(
+    () => clientLog('copy', { ...how, ok: true }),
+    (e) => { clientLog('copy', { ...how, ok: false, err: e.name }); throw e; });
+}
+function copyBang(text, from) {
+  clipWrite(text, from).then(() => toast(copiedMsg(text))).catch(() => copySheet(text));
+}
+// A button's click is the one event iOS always lets write to the clipboard. The text stays selectable as a last resort.
+function copySheet(text) {
+  sheet('Copy this command?', h('p', { class: 'ptext' }, text), h('div', { class: 'btns' },
+    h('button', { class: 'primary', onclick: () => {
+      clipWrite(text, 'sheet')
+        .then(() => { closeSheet(); toast(copiedMsg(text)); })
+        .catch(() => toast('Could not copy. Select the text instead.'));
+    } }, 'Copy'),
+    h('button', { onclick: closeSheet }, 'Cancel')));
 }
 
 // The same in Terminal: hold a line with a `! command` on it until a toast names the command, then lift to copy
@@ -1112,7 +1135,11 @@ $('#term').addEventListener('pointercancel', dropTermHold);
 $('#term').addEventListener('pointerup', () => {
   const cmd = termHold?.cmd;
   dropTermHold();
-  if (cmd) copyBang(cmd);
+  if (cmd) copyBang(cmd, 'hold');
+});
+$('#term').addEventListener('click', (e) => {
+  const cmd = bangAt(current.term, e.clientY);
+  if (cmd) copyBang(cmd, 'tap');
 });
 // The `! command` on the terminal row at height y: from a ! that starts a word to the end of the row.
 function bangAt(term, y) {
