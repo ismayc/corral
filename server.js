@@ -1519,6 +1519,33 @@ function autoRestore() {
   return r;
 }
 
+// Ends a Corral window: its tmux session, its process, and the pages attached to it.
+function endSession(s) {
+  if (s.tmux) { try { tmux('kill-session', '-t', SESSION_PREFIX + s.id); } catch {} }
+  try { s.pty.kill(); } catch {}
+  for (const ws of s.clients) ws.close();
+  sessions.delete(s.id);
+  saveBackupSoon();
+}
+
+// Closes a herdr space from the Mac page's space menu. The Corral windows opened for the space end
+// first, then herdr closes the space and its panes. The folder stays, so the project moves to
+// Inactive projects.
+async function closeSpace(id) {
+  const snap = await herdrSnapshot();
+  if (!snap.available) return { status: 502, error: 'herdr not reachable' };
+  const sp = snap.spaces.find((s) => s.id === id);
+  if (!sp) return { status: 404, error: 'no such space' };
+  const mine = [...sessions.values()].filter((s) => s.space === id);
+  for (const s of mine) endSession(s);
+  const closed = await new Promise((resolve) => {
+    cp.execFile(HERDR, ['workspace', 'close', id], { timeout: 10000 }, (err) => resolve(!err));
+  });
+  if (!closed) return { status: 502, error: 'herdr could not close the space' };
+  await herdrSnapshot(); // refreshes the ledger's open set
+  return { status: 200, ok: true, label: sp.label, windows: mine.length };
+}
+
 // Creates a herdr space for a ledger project, then re-sorts the spaces alphabetically with the
 // existing herdr-sort-spaces script (best effort; the new space is kept either way).
 // Makes a herdr space for a project in the ledger, or for one of the new repos.
@@ -1785,6 +1812,12 @@ const server = http.createServer(async (req, res) => {
     const { status, ...r } = await createProject(body.name);
     return send(res, status, r);
   }
+  if (url.pathname === '/api/spaces/close' && req.method === 'POST') {
+    const body = await readJson(req);
+    if (!body || typeof body.space !== 'string') return send(res, 400, { error: 'bad json' });
+    const { status, ...r } = await closeSpace(body.space);
+    return send(res, status, r);
+  }
   if (url.pathname === '/api/projects/forget' && req.method === 'POST') {
     const body = await readJson(req);
     if (!body || typeof body.root !== 'string') return send(res, 400, { error: 'bad json' });
@@ -1977,11 +2010,7 @@ const server = http.createServer(async (req, res) => {
   if (del && req.method === 'DELETE') {
     const s = sessions.get(del[1]);
     if (!s) return send(res, 404, { error: 'no such session' });
-    if (s.tmux) { try { tmux('kill-session', '-t', SESSION_PREFIX + s.id); } catch {} }
-    try { s.pty.kill(); } catch {}
-    for (const ws of s.clients) ws.close();
-    sessions.delete(s.id);
-    saveBackupSoon();
+    endSession(s);
     return send(res, 200, { ok: true });
   }
   if (url.pathname === '/api/restore' && req.method === 'GET') {

@@ -632,6 +632,14 @@ function catMenu(list, anchor) {
     b.onclick = () => { closeMenu(); setMark(list, key, !all); };
     m.append(b);
   }
+  if (list.length === 1) {
+    m.append(Object.assign(document.createElement('div'), { className: 'msep' }));
+    const b = document.createElement('button');
+    b.className = 'danger';
+    b.textContent = 'Close space…';
+    b.onclick = (e) => { e.stopPropagation(); closeSpaceAsk(m, list[0]); };
+    m.append(b);
+  }
   const inp = document.createElement('input');
   inp.placeholder = 'New category, then Enter';
   inp.onkeydown = (e) => {
@@ -647,6 +655,24 @@ function catMenu(list, anchor) {
   inp.focus();
 }
 document.addEventListener('click', (e) => { if (openMenu && !openMenu.contains(e.target)) closeMenu(); });
+
+// The space menu turns into a question before a space closes: herdr ends its panes, and Corral ends any
+// window opened for it, Claude Code included. The folder stays, under Inactive projects.
+function closeSpaceAsk(m, s) {
+  m.replaceChildren();
+  const add = (cls, text) => m.appendChild(Object.assign(document.createElement('div'), { className: cls, textContent: text }));
+  add('mhead', `Close ${s.label}?`);
+  add('murl', 'This ends the space and everything running in it, Claude Code included. The folder stays, under Inactive projects.');
+  const yes = m.appendChild(Object.assign(document.createElement('button'), { className: 'danger', textContent: 'Close it' }));
+  yes.onclick = async () => {
+    closeMenu();
+    const r = await api('/api/spaces/close', { method: 'POST', body: { space: s.id } }).catch(() => ({ error: 'Could not reach Corral.' }));
+    toast(r.ok ? `Closed ${s.label}.` : `Could not close ${s.label}: ${r.error}`);
+    loadSpaces();
+  };
+  m.appendChild(Object.assign(document.createElement('button'), { textContent: 'Keep it', onclick: closeMenu }));
+  yes.focus();
+}
 
 // A link clicked in a terminal: one Claude Code marks as a link (OSC 8, which tmux passes on because of
 // corral.tmux.conf) or plain http(s) text. It opens in a new tab of this computer's browser once confirmed.

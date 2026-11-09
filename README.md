@@ -85,6 +85,9 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   group's header or rows. Cmd-click or Shift-click to select several spaces
   and move them together, or search and move every match at once. Each move
   can be undone from the notice that follows it.
+- **Close a space** from the same menu: **Close space…** asks first, then
+  ends any Corral window opened for the space and closes the space in herdr,
+  with everything running in it. The folder stays, under "Inactive projects".
 - **A file tree for each space**, limited to that project's folder. Click a
   file to open it in a Mac app. Until you set a default for that type of file,
   Corral asks which app, from the list macOS itself offers (the same as
@@ -93,8 +96,9 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   another app or forget the default. Files of a type macOS does not know get
   the apps that open plain text.
 - **Inactive projects.** Corral remembers every project folder it has seen. If
-  a herdr space disappears (for example, closing a space's only pane closes
-  the space), the project shows under "Inactive projects" with a Reopen button.
+  a herdr space disappears (closed from its menu, or by closing its only
+  pane), the project shows under "Inactive projects" with a Reopen button and
+  a × that forgets it.
 
 ## Requirements
 

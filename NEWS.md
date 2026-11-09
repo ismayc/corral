@@ -5,6 +5,12 @@ in `package.json`.
 
 ## Development version
 
+- **Close a space from the Mac page.** A space's ⋯ menu (or a right-click on
+  it) has **Close space…**. It asks first, then ends any Corral window opened
+  for the space, Claude Code included, and closes the space in herdr. The
+  project moves to Inactive projects, where × forgets it. Before this, a space
+  closed only from herdr itself, or by closing its only pane.
+
 - **Tap a `! command` to copy it on an iPhone.** A long press gives a page no
   permission to write to the clipboard, so a hold copied only if a tap came a
   few seconds before it, and the page often answered "Could not copy". A tap

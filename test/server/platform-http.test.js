@@ -184,6 +184,33 @@ test('POST /api/projects/forget removes an inactive project and keeps an open on
   assert.deepEqual(saved.projects.map((p) => p.root), ['/live']);
 });
 
+test('POST /api/spaces/close ends the space\'s windows, then closes the space in herdr', async (t) => {
+  const { req, herdr, srv } = await world(t);
+  assert.equal((await req('POST', '/api/spaces/close', { raw: '{nope' })).status, 400);
+  assert.equal((await req('POST', '/api/spaces/close', { body: { space: 5 } })).status, 400);
+  herdr.fail = true;
+  assert.deepEqual((await req('POST', '/api/spaces/close', { body: { space: 'w1' } })).json, { error: 'herdr not reachable' });
+  herdr.fail = false;
+  herdr.snap = { workspaces: [{ workspace_id: 'w1', label: 'One' }, { workspace_id: 'w2', label: 'Two' }], panes: [{ workspace_id: 'w1', cwd: '/one' }, { workspace_id: 'w2', cwd: '/two' }] };
+  const none = await req('POST', '/api/spaces/close', { body: { space: 'w9' } });
+  assert.deepEqual([none.status, none.json], [404, { error: 'no such space' }]);
+
+  const mine = srv.createSession(os.tmpdir(), 'mine', 'w1');
+  const other = srv.createSession(os.tmpdir(), 'other', 'w2');
+  herdr.other = (args) => {
+    if (args[1] === 'close') herdr.snap.workspaces = herdr.snap.workspaces.filter((w) => w.workspace_id !== args[2]);
+    return '';
+  };
+  const ok = await req('POST', '/api/spaces/close', { body: { space: 'w1' } });
+  assert.deepEqual([ok.status, ok.json], [200, { ok: true, label: 'One', windows: 1 }]);
+  assert.deepEqual(herdr.calls.find((a) => a[1] === 'close'), ['workspace', 'close', 'w1']);
+  assert.deepEqual([srv.sessions.has(mine.id), srv.sessions.has(other.id)], [false, true]);
+
+  herdr.other = () => { throw new Error('no'); };
+  const bad = await req('POST', '/api/spaces/close', { body: { space: 'w2' } });
+  assert.deepEqual([bad.status, bad.json], [502, { error: 'herdr could not close the space' }]);
+});
+
 test('GET /api/files lists a space folder and refuses what is outside it', async (t) => {
   const root = realTmp();
   fs.mkdirSync(path.join(root, 'sub'));
