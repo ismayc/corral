@@ -347,13 +347,15 @@ function attach(info, quiet) {
   });
   // With tmux's mouse on, a plain drag selects inside tmux, and on release tmux sends the text as an
   // OSC 52 escape. Put it on the clipboard. Writes only: a request to read the clipboard is ignored,
-  // and so is any copy replayed from saved output while reconnecting.
+  // and so is any copy replayed from saved output while reconnecting. tmux clears the highlight on
+  // release, so a toast says what was copied.
   term.parser.registerOscHandler(52, (data) => {
     const b64 = data.slice(data.indexOf(';') + 1);
     if (w.muted || !b64 || b64 === '?') return true;
     try {
       const text = new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
-      navigator.clipboard.writeText(text).catch(() => {});
+      navigator.clipboard.writeText(text).then(() => toast(copiedNote(text)),
+        () => toast('Could not copy. Option-drag to select it, then press Cmd-C.'));
     } catch {}
     return true;
   });
@@ -411,6 +413,13 @@ function attach(info, quiet) {
   };
   if (quiet) { persist(); minimize(info.id); arrange(); return; }
   persist(); layout(); arrange(); setFocus(info.id);
+}
+
+// The toast for a drag copy: a short single line is shown whole, anything longer by its size.
+function copiedNote(text) {
+  const lines = text.replace(/\n$/, '').split('\n').length;
+  if (lines > 1) return `Copied ${lines} lines.`;
+  return text.length <= 60 ? `Copied: ${text}` : `Copied ${text.length} characters.`;
 }
 
 // The `! command` on the terminal row at height y: from a ! that starts a word to the end of the row.

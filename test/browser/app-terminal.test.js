@@ -142,6 +142,20 @@ test('text tmux copies with OSC 52 goes on the clipboard', async () => {
   assert.equal(osc(`c;${b64('héllo')}`), true);
   await flush();
   assert.equal(p.clipboard.text, 'héllo');
+  assert.equal(p.toast(), 'Copied: héllo');
+});
+
+test('a drag copy toast gives the size of a long line or several lines', async () => {
+  const p = await start(one);
+  const osc = p.terms[0].osc[52];
+  p.terms[0].writeCb?.();
+  osc(`c;${b64('x'.repeat(61))}`);
+  await flush();
+  assert.equal(p.toast(), 'Copied 61 characters.');
+  osc(`c;${b64('one\ntwo\nthree\n')}`);
+  await flush();
+  assert.equal(p.clipboard.text, 'one\ntwo\nthree\n');
+  assert.equal(p.toast(), 'Copied 3 lines.');
 });
 
 test('OSC 52 reads, empty copies, bad data, and copies replayed while reconnecting are ignored', async () => {
@@ -165,6 +179,7 @@ test('a clipboard that refuses the write is not an error', async () => {
   assert.equal(p.terms[0].osc[52](`c;${b64('x')}`), true);
   await flush();
   assert.equal(p.clipboard.text, null);
+  assert.equal(p.toast(), 'Could not copy. Option-drag to select it, then press Cmd-C.');
 });
 
 // Links: Claude Code's own (OSC 8, through xterm's linkHandler) and plain http(s) text (the web links addon).

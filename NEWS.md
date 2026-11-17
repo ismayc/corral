@@ -5,6 +5,11 @@ in `package.json`.
 
 ## Development version
 
+- **A drag copy in a shell says it copied.** On the Mac page, tmux clears the
+  highlight when you let go of a drag, so nothing showed that the text was on
+  the clipboard. A toast now shows the text (or its size, for a long line or
+  several lines), or says the copy failed.
+
 - **Close a space from the Mac page.** A space's ⋯ menu (or a right-click on
   it) has **Close space…**. It asks first, then ends any Corral window opened
   for the space, Claude Code included, and closes the space in herdr. The
