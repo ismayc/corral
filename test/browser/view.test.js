@@ -302,3 +302,76 @@ test('an HTML rule is a rule, and comments draw nothing', async () => {
   assert.equal(p.$$('#doc .md hr').length, 2);
   assert.deepEqual(p.$$('#doc .md p').map((x) => x.textContent), ['one  two', 'last']);
 });
+
+// ---- HTML blocks: tables, lists, and details ----
+
+// The shape of an element: its tag, its attributes if any, and its children or text.
+const shape = (el) => {
+  const a = attrs(el);
+  const kids = [...el.children].map(shape);
+  return [el.tagName.toLowerCase(), ...(Object.keys(a).length ? [a] : []), ...(kids.length ? kids : [el.textContent])];
+};
+
+test('an HTML table is drawn as a table, with spans, alignment, and markdown in its cells', async () => {
+  const p = await view(file('<table>\n  <caption>Scores</caption>\n  <thead>\n    <tr><th colspan="2" align="CENTER">Team</th><th rowspan=\'x\'>Pts</th></tr>\n  </thead>\n  <tbody>\n    <tr>\n      <td rowspan="2">A</td>\n      <td>**bold** and <i>it</i></td>\n      <td align="right">3</td>\n    </tr>\n    <tr><td><img src="p.png" width="20"></td><td align="justify">1</td></tr>\n  </tbody>\n</table>\n\nafter\n'));
+  const wrap = p.$('#doc .md > div.table');
+  assert.deepEqual(shape(wrap.querySelector('table')), ['table',
+    ['caption', 'Scores'],
+    ['thead', ['tr', ['th', { colspan: '2', align: 'center' }, 'Team'], ['th', 'Pts']]],
+    ['tbody',
+      ['tr', ['td', { rowspan: '2' }, 'A'], ['td', ['strong', 'bold'], ['i', 'it']], ['td', { align: 'right' }, '3']],
+      ['tr', ['td', ['img', { src: '/api/image?space=alpha&path=docs%2Fp.png', alt: '', width: '20', loading: 'lazy' }, '']], ['td', '1']]]]);
+  assert.equal(p.$('#doc .md > p').textContent, 'after');
+});
+
+test('a table with tags left open is read as a browser reads it', async () => {
+  const p = await view(file('<table>\n<thead><tr><th>a<th>b\n<tbody>\n<tr><td>1<td>2\n<tr><td>3<td>4\n<tfoot><tr><td>5</td></table>\n'));
+  assert.deepEqual(shape(p.$('#doc .md table')), ['table',
+    ['thead', ['tr', ['th', 'a'], ['th', 'b']]],
+    ['tbody', ['tr', ['td', '1'], ['td', '2']], ['tr', ['td', '3'], ['td', '4']]],
+    ['tfoot', ['tr', ['td', '5']]]]);
+});
+
+test('HTML lists are drawn as lists, nested ones too, with markdown in their items', async () => {
+  const p = await view(file('<ol start="3" type="a">\n  <li>First with `code`\n  <li>Second\n    <ul>\n      <li><b>Inner</b> one</li>\n      <li>\n\n        - a markdown item\n        - another\n\n      </li>\n    </ul>\n  </li>\n</ol>\n<UL><LI>upper</LI></UL>\n'));
+  const [ol, ul] = p.$$('#doc .md > :is(ol,ul)');
+  assert.equal(ol.getAttribute('start'), '3');
+  assert.equal(ol.getAttribute('type'), null);
+  assert.deepEqual([...ol.children].map((li) => li.tagName), ['LI', 'LI']);
+  assert.equal(ol.children[0].querySelector('code').textContent, 'code');
+  const inner = ol.children[1].querySelector('ul');
+  assert.equal(ol.children[1].firstElementChild.textContent, 'Second');
+  assert.equal(inner.children[0].querySelector('b').textContent, 'Inner');
+  assert.deepEqual([...inner.children[1].querySelectorAll('ul > li')].map((x) => x.textContent), ['a markdown item', 'another']);
+  assert.deepEqual(shape(ul), ['ul', ['li', ['p', 'upper']]]);
+});
+
+test('details opens and closes, with a summary and markdown inside, and can start open', async () => {
+  const p = await view(file('<details>\n<summary>Click <b>me</b></summary>\n\n## Inside\n\n```r\nx <- 1\n```\n\n<details open>\n  <summary>Nested</summary>\n  Deep text\n</details>\n\n</details>\n\n<details OPEN="">bare</details> tail\n'));
+  const [outer, bare] = p.$$('#doc .md > details');
+  assert.equal(outer.hasAttribute('open'), false);
+  assert.deepEqual(shape(outer.querySelector('summary')), ['summary', ['b', 'me']]);
+  assert.equal(outer.querySelector('summary').textContent, 'Click me');
+  assert.deepEqual([outer.querySelector('h2').textContent, outer.querySelector('h2').id], ['Inside', 'inside']);
+  assert.equal(outer.querySelector('pre code').textContent, 'x <- 1');
+  const nested = outer.querySelector('details');
+  assert.equal(nested.getAttribute('open'), '');
+  assert.equal(nested.querySelector('p').textContent, 'Deep text');
+  assert.equal(bare.hasAttribute('open'), true);
+  assert.equal(bare.textContent, 'bare');
+  assert.equal(p.$('#doc .md > p').textContent, 'tail');
+});
+
+test('a block that never closes, or a stray closing tag, does not break the page', async () => {
+  const p = await view(file('<ul>\n<li>never closed\n\n<details><summary>s</summary>a</li></td>b</details>\n\n<table><tr><td>x</td></tr></table></table>\n'));
+  assert.equal(p.$('#doc .md > p').textContent, '<ul>\n<li>never closed');
+  assert.equal(p.$('#doc .md > details').textContent, 'sab'); // the stray </li> and </td> are passed over
+  assert.deepEqual(shape(p.$('#doc .md table')), ['table', ['tr', ['td', 'x']]]);
+});
+
+test('script and other tags inside a block still come out as text', async () => {
+  const p = await view(file('<ul><li><script>alert(1)</script> <iframe src="/x"></iframe> <a href="javascript:alert(1)" onclick="x()">t</a></li></ul>\n'));
+  const li = p.$('#doc .md li');
+  assert.equal(li.querySelector('script, iframe, a'), null);
+  assert.equal(li.textContent, '<script>alert(1)</script> <iframe src="/x"></iframe> t');
+});

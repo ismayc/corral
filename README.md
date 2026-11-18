@@ -111,9 +111,11 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   holds also works: `<img>` (with its width and height), `<a href>`, `<br>`,
   `<hr>`, headings (`<h1>` to `<h6>`), text tags (`<b>`, `<strong>`, `<i>`,
   `<em>`, `<code>`, `<kbd>`, `<sub>`, `<sup>`, `<del>`, `<s>`, `<u>`,
-  `<mark>`, and `<small>`), and a block or heading centered with
-  `align="center"`. Comments are left out. Any other HTML tag, such as a
-  table or `<details>`, is shown as text.
+  `<mark>`, and `<small>`), tables (with `colspan`, `rowspan`, and `align`),
+  lists (`<ul>`, `<ol>`, nested ones too), `<details>` with its `<summary>`
+  (markdown inside it works), and a block or heading centered with
+  `align="center"`. Comments are left out. Any other HTML tag is shown as
+  text.
 - **Inactive projects.** Corral remembers every project folder it has seen. If
   a herdr space disappears (closed from its menu, or by closing its only
   pane), the project shows under "Inactive projects" with a Reopen button and

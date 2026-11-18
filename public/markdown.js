@@ -23,8 +23,9 @@
   const LOCAL = /\[((?:!\[[^\]]*\]\([^)\s]+(?: +"[^"]*")?\)|[^\]])+)\]\(([^)\s]+)(?: +"[^"]*")?\)|!\[([^\]]*)\]\(([^)\s]+)(?: +"[^"]*")?\)/;
   // Also with local, the HTML a README often holds: <img> and <a href> are drawn (through the same link and
   // image answers), <br> breaks the line, the text tags (<b>, <i>, <code>, <kbd>, <sub>, <sup>, <del>, and the like) are drawn as themselves, and the tags
-  // that only wrap things (<p>, <div>, <center>, <picture>, <span>) and comments are left out. <h1> to <h6>
-  // and <hr> are blocks, drawn by markdown(). Any other tag stays as text.
+  // that only wrap things (<p>, <div>, <center>, <picture>, <span>) and comments are left out. <h1> to <h6>,
+  // <hr>, and the HTML blocks below (tables, lists, <details>) are drawn by markdown(). Any other tag stays
+  // as text.
   const HTML = /(<img\b[^>]*>)|<a\b([^>]*)>([\s\S]*?)<\/a>|(<br\s*\/?>)|(<\/?(?:p|div|center|picture|span)\b[^>]*>|<!--[\s\S]*?-->)|<(?<t>b|strong|i|em|code|kbd|sub|sup|del|s|u|mark|small)(?:\s[^>]*)?>([\s\S]*?)<\/\k<t>>/;
   const INLINE_LOCAL = new RegExp(`${LOCAL.source}|${HTML.source}|${INLINE.source}`, 'gi'); // LOCAL first, or a badge's image reads as a link's text
   const attr = (tag, name) => { const m = tag.match(new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i')); return m ? m[1] ?? m[2] ?? m[3] : null; };
@@ -77,6 +78,83 @@
     return 0;
   }
 
+  // ---- HTML blocks: <table>, <ul>, <ol>, and <details>, with what goes inside them ----
+  // The block's tags are read into a tree, and each element is built here, never handed to the browser as
+  // HTML, so nothing but these tags and a few plain attributes can come out. Text inside a list item or
+  // <details> is drawn as markdown; text inside a cell, caption, or summary as one line of it.
+  const HTML_BLOCK = /^ *<(table|ul|ol|details)\b[^>]*>/i;
+  const STRUCT = /<(\/?)(table|thead|tbody|tfoot|tr|th|td|caption|ul|ol|li|details|summary)\b([^>]*)>/gi;
+  // An opening tag ends these when one is still open, as a browser does: <li>one<li>two, <tr><td>a<td>b.
+  const ROWS = ['td', 'th', 'tr'];
+  const ENDS = { li: ['li'], td: ['td', 'th'], th: ['td', 'th'], tr: ROWS, thead: [...ROWS, 'thead', 'tbody', 'tfoot'], tbody: [...ROWS, 'thead', 'tbody', 'tfoot'], tfoot: [...ROWS, 'thead', 'tbody', 'tfoot'] };
+  const FLOW = new Set(['root', 'li', 'details']);
+
+  // The line after the one where the block opened on line i closes (nested blocks of its kind counted), or
+  // 0 when it never closes.
+  function htmlBlockEnd(lines, i, tag) {
+    const re = new RegExp(`<(/?)${tag}\\b`, 'gi');
+    let depth = 0;
+    for (let j = i; j < lines.length; j++) {
+      for (const t of lines[j].matchAll(re)) {
+        depth += t[1] ? -1 : 1;
+        if (!depth) return j + 1;
+      }
+    }
+    return 0;
+  }
+
+  function htmlTree(html) {
+    const root = { tag: 'root', attrs: '', kids: [] };
+    const stack = [root];
+    let at = 0;
+    for (const m of html.matchAll(STRUCT)) {
+      stack.at(-1).kids.push(html.slice(at, m.index));
+      at = m.index + m[0].length;
+      const tag = m[2].toLowerCase();
+      if (m[1]) {
+        const open = stack.findLastIndex((n) => n.tag === tag);
+        if (open > 0) stack.length = open; // a closing tag with nothing open is passed over
+        continue;
+      }
+      while ((ENDS[tag] || []).includes(stack.at(-1).tag)) stack.pop();
+      const node = { tag, attrs: m[3], kids: [] };
+      stack.at(-1).kids.push(node);
+      stack.push(node);
+    }
+    root.kids.push(html.slice(at));
+    return root;
+  }
+
+  // Text indented with its tags loses that indent, so markdown reads it as written at the margin.
+  function dedent(text) {
+    const lines = text.replace(/^\n+|\s+$/g, '').split('\n');
+    const n = Math.min(...lines.filter((l) => l.trim()).map((l) => l.match(/^ */)[0].length));
+    return lines.map((l) => l.slice(n)).join('\n');
+  }
+  const digits = (v) => (/^\d+$/.test(v || '') ? v : null);
+
+  // The elements for a tree node: an array for the root, one element otherwise.
+  function htmlNode(node, local) {
+    const kids = [];
+    let text = '';
+    const flush = () => {
+      if (text.trim()) kids.push(...(FLOW.has(node.tag) ? markdown(dedent(text), local) : mdInline(text.trim(), local)));
+      text = '';
+    };
+    for (const k of node.kids) {
+      if (typeof k === 'string') text += k;
+      else { flush(); kids.push(htmlNode(k, local)); }
+    }
+    flush();
+    if (node.tag === 'root') return kids;
+    const align = attr(node.attrs, 'align')?.toLowerCase();
+    const el = h(node.tag, {
+      colspan: digits(attr(node.attrs, 'colspan')), rowspan: digits(attr(node.attrs, 'rowspan')), start: digits(attr(node.attrs, 'start')),
+      align: ['left', 'center', 'right'].includes(align) ? align : null, open: node.tag === 'details' && /\sopen\b/i.test(node.attrs) ? '' : null,
+    }, kids);
+    return node.tag === 'table' ? h('div', { class: 'table' }, el) : el; // the div lets a wide table scroll
+  }
+
   const LIST_ITEM = /^( *)([-*+]|\d+[.)]) +(.*)$/;
   const TABLE_RULE = /^ *\|? *:?-+:? *(\| *:?-+:? *)*\|? *$/;
   const cells = (line) => line.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
@@ -111,6 +189,11 @@
         const end = htmlHeading(lines, i, m[1]);
         const inside = lines.slice(i, end).join('\n').replace(HTML_HEADING, '').replace(new RegExp(`</h${m[1]}>[^]*$`, 'i'), '');
         out.push(h(`h${m[1]}`, ALIGN_CENTER.test(m[2]) ? { class: 'center' } : {}, mdInline(inside.trim(), local)));
+        i = end;
+      } else if (local && (m = line.match(HTML_BLOCK)) && htmlBlockEnd(lines, i, m[1])) {
+        flush();
+        const end = htmlBlockEnd(lines, i, m[1]);
+        out.push(...htmlNode(htmlTree(lines.slice(i, end).join('\n')), local));
         i = end;
       } else if (/^ *([-*_])( *\1){2,} *$/.test(line) || (local && /^ *<hr\b[^>]*> *$/i.test(line))) {
         flush();

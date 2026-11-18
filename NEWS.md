@@ -24,6 +24,10 @@ in `package.json`.
 - **More HTML works in the viewer.** Headings (`<h1>` to `<h6>`, centered
   when they say so), `<hr>`, and text tags such as `<b>`, `<i>`, `<code>`,
   `<kbd>`, `<sub>`, and `<sup>` are drawn, and comments are left out.
+- **HTML tables, lists, and details work in the viewer.** A `<table>` (with
+  `colspan`, `rowspan`, and `align`), `<ul>` and `<ol>` (nested too), and
+  `<details>` with its `<summary>` are drawn, and markdown inside a list
+  item or a details block works.
 - **The viewer is on the phone page too.** A window's ⋯ menu has **Markdown
   files**, a list of the markdown files of its project. Tap one to read it,
   Rendered or Raw, with images; it follows the file as it changes, and a link

@@ -158,6 +158,11 @@
   #mdbody .md img { max-width:100%; height:auto; vertical-align:middle; }
   #mdbody .md pre.front { color:var(--muted); }
   #mdbody .md .center { text-align:center; }
+  #mdbody .md details { margin:0 0 14px; padding:8px 12px; border:1px solid var(--rail); border-radius:8px; }
+  #mdbody .md summary { cursor:pointer; font-weight:600; }
+  #mdbody .md details[open] > summary { margin-bottom:8px; }
+  #mdbody .md :is(td,th) > :last-child { margin-bottom:0; }
+  #mdbody .md [align=center] { text-align:center; } #mdbody .md [align=right] { text-align:right; }
   #mdbody .md kbd { font:.86em var(--mono); border:1px solid var(--rail); border-radius:4px; padding:0 4px; }
 
   /* Changes: git status and diff of the window's project */
