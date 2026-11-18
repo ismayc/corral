@@ -141,6 +141,23 @@
   #notifybody input[type=checkbox] { width:22px; height:22px; accent-color:var(--fence); }
   #notifybody .btns { display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 16px; }
 
+  /* Markdown files: the list in a sheet, and one file drawn or as text */
+  .mdfilter { width:100%; margin:0 0 8px; }
+  .mdfiles button { display:block; width:100%; text-align:left; border:0; border-bottom:1px solid var(--rail); border-radius:0;
+                    background:none; padding:10px 2px; font-size:15px; color:var(--text); }
+  .mdfiles button small { display:block; color:var(--muted); font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .seg { display:flex; flex:none; border:1px solid var(--rail); border-radius:8px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; background:transparent; color:var(--muted); font-size:13px; padding:6px 10px; }
+  .seg button[aria-pressed=true] { background:var(--fence); color:#fff; }
+  #mdbody { flex:1; overflow:auto; padding:14px 14px calc(24px + env(safe-area-inset-bottom)); font-size:15.5px; line-height:1.5;
+            overflow-wrap:break-word; -webkit-user-select:text; user-select:text; }
+  #mdbody .note { color:var(--muted); padding:30px 0; text-align:center; }
+  #mdbody pre.raw { margin:0; font:12.5px/1.5 var(--mono); white-space:pre-wrap; overflow-wrap:anywhere; }
+  #mdbody .md :is(h1,h2,h3,h4,h5,h6) { margin:20px 0 8px; font-family:var(--brand, inherit); }
+  #mdbody .md h1 { font-size:24px; } #mdbody .md h2 { font-size:20px; } #mdbody .md h3 { font-size:17px; }
+  #mdbody .md img { max-width:100%; height:auto; vertical-align:middle; }
+  #mdbody .md pre.front { color:var(--muted); }
+
   /* Changes: git status and diff of the window's project */
   #difflist { flex:1; overflow:auto; background:var(--term); padding:0 0 calc(16px + env(safe-area-inset-bottom)); }
   #difflist .files { padding:10px 12px; border-bottom:1px solid var(--rail); background:var(--panel); }
@@ -293,7 +310,7 @@
     <span class="dot" id="tdot"></span>
     <div class="grow"><div class="title" id="ttitle"></div><div class="sub" id="tsub"></div></div>
     <button class="iconbtn" id="viewbtn" hidden>Terminal</button>
-    <button class="iconbtn" id="morebtn" aria-label="More: changes and scrollback">&middot;&middot;&middot;</button>
+    <button class="iconbtn" id="morebtn" aria-label="More: changes, markdown files, and scrollback">&middot;&middot;&middot;</button>
   </header>
   <div id="lastprompt" hidden><span class="pt"></span><button class="iconbtn" aria-label="Hide my last prompt">&times;</button></div>
   <div id="termwrap"><div id="term" style="height:100%"></div><span id="conn" hidden>Reconnecting&hellip;</span>
@@ -317,6 +334,18 @@
     <button class="iconbtn" id="histcopy">Copy all</button>
   </header>
   <pre id="histtext"></pre>
+</section>
+
+<section id="mdview" class="view" hidden>
+  <header>
+    <button class="iconbtn" id="mdback" aria-label="Back to the terminal">&lsaquo;</button>
+    <div class="grow"><div class="title" id="mdtitle"></div><div class="sub" id="mdsub"></div></div>
+    <div class="seg" role="group" aria-label="How to show the file">
+      <button id="mdrendered" type="button" aria-pressed="true">Rendered</button>
+      <button id="mdraw" type="button" aria-pressed="false">Raw</button>
+    </div>
+  </header>
+  <div id="mdbody"></div>
 </section>
 
 <section id="diffview" class="view" hidden>

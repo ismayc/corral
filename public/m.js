@@ -661,7 +661,7 @@ function sendRaw(d) { if (current?.ws?.readyState === 1) current.ws.send(JSON.st
 
 function openTerm(info, swiped) {
   closeTerm();
-  $('#home').hidden = true; $('#histview').hidden = true; $('#diffview').hidden = true; $('#termview').hidden = false;
+  $('#home').hidden = true; $('#histview').hidden = true; $('#diffview').hidden = true; closeMd(); $('#termview').hidden = false;
   $('#ttitle').textContent = info.label;
   const w = windows.find((x) => x.id === info.id) || info;
   $('#tsub').textContent = termSub(w);
@@ -738,13 +738,13 @@ function closeTerm() {
 
 function backHome() {
   closeTerm();
-  $('#termview').hidden = true; $('#histview').hidden = true; $('#diffview').hidden = true; $('#home').hidden = false;
+  $('#termview').hidden = true; $('#histview').hidden = true; $('#diffview').hidden = true; closeMd(); $('#home').hidden = false;
   refresh();
 }
 $('#back').onclick = () => history.back();
 window.addEventListener('popstate', () => {
-  if ((!$('#histview').hidden || !$('#diffview').hidden) && current) {
-    $('#histview').hidden = true; $('#diffview').hidden = true; $('#termview').hidden = false; return;
+  if ((!$('#histview').hidden || !$('#diffview').hidden || !$('#mdview').hidden) && current) {
+    $('#histview').hidden = true; $('#diffview').hidden = true; closeMd(); $('#termview').hidden = false; return;
   }
   if (current) backHome();
 });
@@ -898,11 +898,11 @@ async function loadConvo() {
   c.drawn = true;
 }
 
-// The ⋯ menu: the project's uncommitted changes, and the window's scrollback as text.
+// The ⋯ menu: the project's uncommitted changes, its markdown files, and the window's scrollback as text.
 $('#morebtn').onclick = () => {
   if (!current) return;
   const item = (label, fn) => h('button', { onclick: () => { closeSheet(); fn(); } }, label);
-  sheet(current.info.label, h('div', { class: 'menu' }, item('Changes not yet committed', showChanges), item('Scrollback as text', showHistory),
+  sheet(current.info.label, h('div', { class: 'menu' }, item('Changes not yet committed', showChanges), item('Markdown files', showMdList), item('Scrollback as text', showHistory),
     item(promptsOn ? 'Hide my last prompt' : 'Show my last prompt', () => setPrompts(!promptsOn))));
 };
 
@@ -1169,6 +1169,73 @@ async function showChanges() {
 }
 $('#diffback').onclick = () => history.back();
 $('#diffreload').onclick = showChanges;
+
+// ---- Markdown files: one of the project's, drawn as a page or shown as its text ----
+// The list comes from the ⋯ menu. The file is read again every 2 seconds while it shows, so one that
+// Claude Code is writing stays current. A link to another markdown file of the project opens it here.
+let mdDoc = null; // the file showing: {win, rel, text, modified}; text is null until it is first read
+let mdMode = load('corral.m.mdmode', 'rendered');
+function closeMd() { $('#mdview').hidden = true; mdDoc = null; }
+
+async function showMdList() {
+  const c = current;
+  let r;
+  try { r = await api(`/api/sessions/${encodeURIComponent(c.info.id)}/markdown`); } catch { return toast('Could not list the files.'); }
+  if (current !== c) return; // left the window while the list loaded
+  if (!r.files.length) return toast('This project has no markdown files.');
+  const rows = r.files.map((f) => {
+    const cut = f.lastIndexOf('/');
+    return h('button', { 'data-path': f.toLowerCase(), onclick: () => { closeSheet(); openMd(f); } }, f.slice(cut + 1), cut < 0 ? null : h('small', {}, f.slice(0, cut)));
+  });
+  const filter = h('input', { class: 'mdfilter', type: 'search', placeholder: 'Find a file', 'aria-label': 'Find a file', autocapitalize: 'none', autocorrect: 'off' });
+  filter.oninput = () => { for (const b of rows) b.hidden = !b.dataset.path.includes(filter.value.trim().toLowerCase()); };
+  sheet(`${r.files.length} markdown file${r.files.length === 1 ? '' : 's'}${r.truncated ? ' (the first found)' : ''}`,
+    ...(r.files.length > 8 ? [filter] : []), h('div', { class: 'mdfiles' }, ...rows)); // sheet() draws a null as text
+}
+
+function drawMd() {
+  $('#mdrendered').setAttribute('aria-pressed', String(mdMode === 'rendered'));
+  $('#mdraw').setAttribute('aria-pressed', String(mdMode === 'raw'));
+  if (mdDoc?.text == null) return;
+  $('#mdbody').replaceChildren(mdMode === 'raw' ? h('pre', { class: 'raw' }, mdDoc.text)
+    : corralMd.fileDoc(mdDoc.text, {
+      base: `window=${encodeURIComponent(mdDoc.win)}`, rel: mdDoc.rel, openMd,
+      openFile: (to) => toast(`${to.split('/').pop()} is not a markdown file, so it does not open here.`),
+    }));
+}
+function setMdMode(next) { mdMode = next; store('corral.m.mdmode', next); drawMd(); $('#mdbody').scrollTop = 0; }
+$('#mdrendered').onclick = () => setMdMode('rendered');
+$('#mdraw').onclick = () => setMdMode('raw');
+$('#mdback').onclick = () => history.back();
+
+// Reads the file showing. A new version keeps the place on the page; the first goes to `heading` if given.
+// A later read that fails leaves the last version up.
+async function readMd(heading) {
+  const d = mdDoc;
+  let r;
+  try { r = await (await fetch(`/api/view?window=${encodeURIComponent(d.win)}&path=${encodeURIComponent(d.rel)}${d.modified ? `&since=${d.modified}` : ''}`)).json(); } catch { r = { error: 'Could not reach the Mac.' }; }
+  if (mdDoc !== d || r.unchanged) return;
+  const body = $('#mdbody');
+  if (r.error) { if (d.text === null) body.replaceChildren(h('div', { class: 'note' }, r.error)); return; }
+  const first = d.text === null;
+  const y = body.scrollTop;
+  d.text = r.text; d.modified = r.modified;
+  drawMd();
+  if (!first) body.scrollTop = y; else if (heading) corralMd.jump(body, heading);
+}
+
+function openMd(rel, heading) {
+  mdDoc = { win: current.info.id, rel, text: null, modified: 0 };
+  $('#mdtitle').textContent = rel.split('/').pop();
+  $('#mdsub').textContent = `${current.info.label} · ${rel}`;
+  if ($('#mdview').hidden) history.pushState({ md: true }, '');
+  $('#termview').hidden = true; $('#mdview').hidden = false;
+  $('#mdbody').replaceChildren(h('div', { class: 'note' }, 'Loading…'));
+  $('#mdbody').scrollTop = 0;
+  drawMd();
+  readMd(heading);
+}
+setInterval(() => { if (mdDoc && document.visibilityState === 'visible') readMd(); }, 2000);
 
 // ---- Notifications: Web Push from the Mac, for a window's turn or a permission prompt ----
 // iOS allows them only in Corral opened from the Home Screen (iOS 16.4 or later), and asks only after a tap.

@@ -18,6 +18,10 @@ in `package.json`.
   opens it in the same window, a `#heading` link jumps to the heading, and a
   link to any other project file opens it on the Mac. Images go out
   sandboxed, so an SVG cannot run script. The phone's Chat is unchanged.
+- **The viewer is on the phone page too.** A window's ⋯ menu has **Markdown
+  files**, a list of the markdown files of its project. Tap one to read it,
+  Rendered or Raw, with images; it follows the file as it changes, and a link
+  to another markdown file opens it in place.
 
 - **A drag copy in a shell says it copied.** On the Mac page, tmux clears the
   highlight when you let go of a drag, so nothing showed that the text was on

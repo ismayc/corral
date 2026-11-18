@@ -352,6 +352,37 @@ test('GET /api/image sends an image of a space, sandboxed, and nothing else', as
   assert.deepEqual(srv.imageFile(path.join(root, 'gone.png')), { status: 404, error: 'could not read the file' }); // removed after it was found
 });
 
+test('a window names its project for the viewer: its markdown list, a file, and an image', async (t) => {
+  const root = realTmp();
+  const other = realTmp();
+  for (const f of ['README.md', 'zeta.txt', 'docs/b.qmd', 'docs/a.md', 'docs/deep/c.Rmd', '.hidden/x.md', 'node_modules/pkg/README.md']) writeFile(path.join(root, f), `# ${f}`);
+  fs.writeFileSync(path.join(root, 'docs/plot.png'), 'PNG');
+  fs.symlinkSync(path.join(root, 'docs'), path.join(root, 'link'));
+  fs.writeFileSync(path.join(other, 'cwd.md'), '# cwd');
+  const { req, herdr, srv } = await world(t);
+  herdr.snap = { workspaces: [{ workspace_id: 'w1', label: 'W' }], panes: [{ workspace_id: 'w1', cwd: root }] };
+  const inSpace = srv.createSession(other, 'spaced', 'w1'); // its space's folder wins over the folder it opened in
+  const bare = srv.createSession(other, 'bare', null);
+  const gone = srv.createSession(other, 'gone', 'nope'); // a space herdr no longer has: the window's own folder
+
+  const list = await req('GET', `/api/sessions/${inSpace.id}/markdown`);
+  assert.deepEqual([list.status, list.json], [200, { files: ['README.md', 'docs/a.md', 'docs/b.qmd', 'docs/deep/c.Rmd'], truncated: false }]);
+  assert.deepEqual((await req('GET', `/api/sessions/${bare.id}/markdown`)).json.files, ['cwd.md']);
+  assert.deepEqual((await req('GET', `/api/sessions/${gone.id}/markdown`)).json.files, ['cwd.md']);
+  assert.equal((await req('GET', '/api/sessions/nope/markdown')).status, 404);
+
+  assert.equal((await req('GET', `/api/view?window=${inSpace.id}&path=docs%2Fa.md`)).json.text, '# docs/a.md');
+  assert.equal((await req('GET', `/api/view?window=${bare.id}&path=cwd.md`)).json.text, '# cwd');
+  assert.equal((await req('GET', `/api/view?window=${bare.id}&path=docs%2Fa.md`)).status, 404);
+  assert.equal((await req('GET', '/api/view?window=nope&path=cwd.md')).status, 404);
+  assert.equal((await req('GET', `/api/image?window=${inSpace.id}&path=docs%2Fplot.png`)).text, 'PNG');
+
+  // The list stops at its limits, and a folder that cannot be read is passed over.
+  assert.deepEqual(srv.markdownFiles(root, 2), { files: ['README.md', 'docs/a.md'], truncated: true });
+  assert.deepEqual(srv.markdownFiles(root, 500, 3), { files: ['README.md'], truncated: true });
+  assert.deepEqual(srv.markdownFiles(path.join(root, 'missing')), { files: [], truncated: false });
+});
+
 test('POST /api/open-with/forget drops a saved choice for a type', async (t) => {
   const { req, srv } = await world(t);
   srv.openWith.set('.md', 'finder');

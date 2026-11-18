@@ -14,13 +14,13 @@ async function scrollback(p) {
   await settle();
 }
 
-test('the ⋯ menu in a terminal offers the changes and the scrollback', async () => {
+test('the ⋯ menu in a terminal offers the changes, the markdown files, and the scrollback', async () => {
   const p = await phone([win('a')]);
   await p.openWin('a');
-  assert.equal(p.$('#morebtn').getAttribute('aria-label'), 'More: changes and scrollback');
+  assert.equal(p.$('#morebtn').getAttribute('aria-label'), 'More: changes, markdown files, and scrollback');
   p.$('#morebtn').click();
   assert.equal(p.sheetTitle(), 'a');
-  assert.deepEqual(p.$$('#genbody .menu button').map((b) => b.textContent), ['Changes not yet committed', 'Scrollback as text', 'Hide my last prompt']);
+  assert.deepEqual(p.$$('#genbody .menu button').map((b) => b.textContent), ['Changes not yet committed', 'Markdown files', 'Scrollback as text', 'Hide my last prompt']);
 });
 
 test('Scrollback as text closes the menu and shows the window\'s scrollback', async () => {

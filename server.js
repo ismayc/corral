@@ -1682,8 +1682,18 @@ function saveOpenWith() {
 const fileKind = (file) => path.extname(file).toLowerCase() || path.basename(file);
 
 // The real path of a file inside a space's project folder, or null.
-async function spaceFile(spaceId, rel) {
-  const root = await rootFor(spaceId || '');
+const spaceFile = async (spaceId, rel) => fileUnder(await rootFor(spaceId || ''), rel);
+
+// The project folder a request names: a window's (its space's folder, or the folder it opened in), with
+// ?window=, or a space's, with ?space=. The phone page knows windows; the Mac page's tree knows spaces.
+const windowRoot = async (s) => (s.space && await rootFor(s.space)) || s.cwd;
+async function askedRoot(q) {
+  const s = sessions.get(q.get('window') || '');
+  return s ? windowRoot(s) : rootFor(q.get('space') || '');
+}
+const askedFile = async (q) => fileUnder(await askedRoot(q), q.get('path'));
+
+function fileUnder(root, rel) {
   if (!root || typeof rel !== 'string' || !rel || rel.includes('\0') || path.isAbsolute(rel)) return null;
   try {
     const realRoot = fs.realpathSync(root);
@@ -1744,6 +1754,31 @@ function imageFile(file) {
     if (fs.statSync(file).size > VIEW_IMAGE_MAX) return { status: 413, error: 'This image is over 20 MB, too large to show' };
     return { status: 200, type, data: fs.readFileSync(file) };
   } catch { return { status: 404, error: 'could not read the file' }; }
+}
+
+// Every markdown file of a project, for the phone page's list: top folders first, hidden and skipped
+// folders left out, links not followed. It stops at MD_LIST_MAX files or MD_WALK_MAX names read.
+const MD_LIST_MAX = 500;
+const MD_WALK_MAX = 20000;
+function markdownFiles(root, listMax = MD_LIST_MAX, walkMax = MD_WALK_MAX) {
+  const files = [];
+  const queue = [''];
+  let seen = 0;
+  let truncated = false;
+  while (queue.length && !truncated) {
+    const dir = queue.shift();
+    let dirents;
+    try { dirents = fs.readdirSync(path.join(root, dir), { withFileTypes: true }); } catch { continue; }
+    dirents.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+    for (const d of dirents) {
+      if (TREE_SKIP.has(d.name) || d.name.startsWith('.')) continue;
+      if (++seen > walkMax || files.length >= listMax) { truncated = true; break; }
+      const rel = dir ? `${dir}/${d.name}` : d.name;
+      if (d.isDirectory()) queue.push(rel);
+      else if (d.isFile() && viewable(d.name)) files.push(rel);
+    }
+  }
+  return { files, truncated };
 }
 
 const appName = (p) => (p === 'system' ? 'its macOS default app' : p === 'finder' ? 'Finder' : p === 'corral' ? 'Corral' : path.basename(p, '.app'));
@@ -1876,14 +1911,14 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { name: path.basename(file), kind, saved: openWith.get(kind) || null, ...c, viewable: viewable(file) });
   }
   if (url.pathname === '/api/view' && req.method === 'GET') {
-    const file = await spaceFile(url.searchParams.get('space'), url.searchParams.get('path'));
-    if (!file) return send(res, 404, { error: 'no such file in this space' });
+    const file = await askedFile(url.searchParams);
+    if (!file) return send(res, 404, { error: 'no such file in this project' });
     const { status, ...r } = viewFile(file, Number(url.searchParams.get('since') || NaN));
     return send(res, status, r);
   }
   if (url.pathname === '/api/image' && req.method === 'GET') {
-    const file = await spaceFile(url.searchParams.get('space'), url.searchParams.get('path'));
-    if (!file) return send(res, 404, { error: 'no such file in this space' });
+    const file = await askedFile(url.searchParams);
+    if (!file) return send(res, 404, { error: 'no such file in this project' });
     const r = imageFile(file);
     if (r.error) return send(res, r.status, { error: r.error });
     res.writeHead(200, { 'Content-Type': r.type, ...IMAGE_HEADERS });
@@ -1964,7 +1999,7 @@ const server = http.createServer(async (req, res) => {
     if (!s || !s.tmux || s.exited) return send(res, 404, { error: 'no such window' });
     try { return send(res, 200, windowHistory(s.id), 'text/plain; charset=utf-8'); } catch { return send(res, 500, { error: 'could not read the window' }); }
   }
-  const act = url.pathname.match(/^\/api\/sessions\/([\w-]+)\/(prompt|answer|changes|upload|key|rename|mute|last|conversation|prompts|commands)$/);
+  const act = url.pathname.match(/^\/api\/sessions\/([\w-]+)\/(prompt|answer|changes|upload|key|rename|mute|last|conversation|prompts|commands|markdown)$/);
   if (act) {
     const s = sessions.get(act[1]);
     if (!s || s.exited) return send(res, 404, { error: 'no such window' });
@@ -2012,6 +2047,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (act[2] === 'commands' && req.method === 'GET') {
       return send(res, 200, { commands: slashCommands(windowClaude(s)?.cwd || s.cwd) });
+    }
+    if (act[2] === 'markdown' && req.method === 'GET') {
+      return send(res, 200, markdownFiles(await windowRoot(s)));
     }
     if (act[2] === 'changes' && req.method === 'GET') {
       const { status, ...r } = await windowChanges(s);
@@ -2183,7 +2221,7 @@ module.exports = {
   vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, pruneUploads,
   locateFile, cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows, autoRestore,
   reopenProject, newRepos, hideRepo, identityRoots, herdrSnapshot, rootFor, listDir, loadOpenWith, saveOpenWith, fileKind, spaceFile,
-  appsFor, openChoices, openFile, appName, viewFile, imageFile, send, serveFile, readJson,
+  appsFor, openChoices, openFile, appName, viewFile, imageFile, markdownFiles, send, serveFile, readJson,
 };
 
 if (require.main === module) start();

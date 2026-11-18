@@ -68,8 +68,8 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   Code's menus), a **Use suggestion** key that sends Claude Code's suggested
   next prompt (Tab, then Enter), a message box that works with dictation, and
   a photo button that hands Claude a picture. The **⋯** menu has a Changes
-  view of the project's uncommitted git diff and the window's scrollback as
-  text. When Claude Code asks for
+  view of the project's uncommitted git diff, the project's markdown files,
+  and the window's scrollback as text. When Claude Code asks for
   permission, its request and answers (Yes, don't ask again, Deny) appear on
   the window's card, and the phone can get a push notification for it, or
   when a turn ends, even with the page closed. Cards also offer Stop, the
@@ -304,6 +304,12 @@ network between your own devices.
   such as a status line command's output and the mode. The phone remembers
   whether you last used Chat or Terminal. **Scrollback as text**, in the ⋯
   menu, shows the window's scrollback to select or copy in one tap.
+- **Markdown files**, in the ⋯ menu, lists the markdown files of the window's
+  project (up to 500, with a filter box for a long list). Tap one to read it,
+  **Rendered** or **Raw**, with its images. It is read again every 2 seconds,
+  so it follows a file that Claude Code is writing. A link to another
+  markdown file of the project opens it in place, a web link asks first, and
+  a link to any other file does not open on the phone.
 - **Restore** the windows from before a Mac restart.
 
 On the Mac's desktop page, a window with a permission prompt gets the same
@@ -458,7 +464,8 @@ about who can reach it:
   run script in the page. Each image goes out with a sandbox policy, so an
   SVG that holds script cannot run it, even opened at its own address. A link
   in a file can go only to a web or mail address, a heading, or a file inside
-  the project.
+  the project. The phone's list of a project's markdown files gives their
+  names only, leaves out hidden folders, and does not follow links.
 - Opening a file hands it to macOS `open`, either to show it in Finder or with
   an app that macOS lists for that file, checked again on every open. The
   page cannot name any other program.
