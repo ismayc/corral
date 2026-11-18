@@ -721,7 +721,17 @@ async function openTreeFile(space, rel, anchor) {
   const r = await api('/api/open', { method: 'POST', body: { space, path: rel } }).catch(() => null);
   if (!r) return toast('Could not reach Corral.');
   if (r.needsChoice) return openWithMenu(space, rel, anchor, r.error);
+  if (r.view && !viewFile(space, rel)) return;
   toast(r.ok ? `Opened ${rel.split('/').pop()} in ${r.app}.` : r.error || 'Could not open it.');
+}
+
+// The viewer: a markdown file in a browser window of its own (/view), which shows it drawn or as text.
+// The window is named for the file, so a second click on the file goes to the window it already has.
+function viewFile(space, rel) {
+  const w = window.open(`/view?space=${encodeURIComponent(space)}&path=${encodeURIComponent(rel)}`, `corral-view:${space}:${rel}`, 'popup,width=900,height=1000');
+  if (!w) toast('The browser blocked the new window. Allow pop-ups for Corral, then click the file again.');
+  else w.focus();
+  return Boolean(w);
 }
 
 async function openWithMenu(space, rel, anchor, problem) {
@@ -741,6 +751,7 @@ async function openWithMenu(space, rel, anchor, problem) {
     closeMenu();
     const r = await api('/api/open', { method: 'POST', body: { space, path: rel, app, remember: always.checked } }).catch(() => null);
     if (!r?.ok) return toast(r?.error || 'Could not open it.');
+    if (r.view && !viewFile(space, rel)) return;
     toast(`Opened ${info.name} in ${r.app}.${r.remembered && always.checked ? ` ${info.kind} files will open there from now on.` : ''}`);
   };
   const item = (label, app) => {
@@ -754,6 +765,7 @@ async function openWithMenu(space, rel, anchor, problem) {
   lab.className = 'always';
   lab.append(always, document.createTextNode(`Always open ${info.kind} files this way`));
   m.append(lab, Object.assign(document.createElement('div'), { className: 'msep' }));
+  if (info.viewable) item('View in Corral', 'corral');
   const label = (a) => `${a.name}${a.path === info.def ? ' (macOS default)' : ''}`;
   const first = [info.saved, info.def].filter((p, i, l) => p && l.indexOf(p) === i);
   for (const p of first) { const a = info.apps.find((x) => x.path === p); if (a) item(label(a), a.path); }
@@ -762,7 +774,7 @@ async function openWithMenu(space, rel, anchor, problem) {
   m.append(Object.assign(document.createElement('div'), { className: 'msep' }));
   item('Show in Finder', 'finder');
   if (info.saved) {
-    const saved = info.saved === 'system' ? 'the macOS default' : info.apps.find((a) => a.path === info.saved)?.name || info.saved.split('/').pop();
+    const saved = info.saved === 'system' ? 'the macOS default' : info.saved === 'corral' ? 'Corral' : info.apps.find((a) => a.path === info.saved)?.name || info.saved.split('/').pop();
     const f = document.createElement('button');
     f.className = 'forget';
     f.textContent = `Forget ${saved} for ${info.kind} files`;

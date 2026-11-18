@@ -128,3 +128,47 @@ test('opening the menu closes any other menu first', async () => {
   await flush();
   assert.equal(p.$$('.catmenu').length, 1);
 });
+
+// ---- The viewer: a markdown file in a Corral window of its own ----
+
+// Stands in for window.open: records each call and returns a window, or null as a pop-up blocker does.
+function popups(p, blocked) {
+  const calls = [];
+  p.window.open = (...a) => { const w = { focused: false, focus() { w.focused = true; } }; calls.push({ args: a, w }); return blocked ? null : w; };
+  return calls;
+}
+
+test('a markdown file offers View in Corral first, and picking it opens the viewer window', async () => {
+  const p = await menuFor(info({ name: 'notes.md', kind: '.md', viewable: true }), { 'POST /api/open': { ok: true, view: true, kind: '.md', app: 'Corral', remembered: false } });
+  const calls = popups(p);
+  assert.deepEqual(p.items(), ['View in Corral', 'TextEdit (macOS default)', 'Visual Studio Code', 'Xcode', 'Show in Finder']);
+  p.pick('View in Corral');
+  await flush();
+  assert.deepEqual(p.api.called('POST', '/api/open')[0].body, { space: 'alpha', path: 'app.js', app: 'corral', remember: false });
+  assert.deepEqual(calls[0].args, ['/view?space=alpha&path=app.js', 'corral-view:alpha:app.js', 'popup,width=900,height=1000']);
+  assert.equal(calls[0].w.focused, true);
+  assert.equal(p.toast(), 'Opened notes.md in Corral.');
+});
+
+test('with Corral saved for the type, a click opens the viewer, and Forget names Corral', async () => {
+  const p = await menuFor(info({ name: 'notes.md', kind: '.md', viewable: true, saved: 'corral' }), { 'POST /api/open': { ok: true, view: true, kind: '.md', app: 'Corral', remembered: true } });
+  assert.deepEqual(p.items(), ['✓ View in Corral', 'TextEdit (macOS default)', 'Visual Studio Code', 'Xcode', 'Show in Finder', 'Forget Corral for .md files']);
+  p.menu().remove();
+  const calls = popups(p);
+  p.$('.tree .node.file').click();
+  await flush();
+  assert.equal(calls.length, 1);
+  assert.equal(p.toast(), 'Opened app.js in Corral.');
+});
+
+test('a blocked viewer window says how to allow it, from a click and from the menu', async () => {
+  const p = await menuFor(info({ name: 'notes.md', kind: '.md', viewable: true }), { 'POST /api/open': { ok: true, view: true, kind: '.md', app: 'Corral', remembered: false } });
+  popups(p, true);
+  p.pick('View in Corral');
+  await flush();
+  assert.equal(p.toast(), 'The browser blocked the new window. Allow pop-ups for Corral, then click the file again.');
+  p.$('#toast').hidden = true;
+  p.$('.tree .node.file').click();
+  await flush();
+  assert.equal(p.toast(), 'The browser blocked the new window. Allow pop-ups for Corral, then click the file again.');
+});

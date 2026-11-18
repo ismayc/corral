@@ -95,6 +95,15 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   files this way" to skip the question next time; right-click a file to pick
   another app or forget the default. Files of a type macOS does not know get
   the apps that open plain text.
+- **A markdown viewer.** For a markdown file (`.md`, `.markdown`, `.qmd`, or
+  `.Rmd`), the app list starts with **View in Corral**, which opens the file
+  in a small browser window of its own. **Rendered** draws it as a page
+  (headings, lists, tables, code, and links, with any YAML front matter shown
+  above); **Raw** shows the text as written. Corral remembers which one you
+  used last. The window reads the file again every 2 seconds, so a file that
+  Claude Code is writing stays current. Tick "Always open .md files this way"
+  to make a click open the viewer. Images and links to other files are shown
+  as text, not followed.
 - **Inactive projects.** Corral remembers every project folder it has seen. If
   a herdr space disappears (closed from its menu, or by closing its only
   pane), the project shows under "Inactive projects" with a Reopen button and
@@ -435,8 +444,12 @@ about who can reach it:
   loopback `Origin`, so other websites you visit cannot drive it.
 - The browser can only choose from a fixed list of things to start (Claude
   Code, Claude Code with `--continue`, or a shell). It never sends a command.
-- The file tree lists names only, never file contents, and refuses any path
-  whose real location (after resolving symlinks) is outside the project.
+- The file tree lists names only, and refuses any path whose real location
+  (after resolving symlinks) is outside the project. The only file contents
+  Corral sends to a page are those of a markdown file you open in the viewer:
+  a file inside the project, with a markdown extension, of 2 MB or less. The
+  viewer draws it as text and elements, never as HTML, so a file cannot run
+  script in the page.
 - Opening a file hands it to macOS `open`, either to show it in Finder or with
   an app that macOS lists for that file, checked again on every open. The
   page cannot name any other program.

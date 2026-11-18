@@ -234,7 +234,9 @@ test('GET /api/open-with names the file, its type, the saved choice, and the app
   const { req, herdr, srv } = await world(t);
   herdr.snap = { workspaces: [{ workspace_id: 'w1', label: 'W' }], panes: [{ workspace_id: 'w1', cwd: root }] };
   const r = await req('GET', '/api/open-with?space=w1&path=notes.MD');
-  assert.deepEqual(r.json, { name: 'notes.MD', kind: '.md', saved: null, ...APPS, asText: false });
+  assert.deepEqual(r.json, { name: 'notes.MD', kind: '.md', saved: null, ...APPS, asText: false, viewable: true });
+  fs.writeFileSync(path.join(root, 'app.js'), '');
+  assert.equal((await req('GET', '/api/open-with?space=w1&path=app.js')).json.viewable, false);
   srv.openWith.set('.md', 'finder');
   assert.equal((await req('GET', '/api/open-with?space=w1&path=notes.MD')).json.saved, 'finder');
   assert.equal((await req('GET', '/api/open-with?space=w1&path=missing')).status, 404);
@@ -278,6 +280,49 @@ test('POST /api/open opens a file, remembers a chosen app, and asks when it has 
   assert.deepEqual([gone.status, gone.json.needsChoice, gone.json.error], [200, true, 'that app does not open this file']);
   const refused = await open({ app: '/Applications/Gone.app' });
   assert.deepEqual([refused.status, refused.json.error], [400, 'that app does not open this file']);
+});
+
+test('POST /api/open with Corral as the app opens nothing on the Mac, and only for markdown', async (t) => {
+  const root = realTmp();
+  fs.writeFileSync(path.join(root, 'notes.md'), '# Hi');
+  fs.writeFileSync(path.join(root, 'app.js'), '');
+  const { req, herdr, srv, opened } = await world(t);
+  herdr.snap = { workspaces: [{ workspace_id: 'w1', label: 'W' }], panes: [{ workspace_id: 'w1', cwd: root }] };
+  const view = await req('POST', '/api/open', { body: { space: 'w1', path: 'notes.md', app: 'corral', remember: true } });
+  assert.deepEqual([view.status, view.json], [200, { ok: true, view: true, kind: '.md', app: 'Corral', remembered: true }]);
+  assert.equal(srv.openWith.get('.md'), 'corral');
+  assert.equal((await req('POST', '/api/open', { body: { space: 'w1', path: 'notes.md' } })).json.view, true); // the saved choice
+  const not = await req('POST', '/api/open', { body: { space: 'w1', path: 'app.js', app: 'corral' } });
+  assert.deepEqual([not.status, not.json.error], [400, 'Corral shows only markdown files']);
+  assert.deepEqual(opened, []);
+});
+
+test('GET /api/view sends a markdown file of a space, and nothing else', async (t) => {
+  const root = realTmp();
+  fs.writeFileSync(path.join(root, 'notes.md'), '# Hi\n');
+  fs.writeFileSync(path.join(root, 'paper.QMD'), 'text');
+  fs.writeFileSync(path.join(root, '.env'), 'SECRET=1');
+  fs.writeFileSync(path.join(root, 'big.md'), 'x'.repeat(2 * 1024 * 1024 + 1));
+  const { req, herdr, srv } = await world(t);
+  herdr.snap = { workspaces: [{ workspace_id: 'w1', label: 'W' }], panes: [{ workspace_id: 'w1', cwd: root }] };
+  const r = await req('GET', '/api/view?space=w1&path=notes.md');
+  const modified = fs.statSync(path.join(root, 'notes.md')).mtimeMs;
+  assert.deepEqual([r.status, r.json], [200, { name: 'notes.md', text: '# Hi\n', modified }]);
+  assert.equal((await req('GET', '/api/view?space=w1&path=paper.QMD')).json.text, 'text');
+
+  // A page that has this version gets no text; one with an older version, or a bad value, gets the file.
+  assert.deepEqual((await req('GET', `/api/view?space=w1&path=notes.md&since=${modified}`)).json, { unchanged: true });
+  assert.equal((await req('GET', `/api/view?space=w1&path=notes.md&since=${modified - 1}`)).json.text, '# Hi\n');
+  assert.equal((await req('GET', '/api/view?space=w1&path=notes.md&since=nope')).json.text, '# Hi\n');
+
+  const env = await req('GET', '/api/view?space=w1&path=.env');
+  assert.deepEqual([env.status, env.json], [415, { error: 'Corral shows only markdown files' }]);
+  const big = await req('GET', '/api/view?space=w1&path=big.md');
+  assert.deepEqual([big.status, big.json], [413, { error: 'This file is over 2 MB, too large to show' }]);
+  assert.equal((await req('GET', '/api/view?space=w1&path=..%2Fnotes.md')).status, 404);
+  assert.equal((await req('GET', '/api/view?space=w1&path=missing.md')).status, 404);
+  assert.equal((await req('GET', '/api/view')).status, 404);
+  assert.deepEqual(srv.viewFile(path.join(root, 'gone.md')), { status: 404, error: 'could not read the file' }); // removed after it was found
 });
 
 test('POST /api/open-with/forget drops a saved choice for a type', async (t) => {
@@ -416,7 +461,7 @@ test('restore: GET lists windows to bring back, POST reopens them, and dismiss t
   assert.equal((await req('POST', '/api/restore/dismiss')).status, 200); // nothing to remove: still fine
 });
 
-test('static files are served with their types, vendor files from node_modules, and / and /m map to the pages', async (t) => {
+test('static files are served with their types, vendor files from node_modules, and /, /m, and /view map to the pages', async (t) => {
   const { req } = await world(t);
   const index = await req('GET', '/');
   assert.equal(index.status, 200);
@@ -424,6 +469,7 @@ test('static files are served with their types, vendor files from node_modules, 
   assert.equal(index.headers['cache-control'], 'no-store');
   assert.equal(index.text, fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8'));
   assert.equal((await req('GET', '/m')).text, fs.readFileSync(path.join(ROOT, 'public/m.html'), 'utf8'));
+  assert.equal((await req('GET', '/view?space=w1&path=a.md')).text, fs.readFileSync(path.join(ROOT, 'public/view.html'), 'utf8'));
   assert.equal((await req('GET', '/app.js')).headers['content-type'], 'text/javascript; charset=utf-8');
   assert.equal((await req('GET', '/favicon.svg')).headers['content-type'], 'image/svg+xml');
   assert.equal((await req('GET', '/favicon-32.png')).headers['content-type'], 'image/png');

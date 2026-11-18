@@ -5,6 +5,16 @@ in `package.json`.
 
 ## Development version
 
+- **View a markdown file in Corral.** On the Mac page, the app list for a
+  markdown file (`.md`, `.markdown`, `.qmd`, or `.Rmd`) now starts with
+  **View in Corral**. It opens the file in a browser window of its own, with
+  a **Rendered** and **Raw** switch: the file drawn as a page, or its text as
+  written. The window reads the file again every 2 seconds, so it follows a
+  file that is being written. Tick "Always open .md files this way" and a
+  click on a markdown file opens the viewer. The renderer is the one the
+  phone's Chat uses, now in `public/markdown.js`; it shows images and links
+  to other files as text.
+
 - **A drag copy in a shell says it copied.** On the Mac page, tmux clears the
   highlight when you let go of a drag, so nothing showed that the text was on
   the clipboard. A toast now shows the text (or its size, for a long line or

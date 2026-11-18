@@ -1711,8 +1711,10 @@ async function openChoices(file) {
   return { def: null, apps: t.apps, asText: true };
 }
 
-// app is 'system' (the macOS default), 'finder' (show it in Finder), or the path of one of the offered apps.
+// app is 'system' (the macOS default), 'finder' (show it in Finder), 'corral' (the page shows it in the
+// viewer; nothing opens here), or the path of one of the offered apps.
 async function openFile(file, app) {
+  if (app === 'corral') return viewable(file) ? { status: 200, ok: true, view: true } : { status: 400, error: 'Corral shows only markdown files' };
   let args;
   if (app === 'finder') args = ['-R', file];
   else if (app === 'system') {
@@ -1727,7 +1729,22 @@ async function openFile(file, app) {
   return ok ? { status: 200, ok: true } : { status: 502, error: 'macOS could not open it' };
 }
 
-const appName = (p) => (p === 'system' ? 'its macOS default app' : p === 'finder' ? 'Finder' : path.basename(p, '.app'));
+const appName = (p) => (p === 'system' ? 'its macOS default app' : p === 'finder' ? 'Finder' : p === 'corral' ? 'Corral' : path.basename(p, '.app'));
+
+// The viewer: a markdown file shown in a Corral page of its own (/view), as text or drawn. It is the one
+// place Corral sends a file's contents to the page, so it reads only markdown types, and only up to VIEW_MAX.
+const VIEW_KINDS = new Set(['.md', '.markdown', '.qmd', '.rmd']);
+const VIEW_MAX = 2 * 1024 * 1024;
+const viewable = (file) => VIEW_KINDS.has(fileKind(file));
+function viewFile(file, since) {
+  if (!viewable(file)) return { status: 415, error: 'Corral shows only markdown files' };
+  try {
+    const st = fs.statSync(file);
+    if (st.mtimeMs === since) return { status: 200, unchanged: true }; // the page has this version
+    if (st.size > VIEW_MAX) return { status: 413, error: 'This file is over 2 MB, too large to show' };
+    return { status: 200, name: path.basename(file), text: fs.readFileSync(file, 'utf8'), modified: st.mtimeMs };
+  } catch { return { status: 404, error: 'could not read the file' }; }
+}
 
 function send(res, code, body, type = 'application/json; charset=utf-8') {
   res.writeHead(code, { 'Content-Type': type, 'Cache-Control': 'no-store' });
@@ -1838,7 +1855,13 @@ const server = http.createServer(async (req, res) => {
     if (!file) return send(res, 404, { error: 'no such file in this space' });
     const kind = fileKind(file);
     const c = await openChoices(file);
-    return send(res, 200, { name: path.basename(file), kind, saved: openWith.get(kind) || null, ...c });
+    return send(res, 200, { name: path.basename(file), kind, saved: openWith.get(kind) || null, ...c, viewable: viewable(file) });
+  }
+  if (url.pathname === '/api/view' && req.method === 'GET') {
+    const file = await spaceFile(url.searchParams.get('space'), url.searchParams.get('path'));
+    if (!file) return send(res, 404, { error: 'no such file in this space' });
+    const { status, ...r } = viewFile(file, Number(url.searchParams.get('since') || NaN));
+    return send(res, status, r);
   }
   // Opens a file. With no app, uses the saved default for its type, or answers needsChoice.
   if (url.pathname === '/api/open' && req.method === 'POST') {
@@ -2025,7 +2048,7 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'GET') {
     if (VENDOR[url.pathname]) return serveFile(res, path.join(__dirname, VENDOR[url.pathname]));
-    const rel = url.pathname === '/' ? 'index.html' : url.pathname === '/m' ? 'm.html' : url.pathname.slice(1);
+    const rel = url.pathname === '/' ? 'index.html' : url.pathname === '/m' ? 'm.html' : url.pathname === '/view' ? 'view.html' : url.pathname.slice(1);
     const file = path.join(PUBLIC, rel);
     if (!file.startsWith(PUBLIC + path.sep)) return send(res, 403, { error: 'forbidden' });
     return serveFile(res, file);
@@ -2134,7 +2157,7 @@ module.exports = {
   vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, pruneUploads,
   locateFile, cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows, autoRestore,
   reopenProject, newRepos, hideRepo, identityRoots, herdrSnapshot, rootFor, listDir, loadOpenWith, saveOpenWith, fileKind, spaceFile,
-  appsFor, openChoices, openFile, appName, send, serveFile, readJson,
+  appsFor, openChoices, openFile, appName, viewFile, send, serveFile, readJson,
 };
 
 if (require.main === module) start();
