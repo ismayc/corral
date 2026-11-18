@@ -15,6 +15,7 @@ async function view(route = file(), opts = {}) {
   await settle();
   p.doc = p.window.document;
   p.$ = (s) => p.doc.querySelector(s);
+  p.$$ = (s) => [...p.doc.querySelectorAll(s)];
   p.pressed = () => ['rendered', 'raw'].filter((id) => p.$(`#${id}`).getAttribute('aria-pressed') === 'true');
   return p;
 }
@@ -128,4 +129,100 @@ test('a page opened with no file named shows the error and keeps the plain title
   assert.deepEqual(p.api.called('GET', '/api/view')[0].query, { space: '', path: '' });
   assert.equal(p.doc.title, 'Corral');
   assert.equal(p.$('#doc .note').textContent, 'no such file in this space');
+});
+
+// ---- Images and links ----
+
+// Draws one line of markdown in docs/notes.md of space alpha and returns the page.
+const line = (text, opts) => view(file(`${text}\n`), opts);
+const attrs = (el) => Object.fromEntries([...el.attributes].map((a) => [a.name, a.value]));
+
+test('an image of the project comes from Corral, by its place in the project', async () => {
+  let p = await line('![A plot](img/plot.png "The title")');
+  assert.deepEqual(attrs(p.$('#doc .md img')), { src: '/api/image?space=alpha&path=docs%2Fimg%2Fplot.png', alt: 'A plot', loading: 'lazy' });
+  p = await line('![](../assets/a%20b.svg?raw=1) ![root](/logo.png) ![here](./x.gif)');
+  assert.deepEqual(p.$$('#doc .md img').map((i) => i.getAttribute('src')), [
+    '/api/image?space=alpha&path=assets%2Fa%20b.svg', '/api/image?space=alpha&path=logo.png', '/api/image?space=alpha&path=docs%2Fx.gif']);
+});
+
+test('a web image loads only over https, and one Corral will not load stays as text', async () => {
+  const p = await line('![ok](https://example.com/b.svg) ![no](http://example.com/b.png) ![d](data:image/png;base64,AAAA) ![up](../../out.png) ![bad](%E0%A4%A.png) ![h](//example.com/x.png)');
+  assert.deepEqual(p.$$('#doc .md img').map((i) => i.getAttribute('src')), ['https://example.com/b.svg']);
+  assert.equal(p.$('#doc .md p').textContent, ' ![no](http://example.com/b.png) ![d](data:image/png;base64,AAAA) ![up](../../out.png) ![bad](%E0%A4%A.png) ![h](//example.com/x.png)');
+});
+
+test('a path that names nothing in the project stays as text', async () => {
+  const p = await line('![none](.) [top](/)', { url: '/view?space=alpha&path=notes.md' });
+  assert.equal(p.$('#doc .md p').textContent, '![none](.) [top](/)');
+});
+
+test('a web or mail link opens in a new tab, and a badge is an image inside a link', async () => {
+  const p = await line('[site](https://example.com/a "t") [mail](mailto:me@example.com) [![build](https://example.com/b.svg)](https://example.com/ci)');
+  const [site, mail, badge] = p.$$('#doc .md a');
+  assert.deepEqual(attrs(site), { href: 'https://example.com/a', target: '_blank', rel: 'noopener' });
+  assert.equal(mail.getAttribute('href'), 'mailto:me@example.com');
+  assert.equal(badge.getAttribute('href'), 'https://example.com/ci');
+  assert.equal(badge.querySelector('img').getAttribute('src'), 'https://example.com/b.svg');
+});
+
+test('a link to another markdown file of the project opens it in the viewer, at its heading if one is named', async () => {
+  const p = await line('[next](other.md) [up](../README.md#Install) [q](/docs/paper.QMD) [**bold** one](./sub/deep.markdown)');
+  assert.deepEqual(p.$$('#doc .md a').map(attrs), [
+    { href: '/view?space=alpha&path=docs%2Fother.md' },
+    { href: '/view?space=alpha&path=README.md#install' },
+    { href: '/view?space=alpha&path=docs%2Fpaper.QMD' },
+    { href: '/view?space=alpha&path=docs%2Fsub%2Fdeep.markdown' },
+  ]);
+  assert.equal(p.$$('#doc .md a')[3].querySelector('strong').textContent, 'bold');
+});
+
+test('a link Corral will not follow stays as text', async () => {
+  const p = await line('[x](javascript:alert(1)) [f](file:///etc/hosts) [out](../../secret.md) [h](//example.com/a.md)');
+  assert.equal(p.$('#doc .md a'), null);
+  assert.equal(p.$('#doc .md p').textContent, '[x](javascript:alert(1)) [f](file:///etc/hosts) [out](../../secret.md) [h](//example.com/a.md)');
+});
+
+test('headings get ids as GitHub names them, and a #heading link points at one', async () => {
+  const p = await view(file('# Getting Started!\n\n## What\'s new, in 2.0?\n\n## Setup\n\n### Setup\n\n[go](#Setup-1)\n'));
+  assert.deepEqual(p.$$('#doc .md :is(h1,h2,h3)').map((x) => x.id), ['getting-started', 'whats-new-in-20', 'setup', 'setup-1']);
+  assert.deepEqual(attrs(p.$('#doc .md a')), { href: '#setup-1' });
+});
+
+test('a page opened at a heading goes to it, and a bad or unknown one is ignored', async () => {
+  let p = await view(file('# One\n\n## Café notes\n'), { url: '/view?space=alpha&path=docs%2Fnotes.md#caf%C3%A9-notes' });
+  assert.equal(p.$('#doc .md h2').scrolledIntoView, true);
+  assert.equal(p.$('#doc .md h1').scrolledIntoView, undefined);
+  p = await view(file('# One\n'), { url: '/view?space=alpha&path=docs%2Fnotes.md#%E0%A4%A' });
+  assert.equal(p.$('#doc .md h1').scrolledIntoView, undefined);
+  p = await view(file('# One\n'), { url: '/view?space=alpha&path=docs%2Fnotes.md#one', storage: { 'corral.view.mode': 'raw' } });
+  assert.equal(p.$('#doc pre.raw').textContent, '# One\n'); // Raw has no headings to go to
+});
+
+test('a link to another kind of file opens it on the Mac, with the saved app or the macOS default', async () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  const replies = [{ ok: true, kind: '.r', app: 'Positron', remembered: true }];
+  const p = await line('[script](../R/fit.R)', { routes: { 'POST /api/open': () => replies.shift() } });
+  const a = p.$('#doc .md a');
+  assert.deepEqual(attrs(a), { href: '#R/fit.R', title: 'Open R/fit.R on the Mac' });
+  const opens = () => p.api.called('POST', '/api/open').map((c) => c.body);
+  const click = async () => { const e = new p.window.MouseEvent('click', { bubbles: true, cancelable: true }); a.dispatchEvent(e); await settle(); return e; };
+
+  assert.equal((await click()).defaultPrevented, true);
+  assert.deepEqual(opens(), [{ space: 'alpha', path: 'R/fit.R' }]);
+  assert.equal(p.$('#state').textContent, 'Opened fit.R in Positron.');
+  mock.timers.tick(4000);
+  assert.equal(p.$('#state').textContent, '');
+
+  // With no app saved for the type, the macOS default is asked for.
+  replies.push({ needsChoice: true }, { ok: true, kind: '.r', app: 'its macOS default app', remembered: false });
+  await click();
+  assert.deepEqual(opens().slice(1), [{ space: 'alpha', path: 'R/fit.R' }, { space: 'alpha', path: 'R/fit.R', app: 'system' }]);
+  assert.equal(p.$('#state').textContent, 'Opened fit.R in its macOS default app.');
+
+  replies.push({ needsChoice: true }, { error: 'macOS has no default app for this file' });
+  await click();
+  assert.equal(p.$('#state').textContent, 'Could not open fit.R: macOS has no default app for this file');
+  p.api.routes['POST /api/open'] = new Error('offline');
+  await click();
+  assert.equal(p.$('#state').textContent, 'Could not open fit.R: Could not reach Corral.');
 });

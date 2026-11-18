@@ -325,6 +325,33 @@ test('GET /api/view sends a markdown file of a space, and nothing else', async (
   assert.deepEqual(srv.viewFile(path.join(root, 'gone.md')), { status: 404, error: 'could not read the file' }); // removed after it was found
 });
 
+test('GET /api/image sends an image of a space, sandboxed, and nothing else', async (t) => {
+  const root = realTmp();
+  fs.mkdirSync(path.join(root, 'img'));
+  fs.writeFileSync(path.join(root, 'img/plot.PNG'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  fs.writeFileSync(path.join(root, 'logo.svg'), '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+  fs.writeFileSync(path.join(root, 'notes.md'), '# Hi');
+  fs.writeFileSync(path.join(root, 'big.jpg'), Buffer.alloc(20 * 1024 * 1024 + 1));
+  const { req, herdr, srv } = await world(t);
+  herdr.snap = { workspaces: [{ workspace_id: 'w1', label: 'W' }], panes: [{ workspace_id: 'w1', cwd: root }] };
+  const png = await req('GET', '/api/image?space=w1&path=img%2Fplot.PNG');
+  assert.deepEqual([png.status, png.headers['content-type'], png.headers['cache-control'], png.headers['x-content-type-options']], [200, 'image/png', 'no-store', 'nosniff']);
+  assert.equal(png.headers['content-security-policy'], "sandbox; default-src 'none'; style-src 'unsafe-inline'");
+  assert.equal(png.text.slice(1, 4), 'PNG');
+  const svg = await req('GET', '/api/image?space=w1&path=logo.svg');
+  assert.deepEqual([svg.status, svg.headers['content-type']], [200, 'image/svg+xml']);
+  assert.match(svg.headers['content-security-policy'], /^sandbox;/);
+
+  const md = await req('GET', '/api/image?space=w1&path=notes.md');
+  assert.deepEqual([md.status, md.json], [415, { error: 'not an image Corral shows' }]);
+  const big = await req('GET', '/api/image?space=w1&path=big.jpg');
+  assert.deepEqual([big.status, big.json], [413, { error: 'This image is over 20 MB, too large to show' }]);
+  assert.equal((await req('GET', '/api/image?space=w1&path=..%2Flogo.svg')).status, 404);
+  assert.equal((await req('GET', '/api/image?space=w1&path=missing.png')).status, 404);
+  assert.equal((await req('GET', '/api/image')).status, 404);
+  assert.deepEqual(srv.imageFile(path.join(root, 'gone.png')), { status: 404, error: 'could not read the file' }); // removed after it was found
+});
+
 test('POST /api/open-with/forget drops a saved choice for a type', async (t) => {
   const { req, srv } = await world(t);
   srv.openWith.set('.md', 'finder');

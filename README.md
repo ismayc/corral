@@ -102,8 +102,13 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   above); **Raw** shows the text as written. Corral remembers which one you
   used last. The window reads the file again every 2 seconds, so a file that
   Claude Code is writing stays current. Tick "Always open .md files this way"
-  to make a click open the viewer. Images and links to other files are shown
-  as text, not followed.
+  to make a click open the viewer. Images show: one in the project by its
+  path (relative to the file, or to the project folder when it starts with
+  `/`), one on the web only over https. A link to another markdown file of
+  the project opens it in the same window, a `#heading` link jumps to that
+  heading, and a link to any other project file opens it on the Mac, in the
+  app saved for its type or the macOS default. HTML tags in a file, such as
+  `<img>`, are shown as text.
 - **Inactive projects.** Corral remembers every project folder it has seen. If
   a herdr space disappears (closed from its menu, or by closing its only
   pane), the project shows under "Inactive projects" with a Reopen button and
@@ -447,9 +452,13 @@ about who can reach it:
 - The file tree lists names only, and refuses any path whose real location
   (after resolving symlinks) is outside the project. The only file contents
   Corral sends to a page are those of a markdown file you open in the viewer:
-  a file inside the project, with a markdown extension, of 2 MB or less. The
-  viewer draws it as text and elements, never as HTML, so a file cannot run
-  script in the page.
+  a file inside the project, with a markdown extension, of 2 MB or less, and
+  the image files inside the project that it shows (20 MB or less). The
+  viewer draws markdown as text and elements, never as HTML, so a file cannot
+  run script in the page. Each image goes out with a sandbox policy, so an
+  SVG that holds script cannot run it, even opened at its own address. A link
+  in a file can go only to a web or mail address, a heading, or a file inside
+  the project.
 - Opening a file hands it to macOS `open`, either to show it in Finder or with
   an app that macOS lists for that file, checked again on every open. The
   page cannot name any other program.

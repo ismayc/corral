@@ -12,8 +12,12 @@ in `package.json`.
   written. The window reads the file again every 2 seconds, so it follows a
   file that is being written. Tick "Always open .md files this way" and a
   click on a markdown file opens the viewer. The renderer is the one the
-  phone's Chat uses, now in `public/markdown.js`; it shows images and links
-  to other files as text.
+  phone's Chat uses, now in `public/markdown.js`.
+- **Images and links work in the viewer.** An image in the project shows by
+  its path, and a web image shows over https. A link to another markdown file
+  opens it in the same window, a `#heading` link jumps to the heading, and a
+  link to any other project file opens it on the Mac. Images go out
+  sandboxed, so an SVG cannot run script. The phone's Chat is unchanged.
 
 - **A drag copy in a shell says it copied.** On the Mac page, tmux clears the
   highlight when you let go of a drag, so nothing showed that the text was on

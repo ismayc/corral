@@ -1729,10 +1729,28 @@ async function openFile(file, app) {
   return ok ? { status: 200, ok: true } : { status: 502, error: 'macOS could not open it' };
 }
 
+// Images a markdown file in the viewer shows. An SVG can hold script, which an <img> never runs but a page
+// opened at the image's own address would, so every image goes out sandboxed: no script, no origin.
+const VIEW_IMAGES = {
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
+  '.svg': 'image/svg+xml', '.avif': 'image/avif', '.bmp': 'image/bmp', '.ico': 'image/x-icon',
+};
+const VIEW_IMAGE_MAX = 20 * 1024 * 1024;
+const IMAGE_HEADERS = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'" };
+function imageFile(file) {
+  const type = VIEW_IMAGES[fileKind(file)];
+  if (!type) return { status: 415, error: 'not an image Corral shows' };
+  try {
+    if (fs.statSync(file).size > VIEW_IMAGE_MAX) return { status: 413, error: 'This image is over 20 MB, too large to show' };
+    return { status: 200, type, data: fs.readFileSync(file) };
+  } catch { return { status: 404, error: 'could not read the file' }; }
+}
+
 const appName = (p) => (p === 'system' ? 'its macOS default app' : p === 'finder' ? 'Finder' : p === 'corral' ? 'Corral' : path.basename(p, '.app'));
 
 // The viewer: a markdown file shown in a Corral page of its own (/view), as text or drawn. It is the one
-// place Corral sends a file's contents to the page, so it reads only markdown types, and only up to VIEW_MAX.
+// place Corral sends a file's contents to the page, so it reads only markdown types, and only up to VIEW_MAX
+// (and the images such a file shows, below).
 const VIEW_KINDS = new Set(['.md', '.markdown', '.qmd', '.rmd']);
 const VIEW_MAX = 2 * 1024 * 1024;
 const viewable = (file) => VIEW_KINDS.has(fileKind(file));
@@ -1862,6 +1880,14 @@ const server = http.createServer(async (req, res) => {
     if (!file) return send(res, 404, { error: 'no such file in this space' });
     const { status, ...r } = viewFile(file, Number(url.searchParams.get('since') || NaN));
     return send(res, status, r);
+  }
+  if (url.pathname === '/api/image' && req.method === 'GET') {
+    const file = await spaceFile(url.searchParams.get('space'), url.searchParams.get('path'));
+    if (!file) return send(res, 404, { error: 'no such file in this space' });
+    const r = imageFile(file);
+    if (r.error) return send(res, r.status, { error: r.error });
+    res.writeHead(200, { 'Content-Type': r.type, ...IMAGE_HEADERS });
+    return res.end(r.data);
   }
   // Opens a file. With no app, uses the saved default for its type, or answers needsChoice.
   if (url.pathname === '/api/open' && req.method === 'POST') {
@@ -2157,7 +2183,7 @@ module.exports = {
   vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, pruneUploads,
   locateFile, cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows, autoRestore,
   reopenProject, newRepos, hideRepo, identityRoots, herdrSnapshot, rootFor, listDir, loadOpenWith, saveOpenWith, fileKind, spaceFile,
-  appsFor, openChoices, openFile, appName, viewFile, send, serveFile, readJson,
+  appsFor, openChoices, openFile, appName, viewFile, imageFile, send, serveFile, readJson,
 };
 
 if (require.main === module) start();
