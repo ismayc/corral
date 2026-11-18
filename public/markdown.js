@@ -22,13 +22,16 @@
   // With local: [text](target) for any target (the text may be an image, as a badge is), and ![alt](target).
   const LOCAL = /\[((?:!\[[^\]]*\]\([^)\s]+(?: +"[^"]*")?\)|[^\]])+)\]\(([^)\s]+)(?: +"[^"]*")?\)|!\[([^\]]*)\]\(([^)\s]+)(?: +"[^"]*")?\)/;
   // Also with local, the HTML a README often holds: <img> and <a href> are drawn (through the same link and
-  // image answers), <br> breaks the line, and the tags that only wrap them (<p>, <div>, <center>, <picture>,
-  // <span>) are left out. Any other tag stays as text.
-  const HTML = /(<img\b[^>]*>)|<a\b([^>]*)>([\s\S]*?)<\/a>|(<br\s*\/?>)|(<\/?(?:p|div|center|picture|span)\b[^>]*>)/;
+  // image answers), <br> breaks the line, the text tags (<b>, <i>, <code>, <kbd>, <sub>, <sup>, <del>, and the like) are drawn as themselves, and the tags
+  // that only wrap things (<p>, <div>, <center>, <picture>, <span>) and comments are left out. <h1> to <h6>
+  // and <hr> are blocks, drawn by markdown(). Any other tag stays as text.
+  const HTML = /(<img\b[^>]*>)|<a\b([^>]*)>([\s\S]*?)<\/a>|(<br\s*\/?>)|(<\/?(?:p|div|center|picture|span)\b[^>]*>|<!--[\s\S]*?-->)|<(?<t>b|strong|i|em|code|kbd|sub|sup|del|s|u|mark|small)(?:\s[^>]*)?>([\s\S]*?)<\/\k<t>>/;
   const INLINE_LOCAL = new RegExp(`${LOCAL.source}|${HTML.source}|${INLINE.source}`, 'gi'); // LOCAL first, or a badge's image reads as a link's text
   const attr = (tag, name) => { const m = tag.match(new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i')); return m ? m[1] ?? m[2] ?? m[3] : null; };
   const size = (v) => (/^\d+(px|%)?$/.test(v || '') ? v.replace('px', '') : null);
+  const ALIGN_CENTER = /\salign\s*=\s*["']?center/i;
   const CENTERED = /^\s*<(?:(?:p|div)\b[^>]*\salign\s*=\s*["']?center|center\b)/i;
+  const HTML_HEADING = /^ *<h([1-6])\b([^>]*)>/i;
   function htmlPiece(m, local) {
     if (m[5]) {
       const src = attr(m[5], 'src');
@@ -41,18 +44,22 @@
       const inside = mdInline(m[7], local);
       return to ? [h('a', to, inside)] : inside; // a link Corral will not follow keeps its text
     }
+    if (m[10]) {
+      const tag = m[10].toLowerCase();
+      return [h(tag, {}, tag === 'code' || tag === 'kbd' ? m[11] : mdInline(m[11], local))]; // code is shown as written
+    }
     return m[8] ? [h('br')] : [];
   }
   function mdInline(s, local) {
     const out = [];
     let at = 0;
-    const o = local ? 9 : 0; // where INLINE's groups start
+    const o = local ? 11 : 0; // where INLINE's groups start
     for (const m of s.matchAll(local ? INLINE_LOCAL : INLINE)) {
       if (m.index > at) out.push(s.slice(at, m.index));
       if (o && (m[2] || m[4])) {
         const to = m[2] ? local.link(m[2]) : local.image(m[4]);
         out.push(!to ? m[0] : m[2] ? h('a', to, mdInline(m[1], local)) : h('img', { src: to, alt: m[3], loading: 'lazy' }));
-      } else if (o && (m[5] || m[7] !== undefined || m[8] || m[9])) out.push(...htmlPiece(m, local));
+      } else if (o && (m[5] || m[7] !== undefined || m[8] || m[9] || m[10])) out.push(...htmlPiece(m, local));
       else if (m[o + 1]) out.push(h('code', BANG.test(m[o + 1]) ? { class: 'bang' } : {}, m[o + 1]));
       else if (m[o + 2]) out.push(h('strong', {}, mdInline(m[o + 2], local)));
       else if (m[o + 3]) out.push(h('a', { href: m[o + 4], target: '_blank', rel: 'noopener', onclick: md.onLink }, mdInline(m[o + 3], local)));
@@ -64,6 +71,12 @@
     return out;
   }
 
+  // The line after the one that closes the <hN> opened on line i, or 0 when a blank line or the end comes first.
+  function htmlHeading(lines, i, n) {
+    for (let j = i; j < lines.length && lines[j].trim(); j++) if (lines[j].toLowerCase().includes(`</h${n}>`)) return j + 1;
+    return 0;
+  }
+
   const LIST_ITEM = /^( *)([-*+]|\d+[.)]) +(.*)$/;
   const TABLE_RULE = /^ *\|? *:?-+:? *(\| *:?-+:? *)*\|? *$/;
   const cells = (line) => line.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
@@ -73,7 +86,9 @@
     let para = [];
     const flush = () => {
       const text = para.join('\n');
-      if (para.length) out.push(h('p', local && CENTERED.test(text) ? { class: 'center' } : {}, mdInline(text, local)));
+      const kids = mdInline(text, local);
+      // A paragraph that held only a comment or wrapping tags draws nothing.
+      if (kids.some((k) => typeof k !== 'string' || k.trim())) out.push(h('p', local && CENTERED.test(text) ? { class: 'center' } : {}, kids));
       para = [];
     };
     for (let i = 0; i < lines.length;) {
@@ -90,7 +105,14 @@
         flush();
         out.push(h(`h${m[1].length}`, {}, mdInline(m[2], local)));
         i++;
-      } else if (/^ *([-*_])( *\1){2,} *$/.test(line)) {
+      } else if (local && (m = line.match(HTML_HEADING)) && htmlHeading(lines, i, m[1])) {
+        // <h2 align="center">...</h2>, on one line or several (a logo above a title, say).
+        flush();
+        const end = htmlHeading(lines, i, m[1]);
+        const inside = lines.slice(i, end).join('\n').replace(HTML_HEADING, '').replace(new RegExp(`</h${m[1]}>[^]*$`, 'i'), '');
+        out.push(h(`h${m[1]}`, ALIGN_CENTER.test(m[2]) ? { class: 'center' } : {}, mdInline(inside.trim(), local)));
+        i = end;
+      } else if (/^ *([-*_])( *\1){2,} *$/.test(line) || (local && /^ *<hr\b[^>]*> *$/i.test(line))) {
         flush();
         out.push(h('hr'));
         i++;

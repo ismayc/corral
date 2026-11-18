@@ -109,8 +109,11 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   heading, and a link to any other project file opens it on the Mac, in the
   app saved for its type or the macOS default. The HTML that a README often
   holds also works: `<img>` (with its width and height), `<a href>`, `<br>`,
-  and a block centered with `align="center"`. Any other HTML tag is shown as
-  text.
+  `<hr>`, headings (`<h1>` to `<h6>`), text tags (`<b>`, `<strong>`, `<i>`,
+  `<em>`, `<code>`, `<kbd>`, `<sub>`, `<sup>`, `<del>`, `<s>`, `<u>`,
+  `<mark>`, and `<small>`), and a block or heading centered with
+  `align="center"`. Comments are left out. Any other HTML tag, such as a
+  table or `<details>`, is shown as text.
 - **Inactive projects.** Corral remembers every project folder it has seen. If
   a herdr space disappears (closed from its menu, or by closing its only
   pane), the project shows under "Inactive projects" with a Reopen button and

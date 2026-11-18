@@ -251,7 +251,8 @@ test('a centered block, as a README has, is drawn centered without its wrapping 
   assert.equal(first.querySelector('a').getAttribute('href'), 'https://example.com');
   assert.equal(first.querySelector('a img').getAttribute('src'), '/api/image?space=alpha&path=docs%2Flogo.png');
   assert.equal(first.querySelectorAll('br').length, 1);
-  assert.equal(first.textContent.trim(), 'The <b>caption</b>'); // a tag Corral does not draw stays as text
+  assert.equal(first.textContent.trim(), 'The caption');
+  assert.equal(first.querySelector('b').textContent, 'caption');
   assert.equal(second.querySelector('img').getAttribute('src'), '/api/image?space=alpha&path=docs%2Fa.png');
   assert.deepEqual([third.textContent, fourth.textContent], ['text', 'left']);
 });
@@ -267,4 +268,37 @@ test('HTML inside code is left as written', async () => {
   assert.equal(p.$('#doc .md img'), null);
   assert.equal(p.$('#doc .md p code').textContent, '<img src="a.png">');
   assert.equal(p.$('#doc .md pre code').textContent, '<p align="center"><img src="a.png"></p>');
+});
+
+test('HTML text tags are drawn as themselves, and code is shown as written', async () => {
+  const p = await line('<b>bold</b> <STRONG>strong</STRONG> <i>it</i> <em class="x">em</em> <kbd>Ctrl</kbd>+<kbd>C</kbd> H<sub>2</sub>O x<sup>2</sup> <del>old</del> <s>gone</s> <u>under</u> <mark>hi</mark> <small>fine</small> <code>a **b** <i>c</i></code> <b>with **md** and `code`</b>');
+  const drawn = (tag) => p.$$(`#doc .md p > ${tag}`).map((x) => x.textContent);
+  assert.deepEqual(drawn('b'), ['bold', 'with md and code']);
+  assert.deepEqual([drawn('strong'), drawn('i'), drawn('em'), drawn('kbd')], [['strong'], ['it'], ['em'], ['Ctrl', 'C']]);
+  assert.deepEqual([drawn('sub'), drawn('sup'), drawn('del'), drawn('s'), drawn('u'), drawn('mark'), drawn('small')], [['2'], ['2'], ['old'], ['gone'], ['under'], ['hi'], ['fine']]);
+  assert.equal(p.$('#doc .md p > code').textContent, 'a **b** <i>c</i>');
+  assert.equal(p.$$('#doc .md p > b')[1].querySelector('strong').textContent, 'md');
+  assert.equal(p.$('#doc .md p > em').className, '');
+});
+
+test('a tag Corral does not draw, or one left open, stays as text', async () => {
+  const p = await line('<blink>no</blink> <b>open <script>alert(1)</script> <font color="red">x</font>');
+  assert.equal(p.$('#doc .md p').children.length, 0);
+  assert.equal(p.$('#doc .md p').textContent, '<blink>no</blink> <b>open <script>alert(1)</script> <font color="red">x</font>');
+});
+
+test('HTML headings are headings, centered when they say so, with ids, on one line or several', async () => {
+  const p = await view(file('<h1 align="center">\n  <img src="logo.png" width="80"><br>\n  My <i>Project</i>\n</h1>\n\n<h2>Plain two</h2>\ntext after\n\n<H3 ALIGN=center>Three</H3> trailing\n\n<h4>never closed\n\nnext para\n\n<h5>closed too late\n\n</h5>\n'));
+  const heads = p.$$('#doc .md :is(h1,h2,h3,h4,h5)');
+  assert.deepEqual(heads.map((x) => [x.tagName, x.className, x.textContent.trim(), x.id]), [
+    ['H1', 'center', 'My Project', 'my-project'], ['H2', '', 'Plain two', 'plain-two'], ['H3', 'center', 'Three', 'three']]);
+  assert.equal(heads[0].querySelector('img').getAttribute('width'), '80');
+  assert.equal(heads[0].querySelector('i').textContent, 'Project');
+  assert.deepEqual(p.$$('#doc .md p').map((x) => x.textContent), ['text after', '<h4>never closed', 'next para', '<h5>closed too late', '</h5>']);
+});
+
+test('an HTML rule is a rule, and comments draw nothing', async () => {
+  const p = await view(file('one <!-- hidden --> two\n\n<!-- badges: start -->\n\n<hr>\n\n<HR />\n\n<p></p>\n\nlast\n'));
+  assert.equal(p.$$('#doc .md hr').length, 2);
+  assert.deepEqual(p.$$('#doc .md p').map((x) => x.textContent), ['one  two', 'last']);
 });

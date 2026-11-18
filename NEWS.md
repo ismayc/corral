@@ -21,6 +21,9 @@ in `package.json`.
 - **HTML images work in the viewer.** An `<img>` tag shows like a markdown
   image, at its width and height, and `<a href>`, `<br>`, and a block
   centered with `align="center"` are drawn too, on the Mac and the phone.
+- **More HTML works in the viewer.** Headings (`<h1>` to `<h6>`, centered
+  when they say so), `<hr>`, and text tags such as `<b>`, `<i>`, `<code>`,
+  `<kbd>`, `<sub>`, and `<sup>` are drawn, and comments are left out.
 - **The viewer is on the phone page too.** A window's ⋯ menu has **Markdown
   files**, a list of the markdown files of its project. Tap one to read it,
   Rendered or Raw, with images; it follows the file as it changes, and a link
