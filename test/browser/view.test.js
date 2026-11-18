@@ -226,3 +226,45 @@ test('a link to another kind of file opens it on the Mac, with the saved app or 
   await click();
   assert.equal(p.$('#state').textContent, 'Could not open fit.R: Could not reach Corral.');
 });
+
+// ---- HTML in a file: <img>, <a>, <br>, and the tags that wrap them ----
+
+test('an HTML img tag is drawn like a markdown image, with its size, alt, and title', async () => {
+  const p = await line('<img src="img/plot.png" alt="A plot" width="200px" height=100 title=\'Fig 1\'> <IMG SRC=https://example.com/b.svg width="50%" /> <img src="x.png" width="big" height="1e3">');
+  assert.deepEqual(p.$$('#doc .md img').map(attrs), [
+    { src: '/api/image?space=alpha&path=docs%2Fimg%2Fplot.png', alt: 'A plot', title: 'Fig 1', width: '200', height: '100', loading: 'lazy' },
+    { src: 'https://example.com/b.svg', alt: '', width: '50%', loading: 'lazy' },
+    { src: '/api/image?space=alpha&path=docs%2Fx.png', alt: '', loading: 'lazy' },
+  ]);
+});
+
+test('an img tag Corral will not load, or one with no src, stays as text', async () => {
+  const p = await line('<img src="http://example.com/a.png"> <img alt="none"> <img data-src="lazy.png">');
+  assert.equal(p.$('#doc .md img'), null);
+  assert.equal(p.$('#doc .md p').textContent, '<img src="http://example.com/a.png"> <img alt="none"> <img data-src="lazy.png">');
+});
+
+test('a centered block, as a README has, is drawn centered without its wrapping tags', async () => {
+  const p = await view(file('<p align="center">\n  <a href="https://example.com"><img src="logo.png" width="120"></a><br/>\n  <span>The <b>caption</b></span>\n</p>\n\n<center><img src="a.png"></center>\n\n<div align=\'center\'>text</div>\n\n<div align="left">left</div>\n'));
+  const [first, second, third, fourth] = p.$$('#doc .md p');
+  assert.deepEqual([first, second, third, fourth].map((x) => x.className), ['center', 'center', 'center', '']);
+  assert.equal(first.querySelector('a').getAttribute('href'), 'https://example.com');
+  assert.equal(first.querySelector('a img').getAttribute('src'), '/api/image?space=alpha&path=docs%2Flogo.png');
+  assert.equal(first.querySelectorAll('br').length, 1);
+  assert.equal(first.textContent.trim(), 'The <b>caption</b>'); // a tag Corral does not draw stays as text
+  assert.equal(second.querySelector('img').getAttribute('src'), '/api/image?space=alpha&path=docs%2Fa.png');
+  assert.deepEqual([third.textContent, fourth.textContent], ['text', 'left']);
+});
+
+test('an HTML link goes where a markdown link does, and one Corral will not follow keeps only its text', async () => {
+  const p = await line('<a href="other.md">next</a> <a href="javascript:alert(1)">bad</a> <a name="top">anchor</a> <a>bare</a> <abbr>x</abbr>');
+  assert.deepEqual(p.$$('#doc .md a').map(attrs), [{ href: '/view?space=alpha&path=docs%2Fother.md' }]);
+  assert.equal(p.$('#doc .md p').textContent, 'next bad anchor bare <abbr>x</abbr>');
+});
+
+test('HTML inside code is left as written', async () => {
+  const p = await view(file('Use `<img src="a.png">` here.\n\n```html\n<p align="center"><img src="a.png"></p>\n```\n'));
+  assert.equal(p.$('#doc .md img'), null);
+  assert.equal(p.$('#doc .md p code').textContent, '<img src="a.png">');
+  assert.equal(p.$('#doc .md pre code').textContent, '<p align="center"><img src="a.png"></p>');
+});

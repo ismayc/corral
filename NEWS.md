@@ -18,6 +18,9 @@ in `package.json`.
   opens it in the same window, a `#heading` link jumps to the heading, and a
   link to any other project file opens it on the Mac. Images go out
   sandboxed, so an SVG cannot run script. The phone's Chat is unchanged.
+- **HTML images work in the viewer.** An `<img>` tag shows like a markdown
+  image, at its width and height, and `<a href>`, `<br>`, and a block
+  centered with `align="center"` are drawn too, on the Mac and the phone.
 - **The viewer is on the phone page too.** A window's ⋯ menu has **Markdown
   files**, a list of the markdown files of its project. Tap one to read it,
   Rendered or Raw, with images; it follows the file as it changes, and a link

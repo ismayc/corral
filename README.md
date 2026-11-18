@@ -107,8 +107,10 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   `/`), one on the web only over https. A link to another markdown file of
   the project opens it in the same window, a `#heading` link jumps to that
   heading, and a link to any other project file opens it on the Mac, in the
-  app saved for its type or the macOS default. HTML tags in a file, such as
-  `<img>`, are shown as text.
+  app saved for its type or the macOS default. The HTML that a README often
+  holds also works: `<img>` (with its width and height), `<a href>`, `<br>`,
+  and a block centered with `align="center"`. Any other HTML tag is shown as
+  text.
 - **Inactive projects.** Corral remembers every project folder it has seen. If
   a herdr space disappears (closed from its menu, or by closing its only
   pane), the project shows under "Inactive projects" with a Reopen button and

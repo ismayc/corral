@@ -21,17 +21,39 @@
   const INLINE = /`([^`]+)`|\*\*(.+?)\*\*|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(?<![\w*])\*(?![\s*])(.+?)(?<!\s)\*(?!\w)|(?<!\w)_(?![\s_])(.+?)(?<!\s)_(?!\w)|(https?:\/\/[^\s<>()]*[^\s<>().,;:!?'"])/g;
   // With local: [text](target) for any target (the text may be an image, as a badge is), and ![alt](target).
   const LOCAL = /\[((?:!\[[^\]]*\]\([^)\s]+(?: +"[^"]*")?\)|[^\]])+)\]\(([^)\s]+)(?: +"[^"]*")?\)|!\[([^\]]*)\]\(([^)\s]+)(?: +"[^"]*")?\)/;
-  const INLINE_LOCAL = new RegExp(`${LOCAL.source}|${INLINE.source}`, 'g'); // LOCAL first, or a badge's image reads as a link's text
+  // Also with local, the HTML a README often holds: <img> and <a href> are drawn (through the same link and
+  // image answers), <br> breaks the line, and the tags that only wrap them (<p>, <div>, <center>, <picture>,
+  // <span>) are left out. Any other tag stays as text.
+  const HTML = /(<img\b[^>]*>)|<a\b([^>]*)>([\s\S]*?)<\/a>|(<br\s*\/?>)|(<\/?(?:p|div|center|picture|span)\b[^>]*>)/;
+  const INLINE_LOCAL = new RegExp(`${LOCAL.source}|${HTML.source}|${INLINE.source}`, 'gi'); // LOCAL first, or a badge's image reads as a link's text
+  const attr = (tag, name) => { const m = tag.match(new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i')); return m ? m[1] ?? m[2] ?? m[3] : null; };
+  const size = (v) => (/^\d+(px|%)?$/.test(v || '') ? v.replace('px', '') : null);
+  const CENTERED = /^\s*<(?:(?:p|div)\b[^>]*\salign\s*=\s*["']?center|center\b)/i;
+  function htmlPiece(m, local) {
+    if (m[5]) {
+      const src = attr(m[5], 'src');
+      const to = src && local.image(src);
+      return to ? [h('img', { src: to, alt: attr(m[5], 'alt') || '', title: attr(m[5], 'title'), width: size(attr(m[5], 'width')), height: size(attr(m[5], 'height')), loading: 'lazy' })] : [m[0]];
+    }
+    if (m[7] !== undefined) {
+      const href = attr(m[6], 'href');
+      const to = href && local.link(href);
+      const inside = mdInline(m[7], local);
+      return to ? [h('a', to, inside)] : inside; // a link Corral will not follow keeps its text
+    }
+    return m[8] ? [h('br')] : [];
+  }
   function mdInline(s, local) {
     const out = [];
     let at = 0;
-    const o = local ? 4 : 0; // where INLINE's groups start
+    const o = local ? 9 : 0; // where INLINE's groups start
     for (const m of s.matchAll(local ? INLINE_LOCAL : INLINE)) {
       if (m.index > at) out.push(s.slice(at, m.index));
       if (o && (m[2] || m[4])) {
         const to = m[2] ? local.link(m[2]) : local.image(m[4]);
         out.push(!to ? m[0] : m[2] ? h('a', to, mdInline(m[1], local)) : h('img', { src: to, alt: m[3], loading: 'lazy' }));
-      } else if (m[o + 1]) out.push(h('code', BANG.test(m[o + 1]) ? { class: 'bang' } : {}, m[o + 1]));
+      } else if (o && (m[5] || m[7] !== undefined || m[8] || m[9])) out.push(...htmlPiece(m, local));
+      else if (m[o + 1]) out.push(h('code', BANG.test(m[o + 1]) ? { class: 'bang' } : {}, m[o + 1]));
       else if (m[o + 2]) out.push(h('strong', {}, mdInline(m[o + 2], local)));
       else if (m[o + 3]) out.push(h('a', { href: m[o + 4], target: '_blank', rel: 'noopener', onclick: md.onLink }, mdInline(m[o + 3], local)));
       else if (m[o + 7]) out.push(h('a', { href: m[o + 7], target: '_blank', rel: 'noopener', onclick: md.onLink }, m[o + 7]));
@@ -49,7 +71,11 @@
     const lines = text.split('\n');
     const out = [];
     let para = [];
-    const flush = () => { if (para.length) out.push(h('p', {}, mdInline(para.join('\n'), local))); para = []; };
+    const flush = () => {
+      const text = para.join('\n');
+      if (para.length) out.push(h('p', local && CENTERED.test(text) ? { class: 'center' } : {}, mdInline(text, local)));
+      para = [];
+    };
     for (let i = 0; i < lines.length;) {
       const line = lines[i];
       let m;
