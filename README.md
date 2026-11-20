@@ -128,8 +128,11 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   button hides or shows the file panel, and Corral keeps that choice for each
   space. Drag the bar between the terminal and the tabs to resize them. The
   open tabs come back when the pop-out opens again. While popped out, the
-  window waits in the Mac page's bottom bar, and it returns to a zone when
-  you close the pop-out.
+  window waits in the Mac page's bottom bar. **Send back** in the pop-out's
+  top bar closes the pop-out and returns the window to a zone, even if the
+  Mac page was reloaded meanwhile. Closing the pop-out any other way returns
+  it too, unless the Mac page was reloaded; then click its chip in the bottom
+  bar.
 - **Inactive projects.** Corral remembers every project folder it has seen. If
   a herdr space disappears (closed from its menu, or by closing its only
   pane), the project shows under "Inactive projects" with a Reopen button and

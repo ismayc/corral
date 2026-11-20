@@ -66,6 +66,16 @@ class FakeWebSocket {
 }
 FakeWebSocket.instances = [];
 
+// Node's own BroadcastChannel would keep the test process alive; this one records posts, and a test calls
+// emit(data) to deliver a message from another page.
+class FakeBroadcastChannel {
+  constructor(name) { this.name = name; this.posted = []; FakeBroadcastChannel.instances.push(this); }
+  postMessage(data) { this.posted.push(data); }
+  emit(data) { this.onmessage?.({ data }); }
+  close() {}
+}
+FakeBroadcastChannel.instances = [];
+
 // The fake server: routes keyed "METHOD /path" (no query) -> value, or (req) => value. A value is a body
 // (sent as JSON, status 200), or {status, body} via api.reply(), or an Error to make fetch reject.
 function fakeApi(routes = {}) {
@@ -167,11 +177,12 @@ function loadPage(page, opts = {}) {
   const observers = [];
   class ResizeObserver { constructor(cb) { this.cb = cb; this.els = []; observers.push(this); } observe(el) { this.els.push(el); } unobserve() {} disconnect() {} fire() { this.cb([]); } }
   FakeTerminal.instances = [];
-  FakeWebSocket.instances = [];
+  FakeWebSocket.instances = []; FakeBroadcastChannel.instances = [];
 
   const extras = {
     fetch: api.fetch,
     WebSocket: FakeWebSocket,
+    BroadcastChannel: FakeBroadcastChannel,
     Terminal: FakeTerminal,
     FitAddon: { FitAddon: FakeFit },
     WebLinksAddon: { WebLinksAddon: FakeLinks },
@@ -218,7 +229,7 @@ function loadPage(page, opts = {}) {
     require(shared);
   }
   delete require.cache[file];
-  current = { dom, window, api, saved, timers, file, notifications, sw, clipboard, observers, Notification, terms: FakeTerminal.instances, sockets: FakeWebSocket.instances };
+  current = { dom, window, api, saved, timers, file, notifications, sw, clipboard, observers, Notification, terms: FakeTerminal.instances, sockets: FakeWebSocket.instances, channels: FakeBroadcastChannel.instances };
   current.exports = require(file);
   return current;
 }

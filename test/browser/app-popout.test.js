@@ -65,6 +65,27 @@ test('a pop-out closed after its window came back by hand, or after the window c
   assert.deepEqual([p.visible(), p.chips()], [['alpha'], []]);
 });
 
+test('Send back in a pop-out brings the window back, even after this page reloaded and lost the pop-out', async () => {
+  const p = await twoWindows();
+  p.slotOf('alpha').querySelector('.title .pop').click();
+  const channel = p.channels.find((c) => c.name === 'corral-pop');
+  channel.emit({ sendBack: 'n-alpha' });
+  assert.deepEqual([p.visible().sort(), p.chips()], [['alpha', 'beta'], []]);
+  p.opened[0].w.closed = true;
+  p.tick(1500); // the pop-out closing afterwards changes nothing
+  assert.deepEqual(p.chips(), []);
+
+  // A page that never saw the pop-out (reloaded since) still brings it back from the bottom bar.
+  p.slotOf('beta').querySelector('.title .min').click();
+  channel.emit({ sendBack: 'n-beta' });
+  assert.deepEqual(p.chips(), []);
+  // A window not in the bottom bar, one not on this page, or a message of another kind changes nothing.
+  channel.emit({ sendBack: 'n-alpha' });
+  channel.emit({ sendBack: 'nope' });
+  channel.emit(null);
+  assert.deepEqual([p.visible().sort(), p.chips()], [['alpha', 'beta'], []]);
+});
+
 test('a blocked pop-up says so and leaves the window in place', async () => {
   const p = await twoWindows();
   p.blocked = true;

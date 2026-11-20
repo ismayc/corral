@@ -303,6 +303,16 @@ function connect() {
   };
 }
 
+// Send back: the Mac page puts the window back into a zone (app.js listens on this channel), and this
+// browser window closes. A browser window the page did not open itself may refuse to close; the note says
+// what to do then.
+const popChannel = new BroadcastChannel('corral-pop');
+$('#sendback').onclick = () => {
+  popChannel.postMessage({ sendBack: id });
+  $('#state').textContent = 'Sent back to Corral. Close this window.';
+  window.close();
+};
+
 async function start() {
   const r = await getJson('/api/sessions').catch(() => null);
   info = r?.sessions.find((s) => s.id === id && !s.exited) || null;
@@ -310,6 +320,7 @@ async function start() {
     $('#label').textContent = 'Corral';
     $('#files').hidden = true;
     $('#filesbtn').hidden = true;
+    $('#sendback').hidden = true;
     $('#term').append(h('p', { class: 'note' }, r ? 'This window is not open any more. Open it again from Corral.' : 'Could not reach Corral.'));
     return;
   }

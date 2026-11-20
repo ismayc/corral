@@ -452,8 +452,20 @@ test('a dropped connection reconnects while the window is open, and stops when i
   assert.equal(p.sockets.length, 3);
 });
 
+test('Send back tells the Mac page and closes the pop-out', async () => {
+  const p = await pop();
+  let closed = 0;
+  p.window.close = () => { closed++; };
+  globalThis.close = p.window.close;
+  p.$('#sendback').click();
+  assert.deepEqual(p.channels.find((c) => c.name === 'corral-pop').posted, [{ sendBack: 'w1' }]);
+  assert.equal(closed, 1);
+  assert.equal(p.$('#state').textContent, 'Sent back to Corral. Close this window.');
+});
+
 test('a window that is not open, or a Mac that does not answer, says so instead', async () => {
   let p = await pop({ routes: { 'GET /api/sessions': { sessions: [win({ id: 'other' })] } } });
+  assert.equal(p.$('#sendback').hidden, true);
   assert.equal(p.$('#term .note').textContent, 'This window is not open any more. Open it again from Corral.');
   assert.equal(p.$('#files').hidden, true);
   assert.equal(p.$('#filesbtn').hidden, true);

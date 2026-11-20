@@ -11,8 +11,9 @@ in `package.json`.
   (markdown drawn or raw, images, PDFs, and any other text file as text).
   The **Files** button hides the file panel, and the choice is kept for each
   space. The tabs and the split between terminal and tabs are kept too. The
-  window waits in the bottom bar meanwhile and comes back when the pop-out
-  closes. New routes: `/pop`, `GET /api/text`, and `GET /api/pdf`; the file
+  window waits in the bottom bar meanwhile. **Send back** in the pop-out
+  closes it and returns the window to a zone, even after the Mac page was
+  reloaded; closing the pop-out any other way returns it too. New routes: `/pop`, `GET /api/text`, and `GET /api/pdf`; the file
   tree and the open routes also take `window=`.
 - **View a markdown file in Corral.** On the Mac page, the app list for a
   markdown file (`.md`, `.markdown`, `.qmd`, or `.Rmd`) now starts with

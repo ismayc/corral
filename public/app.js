@@ -439,6 +439,14 @@ function checkPopped() {
   }
   if (!popped.size) { clearInterval(popTimer); popTimer = null; }
 }
+// A pop-out's Send back button says so on this channel. That reaches this page even when it was reloaded
+// after the window popped out and so lost track of the pop-out's browser window.
+const popChannel = new BroadcastChannel('corral-pop');
+popChannel.onmessage = (e) => {
+  const id = e.data?.sendBack;
+  popped.delete(id);
+  if (open.has(id) && minimized.has(id)) restore(id);
+};
 
 // The toast for a drag copy: a short single line is shown whole, anything longer by its size.
 function copiedNote(text) {
