@@ -141,6 +141,12 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   disk**. With no unsaved edits, the text follows the file as it changes.
   Unsaved edits mark the tab with •, and closing that tab takes a second
   click. Corral edits only markdown files that already exist in the project.
+- **A banner when Corral is updated.** An open page keeps running the
+  scripts it loaded. When Corral's page files change (a pull or an edit),
+  the Mac page, a pop-out, and the viewer show "Corral was updated" with a
+  **Reload** button, within a minute or as soon as the page is back in view.
+  The × hides the banner until the next update. A change to `server.js`
+  needs a server restart instead; the banner does not cover that.
 - **Light or dark.** The **Theme** button on the Mac page, the pop-out, and
   the markdown viewer moves between **Auto** (follow the macOS appearance),
   **Light**, and **Dark**. The choice is kept in the browser and reaches every

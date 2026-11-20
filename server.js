@@ -1840,6 +1840,19 @@ function pdfFile(file) {
   } catch { return { status: 404, error: 'could not read the file' }; }
 }
 
+// A fingerprint of the page files (public/, top level): each file's name, size, and modified time. A page
+// records it when it loads and shows a "Reload" banner when it changes, since a page keeps running the
+// scripts it loaded until it is reloaded (public/fresh.js).
+function pageVersion(dir = PUBLIC) {
+  const h = crypto.createHash('sha256');
+  for (const name of fs.readdirSync(dir).sort()) {
+    let st;
+    try { st = fs.statSync(path.join(dir, name)); } catch { continue; } // gone since the listing, or a dangling link
+    if (st.isFile()) h.update(`${name}:${st.size}:${st.mtimeMs}\n`);
+  }
+  return h.digest('hex').slice(0, 16);
+}
+
 function send(res, code, body, type = 'application/json; charset=utf-8') {
   res.writeHead(code, { 'Content-Type': type, 'Cache-Control': 'no-store' });
   res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
@@ -2052,6 +2065,7 @@ const server = http.createServer(async (req, res) => {
     const found = await locateFile(q.get('name'), Number(q.get('size')), Number(q.get('modified')));
     return found ? send(res, 200, { path: found }) : send(res, 404, { error: 'not found on this Mac' });
   }
+  if (url.pathname === '/api/version' && req.method === 'GET') return send(res, 200, { version: pageVersion() });
   if (url.pathname === '/api/hub' && req.method === 'GET') return send(res, 200, { url: urlFile(HUB_FILE), watch: urlFile(WATCH_FILE) });
   if (url.pathname === '/api/remote' && req.method === 'GET') {
     return send(res, 200, { url: tailnet?.served ? tailnet.url : null, machine: tailnet?.machine || null, remote: Boolean(access.remote) });
@@ -2284,7 +2298,7 @@ module.exports = {
   vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, pruneUploads,
   locateFile, cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows, autoRestore,
   reopenProject, newRepos, hideRepo, identityRoots, herdrSnapshot, rootFor, listDir, loadOpenWith, saveOpenWith, fileKind, bodyFile,
-  appsFor, openChoices, openFile, appName, viewFile, imageFile, textFile, pdfFile, saveFile, markdownFiles, send, serveFile, readJson,
+  appsFor, openChoices, openFile, appName, viewFile, imageFile, textFile, pdfFile, saveFile, pageVersion, markdownFiles, send, serveFile, readJson,
 };
 
 if (require.main === module) start();

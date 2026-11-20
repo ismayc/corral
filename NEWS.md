@@ -5,6 +5,11 @@ in `package.json`.
 
 ## Development version
 
+- **Reload banner.** The Mac page, the pop-out, and the viewer say "Corral
+  was updated" with a **Reload** button when the page files change, so an
+  open page does not keep running old code. New: `GET /api/version` (a
+  fingerprint of `public/`) and `public/fresh.js`.
+
 - **Edit markdown files in Corral.** The viewer and a pop-out's markdown
   tabs have an **Edit** mode with **Save** (Cmd-S). A save is refused when
   the file changed on disk after editing started, with **Save anyway** and

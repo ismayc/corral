@@ -604,6 +604,23 @@ test('POST /api/save writes a markdown file of the project, and refuses a stale 
   assert.deepEqual(srv.saveFile(path.join(root, 'gone.md'), { text: 'x', force: true }), { status: 500, error: 'could not save the file' });
 });
 
+test('GET /api/version fingerprints the page files and changes when one changes', async (t) => {
+  const { req, srv } = await world(t);
+  const v = (await req('GET', '/api/version')).json.version;
+  assert.match(v, /^[0-9a-f]{16}$/);
+  assert.equal((await req('GET', '/api/version')).json.version, v);
+
+  const dir = realTmp();
+  fs.writeFileSync(path.join(dir, 'a.js'), 'one');
+  fs.mkdirSync(path.join(dir, 'fonts')); // folders are left out
+  fs.symlinkSync(path.join(dir, 'gone'), path.join(dir, 'dangling.js')); // so is a link to nothing
+  const before = srv.pageVersion(dir);
+  fs.writeFileSync(path.join(dir, 'fonts/x.woff2'), 'x');
+  assert.equal(srv.pageVersion(dir), before);
+  fs.writeFileSync(path.join(dir, 'a.js'), 'one, changed');
+  assert.notEqual(srv.pageVersion(dir), before);
+});
+
 test('static files are served with their types, vendor files from node_modules, and /, /m, /view, and /pop map to the pages', async (t) => {
   const { req } = await world(t);
   const index = await req('GET', '/');

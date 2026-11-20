@@ -10,6 +10,12 @@
   --sel:#342b55; --ask-bg:#16301f; --ask-text:#a6e9c4; --deny-text:#ffb4ad; --you-bg:#1b1726;
   --shadow:rgba(8,6,14,.6);
 }
+/* The "Corral was updated" banner (fresh.js), on every Mac page. */
+.corral-update { position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:50; display:flex; align-items:center; gap:10px;
+                 max-width:calc(100vw - 32px); padding:8px 8px 8px 14px; background:var(--fence); color:#fff; border-radius:10px;
+                 font:13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; box-shadow:0 8px 24px var(--shadow); }
+.corral-update button { font:inherit; font-weight:600; color:var(--fence); background:#fff; border:0; border-radius:6px; padding:3px 12px; cursor:pointer; }
+.corral-update button.x { color:#fff; background:transparent; font-size:16px; padding:0 6px; }
 :root[data-theme=light] {
   color-scheme:light;
   --ground:#f4f2f9; --panel:#ffffff; --raise:#ebe7f4; --rail:#d6d0e4; --text:#1f1b29; --muted:#665e7a;
