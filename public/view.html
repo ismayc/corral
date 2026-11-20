@@ -36,6 +36,15 @@
   #theme { flex:none; font:inherit; font-size:13px; color:var(--muted); background:transparent; border:1px solid var(--rail);
            border-radius:7px; padding:4px 10px; cursor:pointer; }
   #theme:hover { color:var(--text); }
+  /* Edit mode (editor.js) */
+  .editor { display:flex; flex-direction:column; gap:10px; }
+  .ebar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .ebar button { font:inherit; font-size:13px; color:var(--text); background:var(--panel); border:1px solid var(--rail); border-radius:7px; padding:4px 12px; cursor:pointer; }
+  .ebar button:hover { border-color:var(--fence); }
+  .ebar .esave { background:var(--fence); border-color:var(--fence); color:#fff; }
+  .estate { color:var(--muted); font-size:12px; }
+  textarea.edit { width:100%; min-height:calc(100vh - 150px); resize:vertical; font:13px/1.55 var(--mono); color:var(--text);
+                  background:var(--term); border:1px solid var(--rail); border-radius:8px; padding:12px 14px; tab-size:4; }
 
   #doc { max-width:860px; margin:0 auto; padding:24px 16px 80px; }
   .note { color:var(--muted); }
@@ -81,12 +90,14 @@
   <div class="seg" role="group" aria-label="How to show the file">
     <button id="rendered" type="button" aria-pressed="true">Rendered</button>
     <button id="raw" type="button" aria-pressed="false">Raw</button>
+    <button id="edit" type="button" aria-pressed="false" title="Edit the file here">Edit</button>
   </div>
   <button id="theme" type="button"></button>
 </header>
 <main id="doc"><p class="note">Loading...</p></main>
 <script src="/clientlog.js"></script>
 <script src="/markdown.js"></script>
+<script src="/editor.js"></script>
 <script src="/view.js"></script>
 </body>
 </html>

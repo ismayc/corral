@@ -563,6 +563,47 @@ test('a window names its project for the pop-out: its tree, any text file, a PDF
   assert.equal((await req('POST', '/api/open', { body: { window: s.id, path: 7 } })).status, 404);
 });
 
+test('POST /api/save writes a markdown file of the project, and refuses a stale version unless forced', async (t) => {
+  const root = realTmp();
+  const outside = realTmp();
+  writeFile(path.join(root, 'docs/notes.md'), '# Old\n');
+  fs.writeFileSync(path.join(root, 'app.js'), '');
+  fs.writeFileSync(path.join(outside, 'secret.md'), 'x');
+  fs.symlinkSync(path.join(outside, 'secret.md'), path.join(root, 'leak.md'));
+  const { req, herdr, srv } = await world(t);
+  herdr.snap = { workspaces: [{ workspace_id: 'w1', label: 'W' }], panes: [{ workspace_id: 'w1', cwd: root }] };
+  const s = srv.createSession(root, 'alpha', 'w1');
+  const file = path.join(root, 'docs/notes.md');
+  const save = (body) => req('POST', '/api/save', { body: { window: s.id, path: 'docs/notes.md', ...body } });
+
+  const base = fs.statSync(file).mtimeMs;
+  const ok = await save({ text: '# New\n', base });
+  assert.deepEqual([ok.status, ok.json], [200, { ok: true, modified: fs.statSync(file).mtimeMs }]);
+  assert.equal(fs.readFileSync(file, 'utf8'), '# New\n');
+
+  // The version the edit started from is stale now: refused, with what is on disk.
+  const stale = await save({ text: '# Mine\n', base });
+  assert.deepEqual([stale.status, stale.json], [409, { error: 'The file changed on disk after you started editing', conflict: true, text: '# New\n', modified: ok.json.modified }]);
+  assert.equal(fs.readFileSync(file, 'utf8'), '# New\n');
+  assert.equal((await save({ text: '# Mine\n', base, force: true })).status, 200);
+  assert.equal(fs.readFileSync(file, 'utf8'), '# Mine\n');
+  // The space's form works too.
+  const bySpace = await req('POST', '/api/save', { body: { space: 'w1', path: 'docs/notes.md', text: '# Space\n', force: true } });
+  assert.equal(bySpace.status, 200);
+
+  const code = await req('POST', '/api/save', { body: { window: s.id, path: 'app.js', text: 'x', force: true } });
+  assert.deepEqual([code.status, code.json], [415, { error: 'Corral edits only markdown files' }]);
+  assert.deepEqual((await save({ base })).json, { error: 'no text to save' });
+  const big = await save({ text: 'x'.repeat(2 * 1024 * 1024 + 1), force: true });
+  assert.deepEqual([big.status, big.json], [413, { error: 'This file would be over 2 MB, too large to save' }]);
+  assert.equal((await req('POST', '/api/save', { body: { window: s.id, path: 'leak.md', text: 'x', force: true } })).status, 404);
+  assert.equal((await req('POST', '/api/save', { body: { window: s.id, path: 'new.md', text: 'x', force: true } })).status, 404); // no new files
+  assert.equal((await req('POST', '/api/save', { body: { window: s.id, path: '..%2Fx.md', text: 'x' } })).status, 404);
+  assert.equal(fs.readFileSync(path.join(outside, 'secret.md'), 'utf8'), 'x');
+  assert.deepEqual((await req('POST', '/api/save', { raw: '{nope' })).json, { error: 'bad json' });
+  assert.deepEqual(srv.saveFile(path.join(root, 'gone.md'), { text: 'x', force: true }), { status: 500, error: 'could not save the file' });
+});
+
 test('static files are served with their types, vendor files from node_modules, and /, /m, /view, and /pop map to the pages', async (t) => {
   const { req } = await world(t);
   const index = await req('GET', '/');

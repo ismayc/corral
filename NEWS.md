@@ -5,6 +5,13 @@ in `package.json`.
 
 ## Development version
 
+- **Edit markdown files in Corral.** The viewer and a pop-out's markdown
+  tabs have an **Edit** mode with **Save** (Cmd-S). A save is refused when
+  the file changed on disk after editing started, with **Save anyway** and
+  **Use the version on disk** offered, so it never silently replaces what
+  Claude Code wrote. New route: `POST /api/save` (existing markdown files in
+  the project only, 2 MB or less). The editor is `public/editor.js`.
+
 - **Light mode.** A **Theme** button on the Mac page, the pop-out, and the
   markdown viewer picks Auto (follow macOS), Light, or Dark, for every Corral
   page in the browser, terminals included. The colors moved to

@@ -452,6 +452,77 @@ test('a dropped connection reconnects while the window is open, and stops when i
   assert.equal(p.sockets.length, 3);
 });
 
+test('a markdown tab can be edited and saved, and the tab marks unsaved edits', async () => {
+  const p = await pop({ routes: { 'POST /api/save': { ok: true, modified: 3 } } });
+  p.node('README.md').click();
+  await settle();
+  p.$('#edit').click();
+  const area = () => p.$('#pane textarea.edit');
+  assert.equal(area().value, MD);
+  assert.equal(p.$('#edit').getAttribute('aria-pressed'), 'true');
+  assert.equal(p.$('#tabreload').hidden, true);
+  area().value = '# Edited\n';
+  fire(area(), 'input');
+  assert.deepEqual(p.tabs(), ['*README.md •']);
+  // A newer version on disk does not replace the edits or redraw the tab.
+  files['README.md'] = { name: 'README.md', text: '# Disk\n', modified: 2 };
+  await p.tick(2000);
+  assert.equal(area().value, '# Edited\n');
+  assert.equal(p.$('#pane .etake').hidden, false);
+  p.$('#pane .eforce').click();
+  await settle();
+  assert.deepEqual(p.api.called('POST', '/api/save')[0].body, { window: 'w1', path: 'README.md', text: '# Edited\n', base: 1, force: true });
+  assert.deepEqual(p.tabs(), ['*README.md']);
+  p.$('#rendered').click();
+  assert.equal(p.$('#pane .md h1').textContent, 'Edited');
+  assert.equal(p.$('#tabreload').hidden, false);
+});
+
+test('closing a tab with unsaved edits asks for a second click, and leaving Edit keeps the edits', async () => {
+  const p = await pop();
+  p.node('README.md').click();
+  await settle();
+  p.$('#edit').click();
+  const area = () => p.$('#pane textarea.edit');
+  area().value = '# Draft\n';
+  fire(area(), 'input');
+  p.$('#raw').click(); // the edits stay for the next visit
+  assert.equal(p.$('#pane pre.raw').textContent, MD);
+  const leave = () => { const e = new p.window.Event('beforeunload', { cancelable: true }); p.window.dispatchEvent(e); return e.defaultPrevented; };
+  assert.equal(leave(), true);
+  p.$$('#tabs .tab .tx')[0].click();
+  assert.equal(p.toast(), 'README.md has unsaved edits. Click × again to close it without saving.');
+  assert.deepEqual(p.tabs(), ['*README.md •']);
+  // Typing again takes the warning back.
+  p.$('#edit').click();
+  assert.equal(area().value, '# Draft\n');
+  fire(area(), 'input');
+  p.$$('#tabs .tab .tx')[0].click();
+  assert.deepEqual(p.tabs(), ['*README.md •']);
+  p.$$('#tabs .tab .tx')[0].click();
+  assert.deepEqual(p.tabs(), []);
+  assert.equal(leave(), false);
+});
+
+test('Edit does nothing on a tab whose file has not been read', async () => {
+  const p = await pop({ routes: { 'GET /api/view': { __reply: true, status: 404, body: { error: 'gone' } } } });
+  p.node('README.md').click();
+  await settle();
+  p.$('#edit').click();
+  assert.equal(p.$('#pane textarea.edit'), null);
+});
+
+test('a tab in Edit mode that is not shown follows its file when it has no edits', async () => {
+  const p = await pop({ storage: { 'corral.pop.tabs.w1': { open: ['README.md', 'app.js'], active: 'README.md' } } });
+  p.$('#edit').click();
+  p.$$('#tabs .tab')[1].click();
+  await settle();
+  files['README.md'] = { name: 'README.md', text: '# Newer\n', modified: 4 };
+  p.$$('#tabs .tab')[0].click(); // activate reads it again
+  await settle();
+  assert.equal(p.$('#pane textarea.edit').value, '# Newer\n');
+});
+
 test('the theme button sets light or dark, and the terminal changes colors with it', async () => {
   const p = await pop();
   assert.equal(p.term.options.theme.background, '#100e15');

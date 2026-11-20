@@ -133,6 +133,14 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   Mac page was reloaded meanwhile. Closing the pop-out any other way returns
   it too, unless the Mac page was reloaded; then click its chip in the bottom
   bar.
+- **Edit a markdown file.** In the viewer and in a pop-out's markdown tab,
+  **Edit** (next to Rendered and Raw) shows the file's text to change.
+  **Save** or Cmd-S writes it. If the file changed on disk after you started
+  (Claude Code wrote to it, say), Corral keeps your edits, does not save over
+  the newer version, and offers **Save anyway** or **Use the version on
+  disk**. With no unsaved edits, the text follows the file as it changes.
+  Unsaved edits mark the tab with •, and closing that tab takes a second
+  click. Corral edits only markdown files that already exist in the project.
 - **Light or dark.** The **Theme** button on the Mac page, the pop-out, and
   the markdown viewer moves between **Auto** (follow the macOS appearance),
   **Light**, and **Dark**. The choice is kept in the browser and reaches every
@@ -501,6 +509,13 @@ about who can reach it:
   in a file can go only to a web or mail address, a heading, or a file inside
   the project. The phone's list of a project's markdown files gives their
   names only, leaves out hidden folders, and does not follow links.
+- The only file Corral writes for a page is a markdown file saved from Edit
+  mode: one that already exists inside the project (its real path, after
+  symlinks, must be inside the project folder), with a markdown extension,
+  and 2 MB or less. A save names the version it started from and is refused
+  if the file changed since, unless the reader chooses Save anyway. Saving
+  works from this Mac and from your own login over Tailscale, the same as
+  the terminals.
 - Opening a file hands it to macOS `open`, either to show it in Finder or with
   an app that macOS lists for that file, checked again on every open. The
   page cannot name any other program.

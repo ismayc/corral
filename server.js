@@ -1798,6 +1798,25 @@ function viewFile(file, since) {
   } catch { return { status: 404, error: 'could not read the file' }; }
 }
 
+// Saves a markdown file edited in the viewer or a pop-out tab. Only a markdown file that already exists in
+// the project (bodyFile has resolved its real path inside it), up to VIEW_MAX. base is the modified time of
+// the version the edit started from: if the file changed since (Claude Code wrote it, say), the save is
+// refused with the version on disk, unless force is set. Written in place, so the file keeps its mode.
+const SAVE_BODY_MAX = 6 * 1024 * 1024; // VIEW_MAX of text, with room for JSON escapes
+function saveFile(file, body) {
+  if (!viewable(file)) return { status: 415, error: 'Corral edits only markdown files' };
+  if (typeof body.text !== 'string') return { status: 400, error: 'no text to save' };
+  if (Buffer.byteLength(body.text) > VIEW_MAX) return { status: 413, error: 'This file would be over 2 MB, too large to save' };
+  try {
+    const st = fs.statSync(file);
+    if (!body.force && st.mtimeMs !== body.base) {
+      return { status: 409, error: 'The file changed on disk after you started editing', conflict: true, text: fs.readFileSync(file, 'utf8'), modified: st.mtimeMs };
+    }
+    fs.writeFileSync(file, body.text);
+    return { status: 200, ok: true, modified: fs.statSync(file).mtimeMs };
+  } catch { return { status: 500, error: 'could not save the file' }; }
+}
+
 // The pop-out page's tabs: any text file of the project (code, data, logs, HTML as its source), shown as
 // text with textContent, never parsed as HTML. A file with a NUL byte in its first 8 KB is not text.
 function textFile(file, since) {
@@ -1974,6 +1993,14 @@ const server = http.createServer(async (req, res) => {
     if (!r.ok && !body.app && openWith.has(kind)) return send(res, 200, { needsChoice: true, error: r.error }); // a saved app that is gone
     const { status, ...result } = r;
     return send(res, status, { ...result, kind, app: appName(app), remembered: openWith.get(kind) === app });
+  }
+  if (url.pathname === '/api/save' && req.method === 'POST') {
+    const body = await readJson(req, SAVE_BODY_MAX);
+    if (!body) return send(res, 400, { error: 'bad json' });
+    const file = await bodyFile(body);
+    if (!file) return send(res, 404, { error: 'no such file in this project' });
+    const { status, ...r } = saveFile(file, body);
+    return send(res, status, r);
   }
   if (url.pathname === '/api/open-with/forget' && req.method === 'POST') {
     const body = await readJson(req);
@@ -2257,7 +2284,7 @@ module.exports = {
   vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, pruneUploads,
   locateFile, cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows, autoRestore,
   reopenProject, newRepos, hideRepo, identityRoots, herdrSnapshot, rootFor, listDir, loadOpenWith, saveOpenWith, fileKind, bodyFile,
-  appsFor, openChoices, openFile, appName, viewFile, imageFile, textFile, pdfFile, markdownFiles, send, serveFile, readJson,
+  appsFor, openChoices, openFile, appName, viewFile, imageFile, textFile, pdfFile, saveFile, markdownFiles, send, serveFile, readJson,
 };
 
 if (require.main === module) start();

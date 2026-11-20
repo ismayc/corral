@@ -1,8 +1,8 @@
 // The pop-out (/pop?id=<window>): one Corral window in a browser window of its own. Its project's files are
 // on the left, and the panel can be hidden; the choice is kept per space. A file clicked there opens in a tab
-// on the right while the terminal stays in view: markdown drawn (or as text), images, PDFs, and any other text
-// file as text. A file Corral cannot show offers to open on the Mac. The open tabs are kept per window, and
-// markdown and text tabs read their file again every 2 seconds while the page shows.
+// on the right while the terminal stays in view: markdown drawn, as text, or in Edit mode, images, PDFs, and
+// any other text file as text. A file Corral cannot show offers to open on the Mac. The open tabs are kept per
+// window, and markdown and text tabs read their file again every 2 seconds while the page shows.
 const $ = (s) => document.querySelector(s);
 const { h } = corralMd;
 const id = new URLSearchParams(location.search).get('id') || '';
@@ -106,6 +106,7 @@ async function openOnMac(rel, app) {
 }
 
 // ---- Tabs. A tab is {rel, kind, shown, error, v}; `shown` is the file as last read, `v` makes an image load again.
+// A markdown tab in Edit mode also has `editing` and `ed` (its editor), and `closeArmed` after one × with unsaved edits.
 const TABS_KEY = `corral.pop.tabs.${id}`;
 const MODE_KEY = 'corral.view.mode'; // shared with the markdown viewer
 let mode = load(MODE_KEY, 'rendered') === 'raw' ? 'raw' : 'rendered';
@@ -133,6 +134,11 @@ function activate(t) {
 }
 
 function closeTab(t) {
+  // Unsaved edits: the first click warns, and a second click closes the tab without saving.
+  if (t.ed?.dirty() && !t.closeArmed) {
+    t.closeArmed = true;
+    return toast(`${nameOf(t.rel)} has unsaved edits. Click × again to close it without saving.`);
+  }
   const i = tabs.indexOf(t);
   tabs.splice(i, 1);
   if (active === t) {
@@ -150,7 +156,7 @@ function drawTabs() {
   $('#tabs').replaceChildren(...tabs.map((t) => {
     const x = h('button', { class: 'tx', type: 'button', title: 'Close this tab', onclick: (e) => { e.stopPropagation(); closeTab(t); } }, '×');
     return h('div', { class: 'tab', role: 'tab', title: t.rel, 'aria-selected': String(t === active), onclick: () => activate(t),
-      onauxclick: (e) => { if (e.button === 1) closeTab(t); } }, h('span', { class: 'tn' }, nameOf(t.rel)), x);
+      onauxclick: (e) => { if (e.button === 1) closeTab(t); } }, h('span', { class: 'tn' }, `${nameOf(t.rel)}${t.ed?.dirty() ? ' •' : ''}`), x);
   }));
   markOpen();
   document.title = `${active ? `${nameOf(active.rel)} · ` : ''}${info.label}`;
@@ -164,9 +170,10 @@ function drawPane(top) {
   if (!t) return pane.replaceChildren();
   $('#tabpath').textContent = t.rel;
   $('#mdmode').hidden = t.kind !== 'md';
-  $('#tabreload').hidden = t.kind === 'pdf';
-  $('#rendered').setAttribute('aria-pressed', String(mode === 'rendered'));
-  $('#raw').setAttribute('aria-pressed', String(mode === 'raw'));
+  $('#tabreload').hidden = t.kind === 'pdf' || Boolean(t.editing); // the editor handles a newer version itself
+  $('#rendered').setAttribute('aria-pressed', String(!t.editing && mode === 'rendered'));
+  $('#raw').setAttribute('aria-pressed', String(!t.editing && mode === 'raw'));
+  $('#edit').setAttribute('aria-pressed', String(Boolean(t.editing)));
   pane.replaceChildren(body(t));
   pane.scrollTop = top ? 0 : y;
   if (top && t.heading && t.shown) corralMd.jump(pane, t.heading);
@@ -179,6 +186,7 @@ function body(t) {
     if (!t.error) return h('p', { class: 'note' }, 'Loading...');
     return h('p', { class: 'note' }, t.error, h('button', { type: 'button', onclick: () => openOnMac(t.rel) }, 'Open on the Mac'));
   }
+  if (t.editing) return (t.ed ||= editorFor(t)).el;
   if (t.kind === 'text' || mode === 'raw') return h('pre', { class: 'raw' }, t.shown.text);
   return h('div', { class: 'doc' }, corralMd.fileDoc(t.shown.text, {
     base: `window=${encodeURIComponent(id)}`, rel: t.rel,
@@ -200,14 +208,39 @@ async function refresh(t) {
     if (r.unchanged) return;
     const first = !t.shown;
     t.shown = r;
-    if (t !== active) return;
+    t.ed?.diskChanged(r);
+    if (t !== active || t.editing) return; // an editor keeps its text; diskChanged has told it
     return drawPane(first);
   }
   if (t === active) drawPane(true);
 }
 
-$('#rendered').onclick = () => { mode = 'rendered'; store(MODE_KEY, mode); drawPane(true); };
-$('#raw').onclick = () => { mode = 'raw'; store(MODE_KEY, mode); drawPane(true); };
+// Edit mode for a markdown tab (editor.js). Leaving it keeps unsaved edits for the next visit; with none,
+// the editor goes, and the next visit starts from the file as it is then.
+function editorFor(t) {
+  return corralEdit.editor({
+    file: t.shown,
+    save: (body) => getJson('/api/save', { method: 'POST', body: { window: id, path: t.rel, ...body } }),
+    onSaved: (file) => { t.shown = { ...t.shown, ...file }; },
+    onDirty: () => { t.closeArmed = false; drawTabs(); },
+  });
+}
+window.addEventListener('beforeunload', (e) => { if (tabs.some((t) => t.ed?.dirty())) e.preventDefault(); });
+function showAs(next) {
+  active.editing = false;
+  if (!active.ed?.dirty()) active.ed = null;
+  mode = next;
+  store(MODE_KEY, mode);
+  drawPane(true);
+}
+$('#rendered').onclick = () => showAs('rendered');
+$('#raw').onclick = () => showAs('raw');
+$('#edit').onclick = () => {
+  if (!active.shown) return;
+  active.editing = true;
+  drawPane(true);
+  active.ed.focus();
+};
 $('#tabreload').onclick = () => {
   if (active.kind === 'image') { active.v = Date.now(); return drawPane(false); }
   active.shown = null;

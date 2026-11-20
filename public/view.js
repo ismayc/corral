@@ -38,10 +38,30 @@ async function openOnMac(to) {
   note(r.ok ? `Opened ${file} in ${r.app}.` : `Could not open ${file}: ${r.error}`);
 }
 
+// Edit mode (editor.js). Leaving it keeps unsaved edits for the next visit; with none, the editor goes.
+let editing = false;
+let ed = null;
+const markDirty = () => {
+  $('#edit').textContent = ed?.dirty() ? 'Edit •' : 'Edit';
+  document.title = `${ed?.dirty() ? '• ' : ''}${name} · Corral`;
+};
+function editorFor() {
+  return corralEdit.editor({
+    file: shown,
+    save: (body) => fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ space, path: rel, ...body }) }).then((r) => r.json()),
+    onSaved: (file) => { shown = { ...shown, ...file }; },
+    onDirty: markDirty,
+  });
+}
+// Unsaved edits: the browser asks before the window closes or reloads.
+window.addEventListener('beforeunload', (e) => { if (ed?.dirty()) e.preventDefault(); });
+
 function draw() {
-  $('#rendered').setAttribute('aria-pressed', String(mode === 'rendered'));
-  $('#raw').setAttribute('aria-pressed', String(mode === 'raw'));
+  $('#rendered').setAttribute('aria-pressed', String(!editing && mode === 'rendered'));
+  $('#raw').setAttribute('aria-pressed', String(!editing && mode === 'raw'));
+  $('#edit').setAttribute('aria-pressed', String(editing));
   if (!shown) return;
+  if (editing) return $('#doc').replaceChildren(ed.el);
   // Rendered: corralMd.fileDoc draws the file with its images and links (markdown.js says where each goes).
   $('#doc').replaceChildren(mode === 'raw' ? h('pre', { class: 'raw' }, shown.text)
     : corralMd.fileDoc(shown.text, { base: `space=${encodeURIComponent(space)}`, rel, openFile: openOnMac, fileTitle: (to) => `Open ${to} on the Mac` }));
@@ -49,12 +69,21 @@ function draw() {
 
 function setMode(next) {
   mode = next;
+  editing = false;
+  if (!ed?.dirty()) ed = null;
   try { localStorage.setItem(MODE_KEY, mode); } catch {}
   draw();
   scrollTo(0, 0);
 }
 $('#rendered').onclick = () => setMode('rendered');
 $('#raw').onclick = () => setMode('raw');
+$('#edit').onclick = () => {
+  if (!shown) return;
+  editing = true;
+  ed ||= editorFor();
+  draw();
+  ed.focus();
+};
 
 // Reads the file. After the first read it asks only for a file changed since then, and keeps the place on
 // the page when it draws a new version. A read that fails leaves the last version up and says so. The first
@@ -73,6 +102,8 @@ async function refresh() {
   const first = !shown;
   const y = window.scrollY;
   shown = r;
+  ed?.diskChanged(r);
+  if (editing) return; // the editor keeps its text; diskChanged has told it
   draw();
   if (!first) return scrollTo(0, y);
   corralMd.jump($('#doc'), location.hash.slice(1));
