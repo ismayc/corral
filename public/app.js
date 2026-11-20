@@ -184,11 +184,13 @@ function layout() {
     el.style.width = `${z[2] * 100}%`; el.style.height = `${z[3] * 100}%`;
   };
   let hinted = false;
+  const back = []; // windows coming back into view, from the bottom bar or a pop-out
   zones.forEach((z, i) => {
     const id = slots[i];
     if (id) {
       const w = open.get(id);
       place(w.slot, z);
+      if (w.slot.hidden) back.push(w);
       w.slot.hidden = false;
       w.slot.dataset.zone = i;
     } else {
@@ -239,7 +241,12 @@ function layout() {
   $('#colslab').hidden = $('#rowslab').hidden = layoutKind !== 'grid';
   const nMin = [...minimized].filter((id) => open.has(id)).length;
   $('#count').textContent = `${open.size} window${open.size === 1 ? '' : 's'}${nMin ? ` (${nMin} minimized)` : ''}`;
-  requestAnimationFrame(() => open.forEach((w) => { if (!w.slot.hidden) w.fit.fit(); }));
+  // A window coming back also sends its size when the size did not change here: while it was out of view a
+  // pop-out (which shares this page's tmux client) may have sized it, and tmux would keep that size.
+  requestAnimationFrame(() => {
+    open.forEach((w) => { if (!w.slot.hidden) w.fit.fit(); });
+    for (const w of back) if (w.ws?.readyState === 1) w.ws.send(JSON.stringify({ t: 'resize', cols: w.term.cols, rows: w.term.rows }));
+  });
 }
 
 function thumb(zones) {

@@ -86,6 +86,26 @@ test('Send back in a pop-out brings the window back, even after this page reload
   assert.deepEqual([p.visible().sort(), p.chips()], [['alpha', 'beta'], []]);
 });
 
+test('a window coming back sends its size even when it did not change here, since a pop-out may have sized it', async () => {
+  const p = await twoWindows();
+  const sock = (id) => p.sockets.find((s) => s.url.includes(`id=${id}`));
+  sock('n-alpha').open();
+  p.slotOf('alpha').querySelector('.title .pop').click();
+  p.slotOf('beta').querySelector('.title .pop').click();
+  const sizes = () => sock('n-alpha').sent.map((s) => JSON.parse(s)).filter((m) => m.t === 'resize');
+  const before = sizes().length;
+  const channel = p.channels.find((c) => c.name === 'corral-pop');
+  channel.emit({ sendBack: 'n-alpha' });
+  channel.emit({ sendBack: 'n-beta' }); // its socket is not open: nothing to send
+  await p.frame();
+  assert.deepEqual(sizes().slice(before), [{ t: 'resize', cols: 80, rows: 24 }]);
+  assert.equal(sock('n-beta').sent.length, 0);
+  // A window already in view sends nothing more on the next layout.
+  p.slotOf('beta').querySelector('.title .min').click();
+  await p.frame();
+  assert.equal(sizes().length, before + 1);
+});
+
 test('a blocked pop-up says so and leaves the window in place', async () => {
   const p = await twoWindows();
   p.blocked = true;
