@@ -78,6 +78,7 @@ async function refresh() {
   corralMd.jump($('#doc'), location.hash.slice(1));
 }
 
+corralTheme.button($('#theme')); // Auto, Light, or Dark, shared with the Mac page (theme.js)
 draw();
 refresh();
 setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 2000);

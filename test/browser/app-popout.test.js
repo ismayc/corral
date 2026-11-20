@@ -106,6 +106,15 @@ test('a window coming back sends its size even when it did not change here, sinc
   assert.equal(sizes().length, before + 1);
 });
 
+test('the theme button sets light or dark, and open terminals change colors with it', async () => {
+  const p = await twoWindows();
+  assert.equal(p.$('#theme').textContent, 'Theme: Auto');
+  assert.equal(p.terms[0].options.theme.background, '#100e15');
+  p.$('#theme').click();
+  assert.equal(p.doc.documentElement.dataset.theme, 'light');
+  assert.deepEqual(p.terms.map((t) => t.options.theme.background), ['#fdfcff', '#fdfcff']);
+});
+
 test('a blocked pop-up says so and leaves the window in place', async () => {
   const p = await twoWindows();
   p.blocked = true;

@@ -133,6 +133,13 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   Mac page was reloaded meanwhile. Closing the pop-out any other way returns
   it too, unless the Mac page was reloaded; then click its chip in the bottom
   bar.
+- **Light or dark.** The **Theme** button on the Mac page, the pop-out, and
+  the markdown viewer moves between **Auto** (follow the macOS appearance),
+  **Light**, and **Dark**. The choice is kept in the browser and reaches every
+  Corral page open in it at once, terminals included. In light mode a
+  terminal's 16 named colors are darker, so yellow and white text stays
+  readable. Claude Code chooses its own colors: run `/theme` in it and pick a
+  light theme to match. The phone page stays dark.
 - **Inactive projects.** Corral remembers every project folder it has seen. If
   a herdr space disappears (closed from its menu, or by closing its only
   pane), the project shows under "Inactive projects" with a Reopen button and

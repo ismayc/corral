@@ -452,6 +452,14 @@ test('a dropped connection reconnects while the window is open, and stops when i
   assert.equal(p.sockets.length, 3);
 });
 
+test('the theme button sets light or dark, and the terminal changes colors with it', async () => {
+  const p = await pop();
+  assert.equal(p.term.options.theme.background, '#100e15');
+  p.$('#theme').click();
+  assert.equal(p.doc.documentElement.dataset.theme, 'light');
+  assert.equal(p.term.options.theme.background, '#fdfcff');
+});
+
 test('Send back tells the Mac page and closes the pop-out', async () => {
   const p = await pop();
   let closed = 0;

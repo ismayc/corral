@@ -254,11 +254,12 @@ function linkMenu(e, uri) {
 function openTerm() {
   term = new Terminal({ fontFamily: 'Menlo, Monaco, monospace', fontSize: 13, cursorBlink: true,
     scrollback: 5000, macOptionClickForcesSelection: true, linkHandler: { activate: linkMenu },
-    theme: { background: '#100e15', cursor: '#c9c1ff', selectionBackground: '#4d4366' } });
+    theme: corralTheme.term() });
   fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
   term.loadAddon(new WebLinksAddon.WebLinksAddon(linkMenu));
   term.open($('#term'));
+  corralTheme.onChange(() => { term.options.theme = corralTheme.term(); });
   // tmux sends a drag selection as OSC 52 on release: put it on the clipboard (writes only, never replays).
   term.parser.registerOscHandler(52, (data) => {
     const b64 = data.slice(data.indexOf(';') + 1);
@@ -302,6 +303,8 @@ function connect() {
     setTimeout(connect, 1500);
   };
 }
+
+corralTheme.button($('#theme')); // Auto, Light, or Dark, shared with the Mac page (theme.js)
 
 // Send back: the Mac page puts the window back into a zone (app.js listens on this channel), and this
 // browser window closes. A browser window the page did not open itself may refuse to close; the note says

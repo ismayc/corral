@@ -5,6 +5,14 @@ in `package.json`.
 
 ## Development version
 
+- **Light mode.** A **Theme** button on the Mac page, the pop-out, and the
+  markdown viewer picks Auto (follow macOS), Light, or Dark, for every Corral
+  page in the browser, terminals included. The colors moved to
+  `public/theme.css`, and `public/theme.js` applies the choice.
+- **Lines wrap at the right place after a pop-out.** A window coming back
+  from a pop-out kept the pop-out's size in tmux, so lines wrapped at the
+  wrong column. A window coming back into view now always sends its size.
+
 - **Pop a window out.** The new ⧉ button on a window's title bar opens the
   window in a browser window of its own: the space's files on the left, the
   terminal in the middle, and a tab on the right for each file you open

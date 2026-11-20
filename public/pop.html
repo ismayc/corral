@@ -8,14 +8,14 @@
 <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="/vendor/xterm.css">
+<link rel="stylesheet" href="/theme.css">
+<script src="/theme.js"></script>
 <style>
   /* The pop-out: one Corral window in a browser window of its own, with its project's files on the left
-     (hidden or shown per space) and the files opened from them in tabs on the right. Colors are the Mac page's. */
+     (hidden or shown per space) and the files opened from them in tabs on the right. Colors are in theme.css. */
   @font-face { font-family:'Bricolage Grotesque'; font-style:normal; font-weight:400 800; font-display:swap;
                src:url(/fonts/bricolage-grotesque-latin.woff2) format('woff2'); }
   :root {
-    --ground:#1b1823; --panel:#24202d; --raise:#2d2838; --rail:#3a3446; --text:#eee9f6; --muted:#9d94ad;
-    --fence:#8b7cf6; --lavender:#c9c1ff; --term:#100e15;
     --brand:'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, sans-serif;
     --mono:ui-monospace, SFMono-Regular, Menlo, monospace;
     --tw:50%;
@@ -75,7 +75,7 @@
   #pane .note { color:var(--muted); padding:20px 18px; }
   #pane .note button { margin-left:8px; }
   #pane .imgbox { padding:16px; text-align:center; }
-  #pane .imgbox img { max-width:100%; height:auto; background:repeating-conic-gradient(#2d2838 0 25%, #24202d 0 50%) 0 0/16px 16px; }
+  #pane .imgbox img { max-width:100%; height:auto; background:repeating-conic-gradient(var(--raise) 0 25%, var(--panel) 0 50%) 0 0/16px 16px; }
   #pane iframe { display:block; width:100%; height:100%; border:0; background:#fff; }
   pre.raw { margin:0; padding:14px 18px 60px; font:12.5px/1.55 var(--mono); white-space:pre-wrap; overflow-wrap:anywhere; tab-size:4; }
 
@@ -112,12 +112,12 @@
   .md th { background:var(--panel); }
 
   .menu { position:fixed; z-index:30; width:240px; display:flex; flex-direction:column; gap:1px; padding:6px;
-          background:var(--panel); border:1px solid var(--rail); border-radius:10px; box-shadow:0 12px 32px rgba(8,6,14,.6); }
+          background:var(--panel); border:1px solid var(--rail); border-radius:10px; box-shadow:0 12px 32px var(--shadow); }
   .menu button { text-align:left; border-color:transparent; background:transparent; }
   .menu button:hover { background:var(--raise); }
   .menu .mhead { color:var(--muted); font-size:12px; padding:4px 9px 6px; overflow-wrap:anywhere; }
   #toast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); z-index:40; padding:9px 16px; background:var(--raise);
-           border:1px solid var(--rail); border-radius:10px; box-shadow:0 12px 32px rgba(8,6,14,.6); max-width:80vw; }
+           border:1px solid var(--rail); border-radius:10px; box-shadow:0 12px 32px var(--shadow); max-width:80vw; }
 </style>
 </head>
 <body>
@@ -125,6 +125,7 @@
   <button id="filesbtn" type="button" aria-pressed="true" title="Hide the file panel for this space">Files</button>
   <span id="label"></span><span id="cwd"></span>
   <span id="state" role="status"></span>
+  <button id="theme" type="button"></button>
   <button id="sendback" type="button" title="Close this pop-out and put the window back with the others in Corral">Send back</button>
 </header>
 <div id="main">

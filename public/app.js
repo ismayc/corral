@@ -336,7 +336,7 @@ function attach(info, quiet) {
   // Option-drag makes a browser selection even while tmux has the mouse (Cmd-C then copies it).
   const term = new Terminal({ fontFamily: 'Menlo, Monaco, monospace', fontSize: 13, cursorBlink: true,
     scrollback: 5000, macOptionClickForcesSelection: true, linkHandler: { activate: linkMenu },
-    theme: { background: '#100e15', cursor: '#c9c1ff', selectionBackground: '#4d4366' } });
+    theme: corralTheme.term() });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
   term.loadAddon(new WebLinksAddon.WebLinksAddon(linkMenu));
@@ -471,6 +471,10 @@ function bangAt(term, y) {
 }
 
 const persist = () => store('corral.open', [...open.keys()]);
+
+// Light or dark (theme.js): the bar's button picks Auto, Light, or Dark, and open terminals change colors too.
+corralTheme.button($('#theme'));
+corralTheme.onChange(() => open.forEach((w) => { w.term.options.theme = corralTheme.term(); }));
 
 // Restore: after the tmux server or the Mac restarts, Corral offers the windows that were open before,
 // each resuming its Claude Code conversation. The server keeps the list; this page only asks for it.

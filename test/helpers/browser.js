@@ -222,8 +222,10 @@ function loadPage(page, opts = {}) {
     Object.defineProperty(globalThis, name, { value: track(set, clear), configurable: true, writable: true });
   }
   const file = path.join(ROOT, 'public', { m: 'm.js', view: 'view.js', pop: 'pop.js' }[page] || 'app.js');
-  // The scripts every page loads first: the error log, and (not on the Mac page) the markdown renderer.
-  for (const name of page === 'app' ? ['clientlog.js'] : ['clientlog.js', 'markdown.js']) {
+  // The scripts a page loads first: light or dark (not on the phone page), the error log, and (not on the Mac
+  // page) the markdown renderer.
+  const first = { app: ['theme.js', 'clientlog.js'], m: ['clientlog.js', 'markdown.js'] }[page] || ['theme.js', 'clientlog.js', 'markdown.js'];
+  for (const name of first) {
     const shared = path.join(ROOT, 'public', name);
     delete require.cache[shared];
     require(shared);

@@ -1,0 +1,20 @@
+/* The Mac pages' colors (the Mac page, the pop-out, and the markdown viewer), dark and light. theme.js sets
+   data-theme on <html>: Auto follows macOS, or the reader picks Light or Dark. The phone page keeps its own
+   dark colors. Dark is "dusk over the paddock": tinted toward the fence violet, never neutral black. Light
+   keeps the same violet for brand and focus. Green, amber, and red mean agent status only. */
+:root {
+  color-scheme:dark;
+  --ground:#1b1823; --panel:#24202d; --raise:#2d2838; --rail:#3a3446; --text:#eee9f6; --muted:#9d94ad;
+  --fence:#8b7cf6; --lavender:#c9c1ff; --term:#100e15;
+  --working:#e5a93d; --idle:#4cc38a; --blocked:#e5584d; --unknown:#5d566b; --wrapped:#4fa3e8;
+  --sel:#342b55; --ask-bg:#16301f; --ask-text:#a6e9c4; --deny-text:#ffb4ad; --you-bg:#1b1726;
+  --shadow:rgba(8,6,14,.6);
+}
+:root[data-theme=light] {
+  color-scheme:light;
+  --ground:#f4f2f9; --panel:#ffffff; --raise:#ebe7f4; --rail:#d6d0e4; --text:#1f1b29; --muted:#665e7a;
+  --fence:#6d5ce8; --lavender:#5240c9; --term:#fdfcff;
+  --working:#b7791f; --idle:#23875a; --blocked:#cc3b31; --unknown:#a39cb4; --wrapped:#2a78c2;
+  --sel:#e2dcfb; --ask-bg:#e2f3e9; --ask-text:#1b6640; --deny-text:#b3261e; --you-bg:#f1eef8;
+  --shadow:rgba(40,30,70,.18);
+}

@@ -7,13 +7,13 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/theme.css">
+<script src="/theme.js"></script>
 <style>
-  /* The markdown viewer: one file, drawn or as text. Colors are the Mac page's. */
+  /* The markdown viewer: one file, drawn or as text. Colors are in theme.css, as on the Mac page. */
   @font-face { font-family:'Bricolage Grotesque'; font-style:normal; font-weight:400 800; font-display:swap;
                src:url(/fonts/bricolage-grotesque-latin.woff2) format('woff2'); }
   :root {
-    --ground:#1b1823; --panel:#24202d; --raise:#2d2838; --rail:#3a3446; --text:#eee9f6; --muted:#9d94ad;
-    --fence:#8b7cf6; --lavender:#c9c1ff; --term:#100e15;
     --brand:'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, sans-serif;
     --mono:ui-monospace, SFMono-Regular, Menlo, monospace;
   }
@@ -33,6 +33,9 @@
   .seg button { font:inherit; font-size:13px; color:var(--muted); background:transparent; border:0; padding:4px 12px; cursor:pointer; }
   .seg button:hover { color:var(--text); }
   .seg button[aria-pressed=true] { background:var(--fence); color:#fff; }
+  #theme { flex:none; font:inherit; font-size:13px; color:var(--muted); background:transparent; border:1px solid var(--rail);
+           border-radius:7px; padding:4px 10px; cursor:pointer; }
+  #theme:hover { color:var(--text); }
 
   #doc { max-width:860px; margin:0 auto; padding:24px 16px 80px; }
   .note { color:var(--muted); }
@@ -79,6 +82,7 @@
     <button id="rendered" type="button" aria-pressed="true">Rendered</button>
     <button id="raw" type="button" aria-pressed="false">Raw</button>
   </div>
+  <button id="theme" type="button"></button>
 </header>
 <main id="doc"><p class="note">Loading...</p></main>
 <script src="/clientlog.js"></script>
