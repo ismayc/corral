@@ -313,7 +313,7 @@ function attach(info, quiet) {
   if (open.has(info.id)) return minimized.has(info.id) || tray.includes(info.id) ? restore(info.id) : setFocus(info.id);
   const el = document.createElement('div');
   el.className = 'win';
-  el.innerHTML = `<div class="title"><span class="dot"></span><span class="t"></span><span class="cwd"></span><button class="min" title="Minimize to the bottom bar (keeps running)">&#8211;</button><button class="close" title="Close and kill shell">&times;</button></div><div class="term"></div>`;
+  el.innerHTML = `<div class="title"><span class="dot"></span><span class="t"></span><span class="cwd"></span><button class="pop" title="Pop out into a browser window of its own, with this space's files and tabs">&#10697;</button><button class="min" title="Minimize to the bottom bar (keeps running)">&#8211;</button><button class="close" title="Close and kill shell">&times;</button></div><div class="term"></div>`;
   el.querySelector('.t').textContent = info.label;
   el.querySelector('.cwd').textContent = info.cwd.replace(/^\/Users\/[^/]+/, '~');
   const slot = document.createElement('div');
@@ -405,6 +405,7 @@ function attach(info, quiet) {
   new ResizeObserver(() => fit.fit()).observe(el.querySelector('.term'));
   el.addEventListener('mousedown', () => setFocus(info.id));
   el.querySelector('.min').onclick = (e) => { e.stopPropagation(); minimize(info.id); };
+  el.querySelector('.pop').onclick = (e) => { e.stopPropagation(); popOut(info.id); };
   el.querySelector('.close').onclick = async () => {
     open.delete(info.id);
     w.ws?.close(); term.dispose(); slot.remove();
@@ -413,6 +414,30 @@ function attach(info, quiet) {
   };
   if (quiet) { persist(); minimize(info.id); arrange(); return; }
   persist(); layout(); arrange(); setFocus(info.id);
+}
+
+// Pop-outs: a window in a browser window of its own (/pop), with its space's files and a tab for each file
+// opened from them. Here it waits minimized, so only the pop-out sizes it, and it comes back into a zone when
+// the pop-out closes (unless it was brought back already). The browser window is named for the window, so a
+// second click goes to the pop-out it already has.
+const popped = new Map(); // window id -> the pop-out's browser window
+function popOut(id) {
+  const pw = window.open(`/pop?id=${encodeURIComponent(id)}`, `corral-pop:${id}`, 'popup,width=1500,height=950');
+  if (!pw) return toast('The browser blocked the new window. Allow pop-ups for Corral, then try again.');
+  pw.focus();
+  popped.set(id, pw);
+  popTimer ||= setInterval(checkPopped, 1500);
+  minimize(id);
+  toast(`Popped out ${open.get(id).info.label}. It comes back here when you close the pop-out.`);
+}
+let popTimer = null; // runs only while a pop-out is open
+function checkPopped() {
+  for (const [id, pw] of popped) {
+    if (!pw.closed) continue;
+    popped.delete(id);
+    if (open.has(id) && minimized.has(id)) restore(id);
+  }
+  if (!popped.size) { clearInterval(popTimer); popTimer = null; }
 }
 
 // The toast for a drag copy: a short single line is shown whole, anything longer by its size.

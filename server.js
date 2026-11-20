@@ -1681,9 +1681,6 @@ function saveOpenWith() {
 // The type a default applies to: the extension (".md"), or the whole name for files without one ("Makefile").
 const fileKind = (file) => path.extname(file).toLowerCase() || path.basename(file);
 
-// The real path of a file inside a space's project folder, or null.
-const spaceFile = async (spaceId, rel) => fileUnder(await rootFor(spaceId || ''), rel);
-
 // The project folder a request names: a window's (its space's folder, or the folder it opened in), with
 // ?window=, or a space's, with ?space=. The phone page knows windows; the Mac page's tree knows spaces.
 const windowRoot = async (s) => (s.space && await rootFor(s.space)) || s.cwd;
@@ -1692,6 +1689,8 @@ async function askedRoot(q) {
   return s ? windowRoot(s) : rootFor(q.get('space') || '');
 }
 const askedFile = async (q) => fileUnder(await askedRoot(q), q.get('path'));
+// The same, from a JSON body's window, space, and path.
+const bodyFile = (b) => askedFile({ get: (k) => (typeof b[k] === 'string' ? b[k] : null) });
 
 function fileUnder(root, rel) {
   if (!root || typeof rel !== 'string' || !rel || rel.includes('\0') || path.isAbsolute(rel)) return null;
@@ -1799,6 +1798,29 @@ function viewFile(file, since) {
   } catch { return { status: 404, error: 'could not read the file' }; }
 }
 
+// The pop-out page's tabs: any text file of the project (code, data, logs, HTML as its source), shown as
+// text with textContent, never parsed as HTML. A file with a NUL byte in its first 8 KB is not text.
+function textFile(file, since) {
+  try {
+    const st = fs.statSync(file);
+    if (st.mtimeMs === since) return { status: 200, unchanged: true };
+    if (st.size > VIEW_MAX) return { status: 413, error: 'This file is over 2 MB, too large to show' };
+    const data = fs.readFileSync(file);
+    if (data.subarray(0, 8192).includes(0)) return { status: 415, error: 'This is not a text file' };
+    return { status: 200, name: path.basename(file), text: data.toString('utf8'), modified: st.mtimeMs };
+  } catch { return { status: 404, error: 'could not read the file' }; }
+}
+
+// A PDF for a pop-out tab. Chrome draws it with its own viewer, which runs apart from the page's origin.
+const PDF_MAX = 50 * 1024 * 1024;
+function pdfFile(file) {
+  if (fileKind(file) !== '.pdf') return { status: 415, error: 'not a PDF' };
+  try {
+    if (fs.statSync(file).size > PDF_MAX) return { status: 413, error: 'This PDF is over 50 MB, too large to show' };
+    return { status: 200, data: fs.readFileSync(file) };
+  } catch { return { status: 404, error: 'could not read the file' }; }
+}
+
 function send(res, code, body, type = 'application/json; charset=utf-8') {
   res.writeHead(code, { 'Content-Type': type, 'Cache-Control': 'no-store' });
   res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
@@ -1898,13 +1920,13 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true });
   }
   if (url.pathname === '/api/files' && req.method === 'GET') {
-    const root = await rootFor(url.searchParams.get('space') || '');
+    const root = await askedRoot(url.searchParams);
     if (!root) return send(res, 404, { error: 'unknown space' });
     const r = listDir(root, url.searchParams.get('path') || '', url.searchParams.get('hidden') === '1');
     return send(res, r.status, r);
   }
   if (url.pathname === '/api/open-with' && req.method === 'GET') {
-    const file = await spaceFile(url.searchParams.get('space'), url.searchParams.get('path'));
+    const file = await askedFile(url.searchParams);
     if (!file) return send(res, 404, { error: 'no such file in this space' });
     const kind = fileKind(file);
     const c = await openChoices(file);
@@ -1915,6 +1937,20 @@ const server = http.createServer(async (req, res) => {
     if (!file) return send(res, 404, { error: 'no such file in this project' });
     const { status, ...r } = viewFile(file, Number(url.searchParams.get('since') || NaN));
     return send(res, status, r);
+  }
+  if (url.pathname === '/api/text' && req.method === 'GET') {
+    const file = await askedFile(url.searchParams);
+    if (!file) return send(res, 404, { error: 'no such file in this project' });
+    const { status, ...r } = textFile(file, Number(url.searchParams.get('since') || NaN));
+    return send(res, status, r);
+  }
+  if (url.pathname === '/api/pdf' && req.method === 'GET') {
+    const file = await askedFile(url.searchParams);
+    if (!file) return send(res, 404, { error: 'no such file in this project' });
+    const r = pdfFile(file);
+    if (r.error) return send(res, r.status, { error: r.error });
+    res.writeHead(200, { 'Content-Type': 'application/pdf', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+    return res.end(r.data);
   }
   if (url.pathname === '/api/image' && req.method === 'GET') {
     const file = await askedFile(url.searchParams);
@@ -1928,7 +1964,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/open' && req.method === 'POST') {
     const body = await readJson(req);
     if (!body) return send(res, 400, { error: 'bad json' });
-    const file = await spaceFile(body.space, body.path);
+    const file = await bodyFile(body);
     if (!file) return send(res, 404, { error: 'no such file in this space' });
     const kind = fileKind(file);
     const app = typeof body.app === 'string' && body.app ? body.app : openWith.get(kind);
@@ -2112,7 +2148,7 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'GET') {
     if (VENDOR[url.pathname]) return serveFile(res, path.join(__dirname, VENDOR[url.pathname]));
-    const rel = url.pathname === '/' ? 'index.html' : url.pathname === '/m' ? 'm.html' : url.pathname === '/view' ? 'view.html' : url.pathname.slice(1);
+    const rel = url.pathname === '/' ? 'index.html' : url.pathname === '/m' ? 'm.html' : url.pathname === '/view' ? 'view.html' : url.pathname === '/pop' ? 'pop.html' : url.pathname.slice(1);
     const file = path.join(PUBLIC, rel);
     if (!file.startsWith(PUBLIC + path.sep)) return send(res, 403, { error: 'forbidden' });
     return serveFile(res, file);
@@ -2220,8 +2256,8 @@ module.exports = {
   permissionPrompt, readPlan, promptKey, windowClaude, answerPrompt, questionPrompt, questionKey, answerQuestion, frontMatter, slashCommands, git, windowChanges, saveUpload, loadPush, savePush,
   vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, pruneUploads,
   locateFile, cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows, autoRestore,
-  reopenProject, newRepos, hideRepo, identityRoots, herdrSnapshot, rootFor, listDir, loadOpenWith, saveOpenWith, fileKind, spaceFile,
-  appsFor, openChoices, openFile, appName, viewFile, imageFile, markdownFiles, send, serveFile, readJson,
+  reopenProject, newRepos, hideRepo, identityRoots, herdrSnapshot, rootFor, listDir, loadOpenWith, saveOpenWith, fileKind, bodyFile,
+  appsFor, openChoices, openFile, appName, viewFile, imageFile, textFile, pdfFile, markdownFiles, send, serveFile, readJson,
 };
 
 if (require.main === module) start();

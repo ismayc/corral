@@ -5,6 +5,15 @@ in `package.json`.
 
 ## Development version
 
+- **Pop a window out.** The new ⧉ button on a window's title bar opens the
+  window in a browser window of its own: the space's files on the left, the
+  terminal in the middle, and a tab on the right for each file you open
+  (markdown drawn or raw, images, PDFs, and any other text file as text).
+  The **Files** button hides the file panel, and the choice is kept for each
+  space. The tabs and the split between terminal and tabs are kept too. The
+  window waits in the bottom bar meanwhile and comes back when the pop-out
+  closes. New routes: `/pop`, `GET /api/text`, and `GET /api/pdf`; the file
+  tree and the open routes also take `window=`.
 - **View a markdown file in Corral.** On the Mac page, the app list for a
   markdown file (`.md`, `.markdown`, `.qmd`, or `.Rmd`) now starts with
   **View in Corral**. It opens the file in a browser window of its own, with

@@ -519,7 +519,51 @@ test('restore: GET lists windows to bring back, POST reopens them, and dismiss t
   assert.equal((await req('POST', '/api/restore/dismiss')).status, 200); // nothing to remove: still fine
 });
 
-test('static files are served with their types, vendor files from node_modules, and /, /m, and /view map to the pages', async (t) => {
+test('a window names its project for the pop-out: its tree, any text file, a PDF, and the open routes', async (t) => {
+  const root = realTmp();
+  writeFile(path.join(root, 'src/app.js'), 'const a = 1;\n');
+  fs.writeFileSync(path.join(root, 'data.bin'), Buffer.concat([Buffer.from('head'), Buffer.from([0]), Buffer.from('tail')]));
+  fs.writeFileSync(path.join(root, 'big.log'), 'x'.repeat(2 * 1024 * 1024 + 1));
+  fs.writeFileSync(path.join(root, 'paper.PDF'), '%PDF-1.4');
+  fs.writeFileSync(path.join(root, 'big.pdf'), Buffer.alloc(50 * 1024 * 1024 + 1));
+  const { req, herdr, srv, opened } = await world(t);
+  herdr.snap = { workspaces: [{ workspace_id: 'w1', label: 'W' }], panes: [{ workspace_id: 'w1', cwd: root }] };
+  const s = srv.createSession(root, 'alpha', 'w1');
+  const w = `window=${s.id}`;
+
+  assert.deepEqual((await req('GET', `/api/files?${w}&path=src`)).json.entries.map((e) => e.name), ['app.js']);
+  assert.equal((await req('GET', '/api/files?window=nope')).status, 404);
+
+  const text = await req('GET', `/api/text?${w}&path=src%2Fapp.js`);
+  const modified = fs.statSync(path.join(root, 'src/app.js')).mtimeMs;
+  assert.deepEqual([text.status, text.json], [200, { name: 'app.js', text: 'const a = 1;\n', modified }]);
+  assert.deepEqual((await req('GET', `/api/text?${w}&path=src%2Fapp.js&since=${modified}`)).json, { unchanged: true });
+  const bin = await req('GET', `/api/text?${w}&path=data.bin`);
+  assert.deepEqual([bin.status, bin.json], [415, { error: 'This is not a text file' }]);
+  const bigText = await req('GET', `/api/text?${w}&path=big.log`);
+  assert.deepEqual([bigText.status, bigText.json], [413, { error: 'This file is over 2 MB, too large to show' }]);
+  assert.equal((await req('GET', `/api/text?${w}&path=..%2Fx`)).status, 404);
+  assert.deepEqual(srv.textFile(path.join(root, 'gone.txt')), { status: 404, error: 'could not read the file' });
+
+  const pdf = await req('GET', `/api/pdf?${w}&path=paper.PDF`);
+  assert.deepEqual([pdf.status, pdf.headers['content-type'], pdf.headers['cache-control'], pdf.headers['x-content-type-options'], pdf.text],
+    [200, 'application/pdf', 'no-store', 'nosniff', '%PDF-1.4']);
+  const notPdf = await req('GET', `/api/pdf?${w}&path=src%2Fapp.js`);
+  assert.deepEqual([notPdf.status, notPdf.json], [415, { error: 'not a PDF' }]);
+  const bigPdf = await req('GET', `/api/pdf?${w}&path=big.pdf`);
+  assert.deepEqual([bigPdf.status, bigPdf.json], [413, { error: 'This PDF is over 50 MB, too large to show' }]);
+  assert.equal((await req('GET', `/api/pdf?${w}&path=missing.pdf`)).status, 404);
+  assert.deepEqual(srv.pdfFile(path.join(root, 'gone.pdf')), { status: 404, error: 'could not read the file' });
+
+  const choices = await req('GET', `/api/open-with?${w}&path=src%2Fapp.js`);
+  assert.deepEqual([choices.status, choices.json.name], [200, 'app.js']);
+  const open = await req('POST', '/api/open', { body: { window: s.id, path: 'src/app.js', app: 'finder' } });
+  assert.deepEqual([open.status, open.json.app], [200, 'Finder']);
+  assert.deepEqual(opened.at(-1), ['-R', path.join(root, 'src/app.js')]);
+  assert.equal((await req('POST', '/api/open', { body: { window: s.id, path: 7 } })).status, 404);
+});
+
+test('static files are served with their types, vendor files from node_modules, and /, /m, /view, and /pop map to the pages', async (t) => {
   const { req } = await world(t);
   const index = await req('GET', '/');
   assert.equal(index.status, 200);
@@ -528,6 +572,7 @@ test('static files are served with their types, vendor files from node_modules, 
   assert.equal(index.text, fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8'));
   assert.equal((await req('GET', '/m')).text, fs.readFileSync(path.join(ROOT, 'public/m.html'), 'utf8'));
   assert.equal((await req('GET', '/view?space=w1&path=a.md')).text, fs.readFileSync(path.join(ROOT, 'public/view.html'), 'utf8'));
+  assert.equal((await req('GET', '/pop?id=w1')).text, fs.readFileSync(path.join(ROOT, 'public/pop.html'), 'utf8'));
   assert.equal((await req('GET', '/app.js')).headers['content-type'], 'text/javascript; charset=utf-8');
   assert.equal((await req('GET', '/favicon.svg')).headers['content-type'], 'image/svg+xml');
   assert.equal((await req('GET', '/favicon-32.png')).headers['content-type'], 'image/png');

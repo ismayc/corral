@@ -116,6 +116,20 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   (markdown inside it works), and a block or heading centered with
   `align="center"`. Comments are left out. Any other HTML tag is shown as
   text.
+- **Pop a window out.** The ⧉ button on a window's title bar opens it in a
+  browser window of its own, with the space's files on the left, the
+  terminal in the middle, and a tab on the right for each file you click.
+  Markdown is drawn (with the **Rendered** and **Raw** switch), images and
+  PDFs show as they are, and any other text file (code, data, logs, an HTML
+  page's source) shows as text. Markdown and text tabs read their file again
+  every 2 seconds. A link in a markdown tab to another project file opens
+  that file in a tab. A file Corral cannot show offers **Open on the Mac**,
+  and right-clicking a file offers a tab, the Mac, or Finder. The **Files**
+  button hides or shows the file panel, and Corral keeps that choice for each
+  space. Drag the bar between the terminal and the tabs to resize them. The
+  open tabs come back when the pop-out opens again. While popped out, the
+  window waits in the Mac page's bottom bar, and it returns to a zone when
+  you close the pop-out.
 - **Inactive projects.** Corral remembers every project folder it has seen. If
   a herdr space disappears (closed from its menu, or by closing its only
   pane), the project shows under "Inactive projects" with a Reopen button and
@@ -466,9 +480,13 @@ about who can reach it:
   (after resolving symlinks) is outside the project. The only file contents
   Corral sends to a page are those of a markdown file you open in the viewer:
   a file inside the project, with a markdown extension, of 2 MB or less, and
-  the image files inside the project that it shows (20 MB or less). The
-  viewer draws markdown as text and elements, never as HTML, so a file cannot
-  run script in the page. Each image goes out with a sandbox policy, so an
+  the image files inside the project that it shows (20 MB or less), and, in a
+  pop-out's tabs, a text file inside the project (2 MB or less, with no NUL
+  byte in its first 8 KB) or a PDF inside it (50 MB or less). Anyone who can
+  reach Corral can already read these files through the window's terminal.
+  The viewer draws markdown as text and elements, never as HTML, and a text
+  tab shows its file as plain text, so a file cannot run script in the page.
+  A PDF is drawn by Chrome's own viewer, apart from the page. Each image goes out with a sandbox policy, so an
   SVG that holds script cannot run it, even opened at its own address. A link
   in a file can go only to a web or mail address, a heading, or a file inside
   the project. The phone's list of a project's markdown files gives their

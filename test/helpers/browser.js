@@ -113,13 +113,13 @@ const DEFAULT_ROUTES = {
 
 let current = null;
 
-// page: 'm' (the phone page), 'app' (the Mac page), or 'view' (the markdown viewer). Options: url (path and query), routes, storage
+// page: 'm' (the phone page), 'app' (the Mac page), 'view' (the markdown viewer), or 'pop' (a pop-out). Options: url (path and query), routes, storage
 // (localStorage contents), width/height, setup(window) to adjust the window before the script runs.
 function loadPage(page, opts = {}) {
   if (current) unloadPage();
-  const html = fs.readFileSync(path.join(ROOT, 'public', { m: 'm.html', view: 'view.html' }[page] || 'index.html'), 'utf8')
+  const html = fs.readFileSync(path.join(ROOT, 'public', { m: 'm.html', view: 'view.html', pop: 'pop.html' }[page] || 'index.html'), 'utf8')
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, ''); // the page's own scripts are required below instead
-  const dom = new JSDOM(html, { url: ORIGIN + (opts.url || { m: '/m', view: '/view' }[page] || '/'), pretendToBeVisual: true });
+  const dom = new JSDOM(html, { url: ORIGIN + (opts.url || { m: '/m', view: '/view', pop: '/pop' }[page] || '/'), pretendToBeVisual: true });
   const { window } = dom;
   const api = fakeApi({ ...DEFAULT_ROUTES, ...opts.routes });
   for (const [k, v] of Object.entries(opts.storage || {})) window.localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v));
@@ -210,7 +210,7 @@ function loadPage(page, opts = {}) {
     saved[name] = Object.getOwnPropertyDescriptor(globalThis, name);
     Object.defineProperty(globalThis, name, { value: track(set, clear), configurable: true, writable: true });
   }
-  const file = path.join(ROOT, 'public', { m: 'm.js', view: 'view.js' }[page] || 'app.js');
+  const file = path.join(ROOT, 'public', { m: 'm.js', view: 'view.js', pop: 'pop.js' }[page] || 'app.js');
   // The scripts every page loads first: the error log, and (not on the Mac page) the markdown renderer.
   for (const name of page === 'app' ? ['clientlog.js'] : ['clientlog.js', 'markdown.js']) {
     const shared = path.join(ROOT, 'public', name);

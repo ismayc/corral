@@ -194,7 +194,7 @@ test('listDir cuts a very large folder at 1000 entries', () => {
   assert.equal(r.truncated, true);
 });
 
-test('spaceFile returns the real path of a file inside a space and null for everything else', async () => {
+test('bodyFile returns the real path of a file inside a space and null for everything else', async () => {
   const root = realTmp();
   const outside = realTmp();
   fs.mkdirSync(path.join(root, 'sub'));
@@ -203,17 +203,18 @@ test('spaceFile returns the real path of a file inside a space and null for ever
   fs.symlinkSync(path.join(outside, 'secret'), path.join(root, 'leak'));
   const { srv, state } = herdrWorld();
   state.snap = { workspaces: [{ workspace_id: 'w1', label: 'W' }], panes: [{ workspace_id: 'w1', cwd: root }] };
-  assert.equal(await srv.spaceFile('w1', 'sub/a.md'), path.join(root, 'sub/a.md'));
-  assert.equal(await srv.spaceFile('w1', 'sub'), null); // a folder
-  assert.equal(await srv.spaceFile('w1', 'leak'), null);
-  assert.equal(await srv.spaceFile('w1', '../x'), null);
-  assert.equal(await srv.spaceFile('w1', 'nope.md'), null);
-  assert.equal(await srv.spaceFile('w1', ''), null);
-  assert.equal(await srv.spaceFile('w1', 'a\0b'), null);
-  assert.equal(await srv.spaceFile('w1', '/etc/hosts'), null);
-  assert.equal(await srv.spaceFile('w1', 7), null);
-  assert.equal(await srv.spaceFile('other', 'sub/a.md'), null);
-  assert.equal(await srv.spaceFile(null, 'sub/a.md'), null);
+  const spaceFile = (space, p) => srv.bodyFile({ space, path: p });
+  assert.equal(await spaceFile('w1', 'sub/a.md'), path.join(root, 'sub/a.md'));
+  assert.equal(await spaceFile('w1', 'sub'), null); // a folder
+  assert.equal(await spaceFile('w1', 'leak'), null);
+  assert.equal(await spaceFile('w1', '../x'), null);
+  assert.equal(await spaceFile('w1', 'nope.md'), null);
+  assert.equal(await spaceFile('w1', ''), null);
+  assert.equal(await spaceFile('w1', 'a\0b'), null);
+  assert.equal(await spaceFile('w1', '/etc/hosts'), null);
+  assert.equal(await spaceFile('w1', 7), null);
+  assert.equal(await spaceFile('other', 'sub/a.md'), null);
+  assert.equal(await spaceFile(null, 'sub/a.md'), null);
 });
 
 const APPS = { def: '/Applications/Typora.app', apps: [{ name: 'Typora', path: '/Applications/Typora.app' }, { name: 'TextEdit', path: '/System/Applications/TextEdit.app' }] };
