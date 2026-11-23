@@ -40,6 +40,8 @@
   .dot.working { background:var(--working); } .dot.idle { background:var(--idle); } .dot.blocked { background:var(--blocked); } .dot.wrapped { background:var(--wrapped); }
   #use { color:var(--muted); font-size:12px; white-space:nowrap; font-variant-numeric:tabular-nums; cursor:pointer; }
   #queue.has { border-color:var(--fence); }
+  #close { font-size:16px; line-height:16px; padding:2px 8px; }
+  #close:hover { border-color:var(--blocked); color:var(--blocked); }
   #lastprompt { flex:none; display:flex; align-items:flex-start; gap:6px; padding:3px 8px 3px 12px; background:var(--you-bg);
                 border-bottom:1px solid var(--rail); font-size:12px; cursor:pointer; }
   #lastprompt .pt { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -156,6 +158,7 @@
   <button id="queue" type="button" hidden title="Prompts to send when Claude finishes">Queue</button>
   <button id="theme" type="button"></button>
   <button id="sendback" type="button" title="Close this pop-out and put the window back with the others in Corral">Send back</button>
+  <button id="close" type="button" title="Close and kill shell">&times;</button>
 </header>
 <div id="lastprompt" hidden title="Your last prompt (click for every prompt in this conversation)"><span class="pt"></span><button type="button" title="Hide the last prompt in every window">&times;</button></div>
 <div id="main">

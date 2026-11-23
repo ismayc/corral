@@ -703,9 +703,44 @@ test('Send back tells the Mac page and closes the pop-out', async () => {
   assert.equal(p.$('#state').textContent, 'Sent back to Corral. Close this window.');
 });
 
+test('× ends the window, tells the Mac page, and closes the pop-out; a failure says so', async () => {
+  const p = await pop({ routes: { 'DELETE /api/sessions/w1': { ok: true } } });
+  let closed = 0;
+  p.window.close = () => { closed++; };
+  globalThis.close = p.window.close;
+  const posted = () => p.channels.find((c) => c.name === 'corral-pop').posted;
+  p.$('#close').click();
+  assert.equal(p.$('#close').disabled, true);
+  await settle();
+  assert.equal(p.api.called('DELETE', '/api/sessions/w1').length, 1);
+  assert.deepEqual(posted(), [{ closed: 'w1' }]);
+  assert.equal(closed, 1);
+  assert.equal(p.$('#state').textContent, 'Closed. Close this browser window.');
+  // Already gone on the Mac: closed all the same. (The button stays off after a close; turned on here to try again.)
+  p.api.routes['DELETE /api/sessions/w1'] = p.api.reply(404, { error: 'no such session' });
+  p.$('#close').disabled = false;
+  p.$('#close').click();
+  await settle();
+  assert.equal(closed, 2);
+  // Another error, or no answer: the window stays, and the button works again.
+  p.api.routes['DELETE /api/sessions/w1'] = p.api.reply(403, { error: 'bad origin' });
+  p.$('#close').disabled = false;
+  p.$('#close').click();
+  await settle();
+  assert.equal(p.toast(), 'Could not close the window: bad origin.');
+  assert.equal(p.$('#close').disabled, false);
+  p.api.routes['DELETE /api/sessions/w1'] = new Error('offline');
+  p.$('#close').click();
+  await settle();
+  assert.equal(p.toast(), 'Could not close the window.');
+  assert.equal(closed, 2);
+  assert.equal(posted().length, 2);
+});
+
 test('a window that is not open, or a Mac that does not answer, says so instead', async () => {
   let p = await pop({ routes: { 'GET /api/sessions': { sessions: [win({ id: 'other' })] } } });
   assert.equal(p.$('#sendback').hidden, true);
+  assert.equal(p.$('#close').hidden, true);
   assert.equal(p.$('#term .note').textContent, 'This window is not open any more. Open it again from Corral.');
   assert.equal(p.$('#files').hidden, true);
   assert.equal(p.$('#filesbtn').hidden, true);

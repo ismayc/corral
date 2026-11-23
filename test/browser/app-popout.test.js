@@ -86,6 +86,22 @@ test('Send back in a pop-out brings the window back, even after this page reload
   assert.deepEqual([p.visible().sort(), p.chips()], [['alpha', 'beta'], []]);
 });
 
+test('a window closed from its pop-out leaves the Mac page at once, and the closed-check does not bring it back', async () => {
+  const p = await twoWindows();
+  p.slotOf('alpha').querySelector('.title .pop').click();
+  assert.deepEqual(p.chips(), ['alpha']);
+  const channel = p.channels.find((c) => c.name === 'corral-pop');
+  channel.emit({ closed: 'n-alpha' });
+  assert.deepEqual([p.visible(), p.chips()], [['beta'], []]);
+  assert.equal(p.slotOf('alpha'), undefined);
+  assert.deepEqual(p.store('corral.open'), ['n-beta']);
+  p.opened[0].w.closed = true;
+  p.tick(1500);
+  assert.deepEqual([p.visible(), p.chips()], [['beta'], []]);
+  channel.emit({ closed: 'n-alpha' }); // already gone here: nothing changes
+  assert.deepEqual(p.visible(), ['beta']);
+});
+
 test('a window coming back sends its size even when it did not change here, since a pop-out may have sized it', async () => {
   const p = await twoWindows();
   const sock = (id) => p.sockets.find((s) => s.url.includes(`id=${id}`));

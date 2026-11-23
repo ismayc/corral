@@ -459,6 +459,19 @@ $('#sendback').onclick = () => {
   $('#state').textContent = 'Sent back to Corral. Close this window.';
   window.close();
 };
+// ×, as on the Mac page: ends the window and its shell. The Mac page takes it off at once (app.js listens on
+// the channel), and this browser window closes.
+$('#close').onclick = async () => {
+  $('#close').disabled = true;
+  const r = await getJson(`/api/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => null);
+  if (!r?.ok && r?.error !== 'no such session') { // already gone counts as closed
+    $('#close').disabled = false;
+    return toast(`Could not close the window${r?.error ? `: ${r.error}` : ''}.`);
+  }
+  popChannel.postMessage({ closed: id });
+  $('#state').textContent = 'Closed. Close this browser window.';
+  window.close();
+};
 
 async function start() {
   const r = await getJson('/api/sessions').catch(() => null);
@@ -468,6 +481,7 @@ async function start() {
     $('#files').hidden = true;
     $('#filesbtn').hidden = true;
     $('#sendback').hidden = true;
+    $('#close').hidden = true;
     $('#term').append(h('p', { class: 'note' }, r ? 'This window is not open any more. Open it again from Corral.' : 'Could not reach Corral.'));
     return;
   }

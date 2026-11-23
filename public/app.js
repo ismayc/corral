@@ -419,9 +419,7 @@ function attach(info, quiet) {
   el.querySelector('.queue').onclick = (e) => { e.stopPropagation(); queueMenu(w, e.currentTarget); };
   el.querySelector('.use').onclick = (e) => { e.stopPropagation(); setCost(!costOn); };
   el.querySelector('.close').onclick = async () => {
-    open.delete(info.id);
-    forgetFont(info.id);
-    w.ws?.close(); term.dispose(); slot.remove();
+    dropWindow(info.id);
     await api(`/api/sessions/${info.id}`, { method: 'DELETE' });
     persist(); layout(); arrange();
   };
@@ -454,12 +452,29 @@ function checkPopped() {
 }
 // A pop-out's Send back button says so on this channel. That reaches this page even when it was reloaded
 // after the window popped out and so lost track of the pop-out's browser window.
+// Its × says on it that the window was closed: it goes from this page at once, so the closed-check cannot
+// bring it back into a zone first.
 const popChannel = new BroadcastChannel('corral-pop');
 popChannel.onmessage = (e) => {
+  const gone = e.data?.closed;
+  if (gone) {
+    popped.delete(gone);
+    if (!open.has(gone)) return;
+    dropWindow(gone);
+    persist(); layout(); arrange();
+    return;
+  }
   const id = e.data?.sendBack;
   popped.delete(id);
   if (open.has(id) && minimized.has(id)) restore(id);
 };
+// Takes a closed window off this page: its terminal, connection, zone, and saved font size.
+function dropWindow(id) {
+  const w = open.get(id);
+  open.delete(id);
+  forgetFont(id);
+  w.ws?.close(); w.term.dispose(); w.slot.remove();
+}
 
 // The toast for a drag copy: a short single line is shown whole, anything longer by its size.
 function copiedNote(text) {
