@@ -45,7 +45,10 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   for the input, output, and cache token counts. The cost uses Anthropic's
   published API prices for the conversation's models, so it is an estimate:
   a Claude plan does not bill each token. The phone's cards show the same
-  tag; tap it for the details.
+  tag; tap it for the details. To hide the dollar amount, click the tag on
+  the Mac page (or use **Hide dollar amounts** in the palette), or tap
+  **Hide dollar amounts** in the phone's details. Each browser keeps its own
+  choice.
 - **A queue of prompts.** The **Queue** button in a Claude window's title
   bar holds prompts to send later, in order. When Claude finishes and has
   been idle for 5 seconds, and nothing is typed in its prompt box, Corral

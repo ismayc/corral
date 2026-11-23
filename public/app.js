@@ -417,6 +417,7 @@ function attach(info, quiet) {
   el.querySelector('.min').onclick = (e) => { e.stopPropagation(); minimize(info.id); };
   el.querySelector('.pop').onclick = (e) => { e.stopPropagation(); popOut(info.id); };
   el.querySelector('.queue').onclick = (e) => { e.stopPropagation(); queueMenu(w, e.currentTarget); };
+  el.querySelector('.use').onclick = (e) => { e.stopPropagation(); setCost(!costOn); };
   el.querySelector('.close').onclick = async () => {
     open.delete(info.id);
     forgetFont(info.id);
@@ -1466,6 +1467,7 @@ function commands(w) {
   add('New project', 'page', () => $('#newproj').click());
   add(`Theme: ${$('#theme').textContent.replace(/^Theme:\s*/, '')}, change it`, 'page', () => $('#theme').click());
   add(promptsOn ? 'Hide last prompts' : 'Show last prompts', 'page', () => setPrompts(!promptsOn));
+  add(costOn ? 'Hide dollar amounts' : 'Show dollar amounts', 'page', () => setCost(!costOn));
   add('Shortcuts', 'page', () => showKeys(true));
   add('Scheduled Claude jobs', 'page', openJobs);
   return out;
@@ -1673,13 +1675,21 @@ function paintPrompt(w) {
   bar.title = 'Your last prompt (click for every prompt in this conversation)';
 }
 
-// Context use and an estimated cost in the title bar, with the details on hover (public/usage.js).
+// Context use and an estimated cost in the title bar, with the details on hover (public/usage.js). A click on
+// it, or the palette, hides or shows the dollar amount in every window, on this browser.
+let costOn = load('corral.cost', true);
 function paintUsage(w) {
   const el = w.el.querySelector('.title .use');
   const u = w.claude?.usage;
   el.hidden = !u;
-  el.textContent = window.CorralUsage.text(u);
-  el.title = window.CorralUsage.title(u);
+  el.textContent = window.CorralUsage.text(u, { cost: costOn });
+  el.title = u ? `${window.CorralUsage.title(u, { cost: costOn })}\nClick to ${costOn ? 'hide' : 'show'} the dollar amount.` : '';
+}
+function setCost(on) {
+  costOn = on;
+  store('corral.cost', on);
+  for (const w of open.values()) paintUsage(w);
+  toast(on ? 'Dollar amounts are shown.' : 'Dollar amounts are hidden. Click a usage tag to show them again.');
 }
 
 // The Queue button: on a Claude window, or any window with prompts waiting, with how many are waiting.

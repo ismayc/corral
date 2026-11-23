@@ -3,6 +3,14 @@
 What changed in each version of Corral, newest first. The version is the one
 in `package.json`.
 
+## Unreleased
+
+- **Hide dollar amounts.** A click on a window's usage tag on the Mac page,
+  **Hide dollar amounts** in the palette, or the button in the phone's token
+  use details hides the estimated cost and leaves the context percentage.
+  Each browser keeps its own choice (`corral.cost` on the Mac page,
+  `corral.m.cost` on the phone).
+
 ## 0.5.0 (November 23, 2026)
 
 - **Scheduled Claude jobs.** A **Jobs** button on the Mac page and the phone

@@ -384,9 +384,17 @@ function closeSheetFor(w) {
       h('button', { onclick: closeSheet }, 'Keep it')));
 }
 
-// A window's token use, context use, and estimated cost (public/usage.js), from a tap on its card's tag.
+// A window's token use, context use, and estimated cost (public/usage.js), from a tap on its card's tag. Its
+// button hides or shows the dollar amount on every card, on this phone.
+let costOn = load('corral.m.cost', true);
 function usageSheet(w) {
-  sheet(`${w.label}: token use`, ...window.CorralUsage.lines(w.claude.usage).map((t) => h('p', {}, t)));
+  sheet(`${w.label}: token use`, ...window.CorralUsage.lines(w.claude.usage, { cost: costOn }).map((t) => h('p', {}, t)),
+    h('div', { class: 'btns' }, h('button', { onclick: () => {
+      costOn = !costOn;
+      store('corral.m.cost', costOn);
+      renderList();
+      usageSheet(w);
+    } }, costOn ? 'Hide dollar amounts' : 'Show dollar amounts')));
 }
 
 // Claude's last reply, read from its transcript on the Mac.
@@ -487,7 +495,7 @@ function renderList() {
       w.claude?.mode ? h('span', { class: 'tag' }, modeName(w.claude.mode)) : null,
       w.muted ? h('span', { class: 'tag' }, 'Muted') : null,
       w.queued ? h('button', { class: 'tag use', 'aria-label': `Queued prompts for ${w.label}`, onclick: (e) => { stop(e); queueSheet(w); } }, `${w.queued} queued`) : null,
-      w.claude?.usage ? h('button', { class: 'tag use', 'aria-label': `Token use for ${w.label}`, onclick: (e) => { stop(e); usageSheet(w); } }, window.CorralUsage.text(w.claude.usage)) : null,
+      w.claude?.usage ? h('button', { class: 'tag use', 'aria-label': `Token use for ${w.label}`, onclick: (e) => { stop(e); usageSheet(w); } }, window.CorralUsage.text(w.claude.usage, { cost: costOn })) : null,
     ].filter(Boolean);
     kids.push(h('div', { class: `card ${st.cls === 'need' ? 'need' : ''}`, role: 'button', tabindex: '0', 'data-id': w.id, 'data-state': colorOf(st),
       onclick: (e) => { if (!longPressed(e)) openTerm(w); },
