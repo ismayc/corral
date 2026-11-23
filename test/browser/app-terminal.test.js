@@ -13,7 +13,7 @@ test('a window shows its label and its folder with ~ for the home folder', async
   const win = p.slotOf('a').querySelector('.win');
   assert.equal(win.querySelector('.cwd').textContent, '~/repos/a');
   assert.equal(p.terms[0].options.scrollback, 5000);
-  assert.equal(p.terms[0].addons.length, 2);
+  assert.equal(p.terms[0].addons.length, 3); // fit, links, and search
   assert.equal(p.terms[0].element, win.querySelector('.term'));
 });
 

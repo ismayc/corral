@@ -43,6 +43,7 @@ class FakeTerminal {
   blur() { this.focused = false; }
   clear() { this.cleared = true; }
   scrollToBottom() {}
+  clearSelection() { this.selection = ''; this.selectionCleared = (this.selectionCleared || 0) + 1; }
   hasSelection() { return Boolean(this.selection); }
   getSelection() { return this.selection || ''; }
   refresh() {}
@@ -52,6 +53,12 @@ FakeTerminal.instances = [];
 
 class FakeFit { fit() { this.fits = (this.fits || 0) + 1; } proposeDimensions() { return { cols: 80, rows: 24 }; } }
 class FakeLinks { constructor(handler) { this.handler = handler; } }
+// Finds a word in the terminal's `text` (a test sets it); records each search.
+class FakeSearch {
+  constructor() { this.calls = []; }
+  findNext(q) { this.calls.push(['next', q]); return (this.term?.text || '').includes(q); }
+  findPrevious(q) { this.calls.push(['previous', q]); return (this.term?.text || '').includes(q); }
+}
 
 class FakeWebSocket {
   constructor(url) {
@@ -187,6 +194,7 @@ function loadPage(page, opts = {}) {
     Terminal: FakeTerminal,
     FitAddon: { FitAddon: FakeFit },
     WebLinksAddon: { WebLinksAddon: FakeLinks },
+    SearchAddon: { SearchAddon: FakeSearch },
     ResizeObserver,
     Notification: opts.noNotification ? undefined : Notification,
     PushManager: opts.noPush ? undefined : function PushManager() {},

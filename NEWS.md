@@ -5,6 +5,15 @@ in `package.json`.
 
 ## Development version
 
+- **Command palette, find, text size, and saved layouts on the Mac page.**
+  **Cmd-K** opens a palette that finds a window, a space, a layout, or a
+  page action by name. **Cmd-F** in a window searches its scrollback
+  (`@xterm/addon-search`, served as `/vendor/addon-search.js`).
+  **Cmd-=**, **Cmd--**, and **Cmd-0** in a window change its text size;
+  the palette sets the size for every window. The Layout menu can save the
+  current layout and the spaces in its zones under a name, and use it
+  again later: a missing window opens, and the others are minimized.
+
 - **Past conversations, resumed or saved.** **Past conversations…** in a
   space's menu lists every Claude Code conversation started in its folder,
   newest first, by the title Claude Code gave it. **Resume** opens it in a

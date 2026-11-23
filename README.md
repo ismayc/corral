@@ -46,6 +46,22 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   published API prices for the conversation's models, so it is an estimate:
   a Claude plan does not bill each token. The phone's cards show the same
   tag; tap it for the details.
+- **Command palette.** **Cmd-K** opens a box that finds what you type: a
+  window to go to, a space to open, a layout, a saved layout, or a page
+  action (new shell, theme, text size, past conversations). The arrow keys
+  and Return pick one; Esc closes it.
+- **Find in a window.** **Cmd-F** in a window opens a find bar under its
+  title. Return finds the next match, Shift-Return the one before, and Esc
+  closes it. It searches what the page has received for the window, up to
+  5,000 lines.
+- **Text size.** **Cmd-=** and **Cmd--** in a window make its text larger or
+  smaller (9 to 24), and **Cmd-0** puts it back. The palette changes the size
+  for every window. Outside a window, those keys still zoom the browser.
+- **Saved layouts.** At the foot of the Layout menu, **Save this layout as…**
+  keeps the layout and the spaces in its zones under a name, in this
+  browser. Click the name later to use it: a space without a window gets
+  one, each window goes to its zone, and the other windows are minimized.
+  Nothing is closed. The × deletes a saved layout, with Undo.
 - **Minimize** a window to the bottom bar; it keeps running, and one click
   brings it back.
 - **Terminals that survive.** Each shell lives in its own tmux session, so

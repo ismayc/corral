@@ -32,6 +32,7 @@ const VENDOR = {
   '/vendor/xterm.css': 'node_modules/@xterm/xterm/css/xterm.css',
   '/vendor/addon-fit.js': 'node_modules/@xterm/addon-fit/lib/addon-fit.js',
   '/vendor/addon-web-links.js': 'node_modules/@xterm/addon-web-links/lib/addon-web-links.js',
+  '/vendor/addon-search.js': 'node_modules/@xterm/addon-search/lib/addon-search.js',
 };
 const TYPES = {
   '.html': 'text/html; charset=utf-8',

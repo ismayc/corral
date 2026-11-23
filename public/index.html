@@ -114,6 +114,26 @@
   .catmenu.openwith { width:280px; }
   .catmenu.linkmenu { width:320px; }
   .catmenu.promptmenu { width:480px; max-width:calc(100vw - 16px); gap:0; }
+  .find { display:flex; align-items:center; gap:6px; padding:3px 6px; background:var(--panel); border-bottom:1px solid var(--rail); }
+  .find input { flex:1; min-width:0; padding:2px 6px; font-size:12px; }
+  .find .fnote { color:var(--muted); font-size:11px; white-space:nowrap; }
+  .find button { padding:0 7px; line-height:18px; background:transparent; border-color:transparent; color:var(--muted); }
+  .find button:hover { color:var(--text); border-color:var(--rail); }
+  #palette { position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.25); display:flex; justify-content:center; align-items:flex-start; padding-top:12vh; }
+  #palette .pbox { width:560px; max-width:calc(100vw - 32px); background:var(--panel); border:1px solid var(--rail); border-radius:10px; box-shadow:0 18px 50px rgba(0,0,0,.35); overflow:hidden; }
+  #palette input { width:100%; box-sizing:border-box; border:0; border-bottom:1px solid var(--rail); border-radius:0; padding:12px 14px; font-size:15px; background:transparent; }
+  #palette input:focus { outline:none; }
+  #palette .plist { max-height:50vh; overflow:auto; padding:4px; }
+  #palette .pitem { display:flex; gap:12px; align-items:baseline; padding:6px 10px; border-radius:6px; cursor:pointer; }
+  #palette .pitem.on { background:var(--raise); }
+  #palette .plabel { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #palette .phint { color:var(--muted); font-size:11px; white-space:nowrap; }
+  #palette .pnone { color:var(--muted); padding:8px 10px; }
+  #laymenu .savedhead { grid-column:1 / -1; color:var(--muted); font-size:11px; padding:8px 4px 2px; border-top:1px solid var(--rail); margin-top:4px; }
+  #laymenu .savedrow { grid-column:1 / -1; display:flex; gap:4px; }
+  #laymenu .saveduse { flex:1; text-align:left; }
+  #laymenu .saveddel { color:var(--muted); }
+  #laymenu .savedname { grid-column:1 / -1; margin-top:4px; }
   .catmenu.histmenu { width:440px; max-width:calc(100vw - 16px); max-height:80vh; gap:0; }
   .histmenu .hrow { padding:7px 9px; border-top:1px solid var(--rail); display:grid; grid-template-columns:1fr auto; gap:2px 8px; align-items:center; }
   .histmenu .htitle { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -280,6 +300,7 @@
         <h4>Erasing what you typed</h4><dl><div class="k"><dt><kbd>Option-Backspace</kbd> or <kbd>Ctrl-W</kbd></dt><dd>One word</dd></div><div class="k"><dt><kbd>Cmd-Backspace</kbd> or <kbd>Ctrl-U</kbd></dt><dd>Back to the start of the line</dd></div><div class="k"><dt><kbd>Esc</kbd> <kbd>Esc</kbd></dt><dd>The whole prompt (Claude Code)</dd></div><div class="k"><dt><kbd>Ctrl-Shift-_</kbd></dt><dd>Undo</dd></div></dl>
         <h4>Claude Code</h4><dl><div class="k"><dt><kbd>\</kbd> then <kbd>Return</kbd></dt><dd>New line</dd></div><div class="k"><dt><kbd>Shift-Tab</kbd></dt><dd>Switch mode (accept edits, plan)</dd></div><div class="k"><dt><kbd>Ctrl-O</kbd></dt><dd>Verbose output</dd></div><div class="k"><dt><kbd>Ctrl-T</kbd></dt><dd>Show or hide tasks</dd></div><div class="k"><dt><kbd>Ctrl-S</kbd></dt><dd>Stash the prompt</dd></div><div class="k"><dt><kbd>Ctrl-G</kbd></dt><dd>Edit the prompt in $EDITOR</dd></div><div class="k"><dt><kbd>Ctrl-V</kbd></dt><dd>Paste an image</dd></div><div class="k"><dt><kbd>Ctrl-Z</kbd></dt><dd>Suspend</dd></div><div class="k"><dt><kbd>!</kbd> <kbd>/</kbd> <kbd>@</kbd></dt><dd>Shell mode, commands, file paths</dd></div></dl>
         <h4>Mouse in a window</h4><dl><div class="k"><dt>Drag</dt><dd>Select and copy (on release)</dd></div><div class="k"><dt>Option-drag</dt><dd>Browser selection, then Cmd-C</dd></div><div class="k"><dt>Scroll</dt><dd>Scroll back</dd></div><div class="k"><dt>Click a link</dt><dd>Asks before opening it</dd></div><div class="k"><dt>Drop files</dt><dd>Gives their paths to Claude</dd></div><div class="k"><dt>Drag the title</dt><dd>Move the window to another spot</dd></div><div class="k"><dt>Click last prompt</dt><dd>Every prompt you sent</dd></div></dl>
+        <h4>Corral</h4><dl><div class="k"><dt><kbd>Cmd-K</kbd></dt><dd>Command palette: windows, spaces, layouts</dd></div><div class="k"><dt><kbd>Cmd-F</kbd> in a window</dt><dd>Find in its scrollback</dd></div><div class="k"><dt><kbd>Cmd-=</kbd> <kbd>Cmd--</kbd> in a window</dt><dd>Larger or smaller text there</dd></div><div class="k"><dt><kbd>Cmd-0</kbd> in a window</dt><dd>Its usual text size</dd></div></dl>
         <h4>Sidebar and page</h4><dl><div class="k"><dt>Click a space</dt><dd>Open a window there</dd></div><div class="k"><dt>Cmd-click or Shift-click</dt><dd>Select several spaces</dd></div><div class="k"><dt>Right-click or ⋯</dt><dd>Move to a category</dd></div><div class="k"><dt>Right-click a file</dt><dd>Choose the app to open it</dd></div><div class="k"><dt><kbd>Esc</kbd></dt><dd>Close a menu, end a selection, clear Find</dd></div><div class="k"><dt>Double-click the tray edge</dt><dd>Reset the tray height</dd></div></dl>
         <p class="note">Type <kbd>?</kbd> in an empty Claude Code prompt for its own list, and <code>/keybindings</code> to change it.</p>
       </div></div>
@@ -299,6 +320,7 @@
 <script src="/vendor/xterm.js"></script>
 <script src="/vendor/addon-fit.js"></script>
 <script src="/vendor/addon-web-links.js"></script>
+<script src="/vendor/addon-search.js"></script>
 <script src="/clientlog.js"></script>
 <script src="/fresh.js"></script>
 <script src="/usage.js"></script>

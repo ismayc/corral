@@ -273,6 +273,7 @@ function buildLayoutMenu() {
     b.onclick = () => { layoutKind = key; store('corral.layout', key); menu.hidden = true; buildLayoutMenu(); layout(); };
     menu.append(b);
   }
+  savedLayoutsMenu(menu);
 }
 
 function setFocus(id) {
@@ -334,15 +335,17 @@ function attach(info, quiet) {
   wireDrop(slot, () => Number(slot.dataset.zone));
 
   // Option-drag makes a browser selection even while tmux has the mouse (Cmd-C then copies it).
-  const term = new Terminal({ fontFamily: 'Menlo, Monaco, monospace', fontSize: 13, cursorBlink: true,
+  const term = new Terminal({ fontFamily: 'Menlo, Monaco, monospace', fontSize: fontOf(info.id), cursorBlink: true,
     scrollback: 5000, macOptionClickForcesSelection: true, linkHandler: { activate: linkMenu },
     theme: corralTheme.term() });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
   term.loadAddon(new WebLinksAddon.WebLinksAddon(linkMenu));
+  const search = new SearchAddon.SearchAddon();
+  term.loadAddon(search);
   term.open(el.querySelector('.term'));
 
-  const w = { term, fit, el, slot, info, ws: null, muted: false };
+  const w = { term, fit, search, el, slot, info, ws: null, muted: false };
   // Drop a file or folder from Finder or the Desktop on the window to give its path to Claude Code (see addFiles).
   el.addEventListener('dragover', (e) => { if (filesIn(e)) { e.preventDefault(); el.classList.add('filedrop'); } });
   el.addEventListener('dragleave', () => el.classList.remove('filedrop'));
@@ -415,6 +418,7 @@ function attach(info, quiet) {
   el.querySelector('.pop').onclick = (e) => { e.stopPropagation(); popOut(info.id); };
   el.querySelector('.close').onclick = async () => {
     open.delete(info.id);
+    forgetFont(info.id);
     w.ws?.close(); term.dispose(); slot.remove();
     await api(`/api/sessions/${info.id}`, { method: 'DELETE' });
     persist(); layout(); arrange();
@@ -1291,6 +1295,276 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('#keyswrap')) showKeys(false);
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('#laymenu').hidden = true; showKeys(false); } });
+
+// ---- Text size. Every window uses the size for all windows unless it has one of its own. Cmd-= and Cmd-- in a
+// window change its own size (Cmd-0 puts it back), and the command palette changes it for all windows. Kept in
+// this browser. Elsewhere on the page those keys still zoom the browser.
+const FONT = { def: 13, min: 9, max: 24 };
+const clampFont = (n) => Math.min(FONT.max, Math.max(FONT.min, Math.round(Number(n) || FONT.def)));
+let fontAll = clampFont(load('corral.fontSize', FONT.def));
+const fontOne = load('corral.fontSizes', {}); // window id -> its own size
+function fontOf(id) { return fontOne[id] ? clampFont(fontOne[id]) : fontAll; }
+function applyFont(w) {
+  const n = fontOf(w.info.id);
+  if (w.term.options.fontSize === n) return;
+  w.term.options.fontSize = n;
+  w.fit.fit();
+}
+// id names one window; null sets the size for all windows and drops each window's own size.
+function setFont(id, n) {
+  n = clampFont(n);
+  if (id) {
+    if (n === fontAll) delete fontOne[id]; else fontOne[id] = n;
+  } else {
+    fontAll = n;
+    for (const k of Object.keys(fontOne)) delete fontOne[k];
+    store('corral.fontSize', n);
+  }
+  store('corral.fontSizes', fontOne);
+  open.forEach(applyFont);
+  toast(id ? `Text size ${n} in ${open.get(id).info.label}.` : `Text size ${n} in every window.`);
+}
+function forgetFont(id) {
+  if (!(id in fontOne)) return;
+  delete fontOne[id];
+  store('corral.fontSizes', fontOne);
+}
+
+// ---- Find in a window's scrollback (Cmd-F in a window): a bar under its title, with the previous and next match.
+// What a window can search is what this page has received for it, up to 5,000 lines. A program on the
+// alternate screen (a full-screen editor) has no scrollback there.
+function openFind(w) {
+  let bar = w.el.querySelector('.find');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.className = 'find';
+    bar.innerHTML = '<input placeholder="Find in this window" aria-label="Find in this window" spellcheck="false" autocomplete="off"><span class="fnote"></span><button class="fprev" title="Previous match (Shift-Enter)">&#8593;</button><button class="fnext" title="Next match (Enter)">&#8595;</button><button class="fclose" title="Close (Esc)">&times;</button>';
+    const input = bar.querySelector('input');
+    const go = (back) => {
+      const q = input.value;
+      if (!q) { bar.querySelector('.fnote').textContent = ''; return; }
+      const hit = back ? w.search.findPrevious(q) : w.search.findNext(q);
+      bar.querySelector('.fnote').textContent = hit ? '' : 'No match';
+    };
+    input.oninput = () => go(false);
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); go(e.shiftKey); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeFind(w); }
+    };
+    bar.querySelector('.fprev').onclick = () => go(true);
+    bar.querySelector('.fnext').onclick = () => go(false);
+    bar.querySelector('.fclose').onclick = () => closeFind(w);
+    (w.el.querySelector('.lastprompt') || w.el.querySelector('.title')).after(bar);
+    requestAnimationFrame(() => w.fit.fit());
+  }
+  const input = bar.querySelector('input');
+  input.focus();
+  input.select();
+}
+function closeFind(w) {
+  w.el.querySelector('.find')?.remove();
+  w.term.clearSelection();
+  requestAnimationFrame(() => w.fit.fit());
+  w.term.focus();
+}
+
+// ---- Saved layouts: a name for the current layout and the spaces in its zones, kept in this browser. Using one
+// opens a window for each of its spaces that has none (as a click on the space does), puts each in its zone,
+// and minimizes the other windows. Nothing is closed.
+let savedLayouts = load('corral.savedLayouts', []);
+const windowForSpace = (sid) => [...open.values()].find((w) => w.info.space === sid && !w.exited);
+function saveLayout(name) {
+  name = String(name || '').trim().slice(0, 40);
+  if (!name) return false;
+  const entry = { name, kind: layoutKind, cols: $('#cols').value, rows: $('#rows').value, spaces: slots.map((id) => open.get(id)?.info.space || null) };
+  savedLayouts = [...savedLayouts.filter((l) => l.name !== name), entry];
+  store('corral.savedLayouts', savedLayouts);
+  const n = entry.spaces.filter(Boolean).length;
+  toast(`Saved "${name}": ${layoutName(entry.kind)} with ${n} space${n === 1 ? '' : 's'}.`);
+  return true;
+}
+function deleteLayout(name) {
+  const gone = savedLayouts.find((l) => l.name === name);
+  savedLayouts = savedLayouts.filter((l) => l.name !== name);
+  store('corral.savedLayouts', savedLayouts);
+  toast(`Deleted the layout "${name}".`, () => { savedLayouts = [...savedLayouts, gone]; store('corral.savedLayouts', savedLayouts); });
+}
+const layoutName = (kind) => (kind === 'auto' ? 'Auto' : kind === 'grid' ? 'Grid' : LAYOUTS[kind]?.name || 'Auto');
+async function applyLayout(l) {
+  layoutKind = l.kind === 'grid' || LAYOUTS[l.kind] ? l.kind : 'auto';
+  store('corral.layout', layoutKind);
+  if (layoutKind === 'grid') {
+    $('#cols').value = l.cols; $('#rows').value = l.rows;
+    store('corral.cols', $('#cols').value); store('corral.rows', $('#rows').value);
+  }
+  const missing = [];
+  for (const sid of l.spaces) {
+    if (!sid || windowForSpace(sid)) continue;
+    const s = spaces.find((x) => x.id === sid);
+    if (s) await spawn(s.cwd, s.label, s.id, $('#agent').value); else missing.push(sid);
+  }
+  const want = l.spaces.map((sid) => (sid && windowForSpace(sid)?.info.id) || null);
+  for (const id of open.keys()) { if (want.includes(id)) minimized.delete(id); else minimized.add(id); }
+  tray = tray.filter((id) => !want.includes(id));
+  slots = want;
+  layout();
+  const first = want.find(Boolean);
+  if (first) setFocus(first);
+  toast(`Using "${l.name}".${missing.length ? ` ${missing.length} of its spaces no longer exist${missing.length === 1 ? 's' : ''}.` : ''}`);
+}
+// The saved layouts at the foot of the Layout menu, each with an ×, then a box to save the current one.
+function savedLayoutsMenu(menu) {
+  const head = document.createElement('div');
+  head.className = 'savedhead';
+  head.textContent = 'Saved layouts';
+  menu.append(head);
+  for (const l of savedLayouts) {
+    const row = document.createElement('div');
+    row.className = 'savedrow';
+    const use = Object.assign(document.createElement('button'), { className: 'saveduse', textContent: l.name, title: `${layoutName(l.kind)}: ${l.spaces.filter(Boolean).map((sid) => spaces.find((x) => x.id === sid)?.label || 'a closed space').join(', ') || 'no spaces'}` });
+    use.onclick = () => { menu.hidden = true; applyLayout(l); };
+    const del = Object.assign(document.createElement('button'), { className: 'saveddel', textContent: '×', title: `Delete "${l.name}"` });
+    del.onclick = (e) => { e.stopPropagation(); deleteLayout(l.name); buildLayoutMenu(); };
+    row.append(use, del);
+    menu.append(row);
+  }
+  const input = Object.assign(document.createElement('input'), { className: 'savedname', placeholder: 'Save this layout as…', maxLength: 40 });
+  input.onkeydown = (e) => { if (e.key === 'Enter' && saveLayout(input.value)) { menu.hidden = true; } };
+  menu.append(input);
+}
+
+// ---- Command palette (Cmd-K): type to find a window, a space, a layout, or a page action, then Enter.
+function focusedWindow() {
+  const el = document.activeElement?.closest?.('.win');
+  return [...open.values()].find((w) => (el ? w.el === el : w.info.id === focusedId));
+}
+// `w` is the window that had the keyboard when the palette opened.
+function commands(w) {
+  const out = [];
+  const add = (label, hint, run) => out.push({ label, hint, run });
+  for (const x of open.values()) add(`Go to ${x.info.label}`, minimized.has(x.info.id) || tray.includes(x.info.id) ? 'window, in the bottom bar' : 'window', () => (minimized.has(x.info.id) || tray.includes(x.info.id) ? restore(x.info.id) : setFocus(x.info.id)));
+  for (const s of spaces) if (!windowForSpace(s.id)) add(`Open ${s.label}`, 'space', () => spawn(s.cwd, s.label, s.id, $('#agent').value));
+  if (w) {
+    add(`Find in ${w.info.label}`, 'Cmd-F', () => openFind(w));
+    add(`Larger text in ${w.info.label}`, 'Cmd-=', () => setFont(w.info.id, fontOf(w.info.id) + 1));
+    add(`Smaller text in ${w.info.label}`, 'Cmd--', () => setFont(w.info.id, fontOf(w.info.id) - 1));
+    if (fontOne[w.info.id]) add(`Usual text size in ${w.info.label}`, 'Cmd-0', () => setFont(w.info.id, fontAll));
+    const s = spaces.find((x) => x.id === w.info.space);
+    if (s) add(`Past conversations in ${s.label}`, 'space', () => pastConversationsOf(s));
+  }
+  add('Larger text in every window', `now ${fontAll}`, () => setFont(null, fontAll + 1));
+  add('Smaller text in every window', `now ${fontAll}`, () => setFont(null, fontAll - 1));
+  if (fontAll !== FONT.def || Object.keys(fontOne).length) add('Usual text size in every window', String(FONT.def), () => setFont(null, FONT.def));
+  for (const l of savedLayouts) add(`Use layout: ${l.name}`, 'saved layout', () => applyLayout(l));
+  add('Save this layout…', 'saved layout', () => paletteAsk('Name for this layout, then Enter', saveLayout));
+  for (const [k, v] of [['auto', { name: 'Auto' }], ['grid', { name: 'Grid' }], ...Object.entries(LAYOUTS)]) {
+    add(`Layout: ${v.name}`, k === layoutKind ? 'in use' : 'layout', () => { layoutKind = k; store('corral.layout', k); buildLayoutMenu(); layout(); });
+  }
+  add('New shell', 'page', () => $('#newshell').click());
+  add('New project', 'page', () => $('#newproj').click());
+  add(`Theme: ${$('#theme').textContent.replace(/^Theme:\s*/, '')}, change it`, 'page', () => $('#theme').click());
+  add(promptsOn ? 'Hide last prompts' : 'Show last prompts', 'page', () => setPrompts(!promptsOn));
+  add('Shortcuts', 'page', () => showKeys(true));
+  return out;
+}
+// The words typed must each appear in the label; labels that start with what was typed come first.
+function matches(list, q) {
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const hits = list.filter((c) => words.every((t) => c.label.toLowerCase().includes(t)));
+  const lead = q.trim().toLowerCase();
+  return lead ? [...hits.filter((c) => c.label.toLowerCase().startsWith(lead)), ...hits.filter((c) => !c.label.toLowerCase().startsWith(lead))] : hits;
+}
+let palette = null; // { el, input, list, items, at, ask }
+function closePalette() {
+  palette.el.remove();
+  const back = palette.back;
+  palette = null;
+  back?.focus?.();
+}
+function drawPalette() {
+  const { list, input } = palette;
+  palette.items = palette.ask ? [] : matches(commands(palette.win), input.value).slice(0, 50);
+  palette.at = Math.min(palette.at, Math.max(0, palette.items.length - 1));
+  list.replaceChildren(...palette.items.map((c, i) => {
+    const row = document.createElement('div');
+    row.className = `pitem${i === palette.at ? ' on' : ''}`;
+    row.append(Object.assign(document.createElement('span'), { className: 'plabel', textContent: c.label }),
+      Object.assign(document.createElement('span'), { className: 'phint', textContent: c.hint }));
+    row.onmousedown = (e) => { e.preventDefault(); runPalette(i); };
+    return row;
+  }));
+  if (!palette.ask && !palette.items.length) list.append(Object.assign(document.createElement('div'), { className: 'pnone', textContent: 'Nothing matches.' }));
+  list.querySelector('.on')?.scrollIntoView?.({ block: 'nearest' });
+}
+function runPalette(i) {
+  const c = palette.items[i];
+  if (!c) return;
+  const back = palette.back;
+  palette.el.remove();
+  palette = null;
+  if (back) back.focus?.();
+  c.run();
+}
+// The palette as a one-line question: Enter hands the text to `done`, which answers true to close it.
+function paletteAsk(placeholder, done) {
+  openPalette();
+  palette.ask = done;
+  palette.input.placeholder = placeholder;
+  drawPalette();
+}
+function openPalette() {
+  if (palette) return closePalette();
+  const win = focusedWindow(); // before the palette takes the keyboard
+  const el = document.createElement('div');
+  el.id = 'palette';
+  el.innerHTML = '<div class="pbox"><input aria-label="Command" placeholder="Type a window, a space, or a command" spellcheck="false" autocomplete="off"><div class="plist"></div></div>';
+  el.onmousedown = (e) => { if (e.target === el) closePalette(); };
+  document.body.append(el);
+  palette = { el, input: el.querySelector('input'), list: el.querySelector('.plist'), items: [], at: 0, ask: null, win, back: document.activeElement };
+  const { input } = palette;
+  input.oninput = () => { palette.at = 0; drawPalette(); };
+  input.onkeydown = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); return closePalette(); }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const n = palette.items.length;
+      if (n) { palette.at = (palette.at + (e.key === 'ArrowDown' ? 1 : n - 1)) % n; drawPalette(); }
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (palette.ask) { if (palette.ask(input.value)) closePalette(); } else runPalette(palette.at);
+    }
+  };
+  drawPalette();
+  input.focus();
+}
+// Past conversations from the palette: the same panel the space menu shows, near the top of the page.
+function pastConversationsOf(s) {
+  closeMenu();
+  const m = document.createElement('div');
+  m.className = 'catmenu';
+  m.style.left = `${Math.max(8, (innerWidth - 440) / 2)}px`;
+  m.style.top = '64px';
+  document.body.append(m);
+  openMenu = m;
+  historyPanel(m, s);
+}
+
+// Cmd-K anywhere; Cmd-F, Cmd-=, Cmd--, and Cmd-0 while a window has the keyboard. Taken before the terminal
+// sees them, so none reaches the program in the window.
+document.addEventListener('keydown', (e) => {
+  if (!e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  const w = document.activeElement?.closest?.('.win') ? focusedWindow() : null;
+  if (k === 'k' && !e.shiftKey) openPalette();
+  else if (k === 'f' && w && !e.shiftKey) openFind(w);
+  else if (w && (k === '=' || k === '+')) setFont(w.info.id, fontOf(w.info.id) + 1);
+  else if (w && k === '-') setFont(w.info.id, fontOf(w.info.id) - 1);
+  else if (w && k === '0') setFont(w.info.id, fontAll);
+  else return;
+  e.preventDefault();
+  e.stopPropagation();
+}, true);
 
 (async () => {
   layout();
