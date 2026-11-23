@@ -176,6 +176,8 @@
            border-bottom:1px solid var(--rail); cursor:grab; }
   .title .t { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
   .title .cwd { color:var(--muted); font-size:11px; }
+  .title .use { color:var(--muted); font-size:11px; white-space:nowrap; font-variant-numeric:tabular-nums; cursor:default; }
+  .win.focus .title .use { color:#e6e1ff; }
   .title button { padding:0 7px; line-height:18px; background:transparent; border-color:transparent; color:var(--muted); }
   .title button:hover { color:var(--text); border-color:var(--rail); }
   .term { flex:1; min-height:0; padding:5px 0 0 8px; }
@@ -290,6 +292,7 @@
 <script src="/vendor/addon-web-links.js"></script>
 <script src="/clientlog.js"></script>
 <script src="/fresh.js"></script>
+<script src="/usage.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

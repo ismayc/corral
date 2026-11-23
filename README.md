@@ -40,6 +40,12 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   prompt you sent in that conversation, with when you sent it.
   Its × hides it; **Prompts** in the toolbar shows it again. The phone has
   the same line under a window's header.
+- **Token use for each window.** A Claude window's title bar shows how full
+  its context is and an estimated cost, such as "18% · $2.21". Hover over it
+  for the input, output, and cache token counts. The cost uses Anthropic's
+  published API prices for the conversation's models, so it is an estimate:
+  a Claude plan does not bill each token. The phone's cards show the same
+  tag; tap it for the details.
 - **Minimize** a window to the bottom bar; it keeps running, and one click
   brings it back.
 - **Terminals that survive.** Each shell lives in its own tmux session, so

@@ -17,6 +17,7 @@ const os = require('os');
 const cp = require('child_process');
 const pty = require('node-pty');
 const { WebSocketServer } = require('ws');
+const usage = require('./lib/usage');
 
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.CORRAL_PORT || process.env.WEBTERM_PORT || 8777);
@@ -612,7 +613,8 @@ function overview({ screens = true } = {}) {
       ...publicSession(s),
       activity: p ? p.activity : null,
       claude: claude ? { status: claude.status, waitingFor: claude.waitingFor, since: claude.since, mode: screen ? screenMode(screen) : null,
-        cleared: rest === 'cleared', compacted: rest === 'compacted', lastPrompt: screens ? lastPrompt(claude) : null } : null,
+        cleared: rest === 'cleared', compacted: rest === 'compacted', lastPrompt: screens ? lastPrompt(claude) : null,
+        usage: screens ? windowUsage(claude) : null } : null,
       askKey: claude?.waitingFor === 'permission prompt' ? promptKey(claude) : null,
       prompt: screen && claude.waitingFor === 'permission prompt' ? withKey(permissionPrompt(s.id, screen), claude) : null,
       question,
@@ -761,6 +763,12 @@ function lastPrompt(c) {
     promptCache.set(file, hit);
     return hit.text;
   } catch { return null; }
+}
+
+// Tokens, context use, and an estimated cost for the conversation in a window (lib/usage.js), or null.
+function windowUsage(c) {
+  const file = transcriptFile(c);
+  return file ? usage.usageFor(file) : null;
 }
 
 // Every prompt you typed in a window's conversation, oldest first, with when you sent it. Read from the last
@@ -2293,7 +2301,7 @@ module.exports = {
   attachPty, register, createSession, adoptSessions, publicSession, skippedRoot, saveLedger, migrateLegacyData,
   loadLedger, seedFromSnapshots, updateLedger, ledgerView, cleanCategories, loadCategories, saveCategories,
   writeJson, readJsonFile, claudeUnder, processChildren, openWindows, overview, withKey, screenLines, screenMode, screenStatus,
-  sendCardKey, renameWindow, transcriptFile, restState, lastPrompt, promptList, tailLines, lastReply, typedText, conversation, windowHistory, rejoin,
+  sendCardKey, renameWindow, transcriptFile, restState, lastPrompt, windowUsage, promptList, tailLines, lastReply, typedText, conversation, windowHistory, rejoin,
   permissionPrompt, readPlan, promptKey, windowClaude, answerPrompt, questionPrompt, questionKey, answerQuestion, frontMatter, slashCommands, git, windowChanges, saveUpload, loadPush, savePush,
   vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, pruneUploads,
   locateFile, cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows, autoRestore,

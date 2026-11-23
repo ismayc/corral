@@ -225,7 +225,7 @@ function loadPage(page, opts = {}) {
   const file = path.join(ROOT, 'public', { m: 'm.js', view: 'view.js', pop: 'pop.js' }[page] || 'app.js');
   // The scripts a page loads first: light or dark and the update banner (the Mac pages), the error log, and the
   // markdown renderer and edit mode (the viewer and the pop-out; the phone page has the renderer only).
-  const first = { app: ['theme.js', 'clientlog.js', 'fresh.js'], m: ['clientlog.js', 'markdown.js'] }[page] || ['theme.js', 'clientlog.js', 'fresh.js', 'markdown.js', 'editor.js'];
+  const first = { app: ['theme.js', 'clientlog.js', 'fresh.js', 'usage.js'], m: ['clientlog.js', 'markdown.js', 'usage.js'] }[page] || ['theme.js', 'clientlog.js', 'fresh.js', 'markdown.js', 'editor.js'];
   for (const name of first) {
     const shared = path.join(ROOT, 'public', name);
     delete require.cache[shared];

@@ -341,6 +341,11 @@ function closeSheetFor(w) {
       h('button', { onclick: closeSheet }, 'Keep it')));
 }
 
+// A window's token use, context use, and estimated cost (public/usage.js), from a tap on its card's tag.
+function usageSheet(w) {
+  sheet(`${w.label}: token use`, ...window.CorralUsage.lines(w.claude.usage).map((t) => h('p', {}, t)));
+}
+
 // Claude's last reply, read from its transcript on the Mac.
 async function showLastReply(w) {
   sheet(`${w.label}: last reply`, h('p', {}, 'Loading…'));
@@ -438,6 +443,7 @@ function renderList() {
       busy ? h('button', { class: 'stop', onclick: (e) => { stop(e); cardKey(w, 'stop'); } }, 'Stop') : null,
       w.claude?.mode ? h('span', { class: 'tag' }, modeName(w.claude.mode)) : null,
       w.muted ? h('span', { class: 'tag' }, 'Muted') : null,
+      w.claude?.usage ? h('button', { class: 'tag use', 'aria-label': `Token use for ${w.label}`, onclick: (e) => { stop(e); usageSheet(w); } }, window.CorralUsage.text(w.claude.usage)) : null,
     ].filter(Boolean);
     kids.push(h('div', { class: `card ${st.cls === 'need' ? 'need' : ''}`, role: 'button', tabindex: '0', 'data-id': w.id, 'data-state': colorOf(st),
       onclick: (e) => { if (!longPressed(e)) openTerm(w); },

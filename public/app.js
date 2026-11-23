@@ -320,7 +320,7 @@ function attach(info, quiet) {
   if (open.has(info.id)) return minimized.has(info.id) || tray.includes(info.id) ? restore(info.id) : setFocus(info.id);
   const el = document.createElement('div');
   el.className = 'win';
-  el.innerHTML = `<div class="title"><span class="dot"></span><span class="t"></span><span class="cwd"></span><button class="pop" title="Pop out into a browser window of its own, with this space's files and tabs">&#10697;</button><button class="min" title="Minimize to the bottom bar (keeps running)">&#8211;</button><button class="close" title="Close and kill shell">&times;</button></div><div class="term"></div>`;
+  el.innerHTML = `<div class="title"><span class="dot"></span><span class="t"></span><span class="use" hidden></span><span class="cwd"></span><button class="pop" title="Pop out into a browser window of its own, with this space's files and tabs">&#10697;</button><button class="min" title="Minimize to the bottom bar (keeps running)">&#8211;</button><button class="close" title="Close and kill shell">&times;</button></div><div class="term"></div>`;
   el.querySelector('.t').textContent = info.label;
   el.querySelector('.cwd').textContent = info.cwd.replace(/^\/Users\/[^/]+/, '~');
   const slot = document.createElement('div');
@@ -1335,6 +1335,15 @@ function paintPrompt(w) {
   bar.title = 'Your last prompt (click for every prompt in this conversation)';
 }
 
+// Context use and an estimated cost in the title bar, with the details on hover (public/usage.js).
+function paintUsage(w) {
+  const el = w.el.querySelector('.title .use');
+  const u = w.claude?.usage;
+  el.hidden = !u;
+  el.textContent = window.CorralUsage.text(u);
+  el.title = window.CorralUsage.title(u);
+}
+
 // When a prompt was sent: the time today, else the date and time.
 function sentAt(at) {
   const d = new Date(at);
@@ -1383,6 +1392,7 @@ async function watchStatus() {
     w.activity = s.activity;
     paint(w);
     paintPrompt(w);
+    paintUsage(w);
     if (s.exited) continue;
     if (s.label !== w.info.label) { w.info.label = s.label; w.el.querySelector('.t').textContent = s.label; relayout = true; }
     const key = s.prompt?.key || null;

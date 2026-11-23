@@ -5,6 +5,14 @@ in `package.json`.
 
 ## Development version
 
+- **Token use for each window.** A Claude window's title bar on the Mac page
+  shows how full its context is and an estimated cost ("18% · $2.21"), with
+  the token counts on hover. The phone's cards show the same tag, and a tap
+  on it opens the details. The cost is an estimate at Anthropic's published
+  API prices; a Claude plan does not bill each token. Read from the
+  conversation's transcript by `lib/usage.js`, and sent as `claude.usage` in
+  `GET /api/overview`.
+
 - **Reload banner.** The Mac page, the pop-out, and the viewer say "Corral
   was updated" with a **Reload** button when the page files change, so an
   open page does not keep running old code. New: `GET /api/version` (a
