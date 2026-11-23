@@ -185,6 +185,18 @@
   .card .tag { font-size:12px; color:var(--muted); border:1px solid var(--rail); border-radius:99px; padding:2px 9px; }
   #notifybody .topic { font-family:ui-monospace, Menlo, monospace; font-size:13px; overflow-wrap:anywhere; }
   #notifybody .topic a { color:var(--lavender); }
+  .jrefresh { margin-bottom:6px; }
+  .jmac { font-weight:700; margin:12px 0 4px; }
+  .jrow { display:grid; grid-template-columns:1fr auto; gap:2px 10px; padding:8px 0; border-top:1px solid var(--rail); align-items:center; }
+  .jname { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .jstate { font-size:12px; justify-self:end; }
+  .jstate.ok { color:var(--idle, #3fb27f); } .jstate.bad { color:var(--blocked, #e5534b); } .jstate.run { color:var(--working, #d4a72c); } .jstate.off, .jstate.none { color:var(--muted); }
+  .jinfo { color:var(--muted); font-size:12px; }
+  .jbtns { display:flex; gap:6px; align-items:center; justify-self:end; }
+  .jask { font-size:12px; }
+  .jnote { color:var(--muted); }
+  .jfile { color:var(--muted); font-size:12px; margin-top:10px; }
+  .jlog { max-height:40vh; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; background:var(--raise); padding:8px; border-radius:6px; margin:4px 0 0; }
   .qrow { display:flex; gap:8px; align-items:flex-start; padding:8px 0; border-top:1px solid var(--rail); }
   .qrow .qn { color:var(--muted); }
   .qrow .qtext { flex:1; overflow-wrap:anywhere; }
@@ -315,6 +327,7 @@
   <header>
     <img class="icon" src="/favicon.svg" alt="">
     <div class="grow"><h1>Corral</h1><div class="sub" id="machine"></div><a class="sub" id="hub" hidden>All tailnet pages</a></div>
+    <button class="iconbtn" id="jobsbtn" aria-label="Scheduled Claude jobs">Jobs</button>
     <button class="iconbtn" id="bell" aria-label="Notifications">Alerts</button>
     <button class="iconbtn" id="todesk" title="Open the full desktop page">Desktop</button>
   </header>
@@ -411,6 +424,7 @@
 <script src="/clientlog.js"></script>
 <script src="/markdown.js"></script>
 <script src="/usage.js"></script>
+<script src="/jobs.js"></script>
 <script src="/m.js"></script>
 </body>
 </html>

@@ -21,6 +21,7 @@ const usage = require('./lib/usage');
 const history = require('./lib/history');
 const queueLib = require('./lib/queue');
 const ntfyLib = require('./lib/ntfy');
+const jobsLib = require('./lib/jobs');
 
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.CORRAL_PORT || process.env.WEBTERM_PORT || 8777);
@@ -1481,6 +1482,11 @@ function watchWindows() {
   }
 }
 const ntfy = ntfyLib.createNtfy(path.join(DATA_DIR, 'ntfy.json'));
+// Scheduled `claude -p` runs on this Mac and the Macs named in job-hosts (lib/jobs.js).
+const JOB_HOSTS_FILE = process.env.CORRAL_JOB_HOSTS_FILE || path.join(os.homedir(), '.config', 'corral', 'job-hosts');
+// This Mac's name: the one Tailscale knows it by, else its host name.
+const thisMacName = () => tailnet?.machine || os.hostname().replace(/\.local$/, '');
+const jobs = jobsLib.createJobs({ hostsFile: JOB_HOSTS_FILE, thisMac: thisMacName });
 
 // Prompts waiting their turn (lib/queue.js): each window whose Claude has finished, with nothing typed in its
 // input box, gets the next one. Queues of windows that are gone are forgotten.
@@ -2129,7 +2135,7 @@ const server = http.createServer(async (req, res) => {
     }
   }
   if (url.pathname === '/api/overview' && req.method === 'GET') {
-    return send(res, 200, { machine: tailnet?.machine || os.hostname().replace(/\.local$/, ''), sessions: overview() });
+    return send(res, 200, { machine: thisMacName(), sessions: overview() });
   }
   if (url.pathname === '/api/locate' && req.method === 'GET') {
     // Says where files are on the Mac, so only the Mac's own page may ask.
@@ -2245,6 +2251,16 @@ const server = http.createServer(async (req, res) => {
     push.subs = [...push.subs.filter((x) => x.endpoint !== sub.endpoint), { ...sub, added: Date.now(), ua: String(req.headers['user-agent'] || '').slice(0, 200) }].slice(-10);
     savePush();
     return send(res, 200, { ok: true, devices: push.subs.length });
+  }
+  if (url.pathname === '/api/jobs' && req.method === 'GET') return send(res, 200, await jobs.list(url.searchParams.get('fresh') === '1'));
+  if (url.pathname === '/api/jobs/log' && req.method === 'GET') {
+    const { status, ...r } = await jobs.log(url.searchParams.get('host') || '', url.searchParams.get('label'));
+    return send(res, status, r);
+  }
+  if (url.pathname === '/api/jobs/run' && req.method === 'POST') {
+    const body = await readJson(req);
+    const { status, ...r } = await jobs.run(typeof body?.host === 'string' ? body.host : '', body?.label);
+    return send(res, status, r);
   }
   if (url.pathname === '/api/ntfy' && req.method === 'GET') return send(res, 200, ntfy.view());
   if (url.pathname === '/api/ntfy' && req.method === 'POST') {
@@ -2391,6 +2407,7 @@ module.exports = {
     get push() { return push; }, set push(v) { push = v; },
     get queue() { return queue; },
     get ntfy() { return ntfy; },
+    get jobs() { return jobs; },
     get categories() { return categories; },
     get openRoots() { return openRoots; },
     get caffeinate() { return caffeinate; },

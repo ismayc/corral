@@ -1467,6 +1467,7 @@ function commands(w) {
   add(`Theme: ${$('#theme').textContent.replace(/^Theme:\s*/, '')}, change it`, 'page', () => $('#theme').click());
   add(promptsOn ? 'Hide last prompts' : 'Show last prompts', 'page', () => setPrompts(!promptsOn));
   add('Shortcuts', 'page', () => showKeys(true));
+  add('Scheduled Claude jobs', 'page', openJobs);
   return out;
 }
 // The words typed must each appear in the label; labels that start with what was typed come first.
@@ -1540,6 +1541,22 @@ function openPalette() {
   drawPalette();
   input.focus();
 }
+// Scheduled Claude jobs on each Mac (public/jobs.js), in a panel over the page. Esc or a click outside closes it.
+function openJobs() {
+  $('#jobspanel')?.remove();
+  const panel = document.createElement('div');
+  panel.id = 'jobspanel';
+  panel.innerHTML = '<div class="jbox"><div class="jhead"><b>Scheduled Claude jobs</b><button class="jclose" title="Close (Esc)">&times;</button></div><div class="jbody"></div></div>';
+  const close = () => panel.remove();
+  panel.onmousedown = (e) => { if (e.target === panel) close(); };
+  panel.querySelector('.jclose').onclick = close;
+  panel.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  document.body.append(panel);
+  panel.querySelector('.jclose').focus();
+  window.CorralJobs.show(panel.querySelector('.jbody'), { toast });
+}
+$('#jobsbtn').onclick = openJobs;
+
 // Past conversations from the palette: the same panel the space menu shows, near the top of the page.
 function pastConversationsOf(s) {
   closeMenu();

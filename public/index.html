@@ -119,6 +119,22 @@
   .find .fnote { color:var(--muted); font-size:11px; white-space:nowrap; }
   .find button { padding:0 7px; line-height:18px; background:transparent; border-color:transparent; color:var(--muted); }
   .find button:hover { color:var(--text); border-color:var(--rail); }
+  #jobspanel { position:fixed; inset:0; z-index:55; background:rgba(0,0,0,.25); display:flex; justify-content:center; align-items:flex-start; padding-top:8vh; }
+  #jobspanel .jbox { width:720px; max-width:calc(100vw - 32px); max-height:80vh; overflow:auto; background:var(--panel); border:1px solid var(--rail); border-radius:10px; box-shadow:0 18px 50px rgba(0,0,0,.35); padding:12px 16px 16px; }
+  #jobspanel .jhead { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  #jobspanel .jhead b { font-size:15px; }
+  .jrefresh { margin-bottom:6px; }
+  .jmac { font-weight:700; margin:12px 0 4px; }
+  .jrow { display:grid; grid-template-columns:1fr auto; gap:2px 10px; padding:8px 0; border-top:1px solid var(--rail); align-items:center; }
+  .jname { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .jstate { font-size:12px; justify-self:end; }
+  .jstate.ok { color:var(--idle, #3fb27f); } .jstate.bad { color:var(--blocked, #e5534b); } .jstate.run { color:var(--working, #d4a72c); } .jstate.off, .jstate.none { color:var(--muted); }
+  .jinfo { color:var(--muted); font-size:12px; }
+  .jbtns { display:flex; gap:6px; align-items:center; justify-self:end; }
+  .jask { font-size:12px; }
+  .jnote { color:var(--muted); }
+  .jfile { color:var(--muted); font-size:12px; margin-top:10px; }
+  .jlog { max-height:40vh; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; background:var(--raise); padding:8px; border-radius:6px; margin:4px 0 0; }
   #palette { position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.25); display:flex; justify-content:center; align-items:flex-start; padding-top:12vh; }
   #palette .pbox { width:560px; max-width:calc(100vw - 32px); background:var(--panel); border:1px solid var(--rail); border-radius:10px; box-shadow:0 18px 50px rgba(0,0,0,.35); overflow:hidden; }
   #palette input { width:100%; box-sizing:border-box; border:0; border-bottom:1px solid var(--rail); border-radius:0; padding:12px 14px; font-size:15px; background:transparent; }
@@ -311,6 +327,7 @@
         <h4>Sidebar and page</h4><dl><div class="k"><dt>Click a space</dt><dd>Open a window there</dd></div><div class="k"><dt>Cmd-click or Shift-click</dt><dd>Select several spaces</dd></div><div class="k"><dt>Right-click or ⋯</dt><dd>Move to a category</dd></div><div class="k"><dt>Right-click a file</dt><dd>Choose the app to open it</dd></div><div class="k"><dt><kbd>Esc</kbd></dt><dd>Close a menu, end a selection, clear Find</dd></div><div class="k"><dt>Double-click the tray edge</dt><dd>Reset the tray height</dd></div></dl>
         <p class="note">Type <kbd>?</kbd> in an empty Claude Code prompt for its own list, and <code>/keybindings</code> to change it.</p>
       </div></div>
+      <button id="jobsbtn" title="Scheduled Claude jobs (claude -p) on this Mac and the others named in ~/.config/corral/job-hosts">Jobs</button>
       <button id="theme"></button>
       <button id="prompts" title="Show the last prompt you typed at the top of each window"></button>
       <button id="alerts" title="Show a desktop notification when a window needs you while this page is in the background">Alerts: off</button>
@@ -331,6 +348,7 @@
 <script src="/clientlog.js"></script>
 <script src="/fresh.js"></script>
 <script src="/usage.js"></script>
+<script src="/jobs.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

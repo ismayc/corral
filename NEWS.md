@@ -5,6 +5,16 @@ in `package.json`.
 
 ## Development version
 
+- **Scheduled Claude jobs.** A **Jobs** button on the Mac page and the phone
+  (and **Scheduled Claude jobs** in the palette) lists the launchd jobs that
+  run `claude -p`, on this Mac and on each Mac named in
+  `~/.config/corral/job-hosts` (one ssh host per line): the schedule, how the
+  last run ended, when its log changed, the log's last lines, and **Run now**
+  (`launchctl kickstart`, after asking). New: `scripts/claude-jobs.js` (run
+  on another Mac over ssh with the script on stdin, so nothing is installed
+  there), `lib/jobs.js`, `GET /api/jobs`, `GET /api/jobs/log`, and
+  `POST /api/jobs/run`.
+
 - **ntfy as a second way to be told.** The phone's Alerts sheet can also send
   each notice to the ntfy app through the public ntfy.sh server, for a phone
   where Web Push does not arrive. The topic is a long random name made on the

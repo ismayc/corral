@@ -110,6 +110,16 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   the Mac's Corral page), or restore windows after a restart. Add it to
   your Home Screen and it opens like an app. Another computer on your tailnet
   gets the full desktop page.
+- **Scheduled Claude jobs.** **Jobs** (top bar on the Mac page, header on
+  the phone, or **Scheduled Claude jobs** in the palette) lists the launchd
+  jobs whose program, or the script it names, runs `claude -p`. For each:
+  its schedule, whether its last run worked, when its log last changed,
+  **Log** (the last 80 lines of its output and error logs), and **Run now**,
+  which asks first and then starts it as its schedule would. To include
+  another Mac, put its ssh host name on a line of
+  `~/.config/corral/job-hosts`; Corral sends the finder script over ssh, so
+  that Mac needs only Node in `/opt/homebrew/bin` or `/usr/local/bin` and
+  ssh keys that work without a prompt.
 - **The ntfy app, too.** If notifications do not reach your phone, turn on
   **Also send to the ntfy app** in the phone's Alerts sheet. Corral makes a
   long random topic on ntfy.sh; subscribe to it in the

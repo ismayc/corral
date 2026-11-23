@@ -1404,6 +1404,12 @@ async function disablePush() {
   toast('Notifications are off on this device.');
   renderNotify();
 }
+// Scheduled Claude jobs on each Mac (public/jobs.js), in a sheet.
+$('#jobsbtn').onclick = () => {
+  const box = h('div', { class: 'jobs' });
+  sheet('Scheduled Claude jobs', box);
+  window.CorralJobs.show(box, { toast });
+};
 $('#bell').onclick = () => { $('#notify').hidden = false; $('#notifybody').replaceChildren(h('p', {}, 'Checking…')); renderNotify(); };
 $('#notifyx').onclick = () => { $('#notify').hidden = true; };
 $('#notify').onclick = (e) => { if (e.target.id === 'notify') $('#notify').hidden = true; };
