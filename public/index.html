@@ -114,6 +114,15 @@
   .catmenu.openwith { width:280px; }
   .catmenu.linkmenu { width:320px; }
   .catmenu.promptmenu { width:480px; max-width:calc(100vw - 16px); gap:0; }
+  .catmenu.histmenu { width:440px; max-width:calc(100vw - 16px); max-height:80vh; gap:0; }
+  .histmenu .hrow { padding:7px 9px; border-top:1px solid var(--rail); display:grid; grid-template-columns:1fr auto; gap:2px 8px; align-items:center; }
+  .histmenu .htitle { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .histmenu .hwhen { grid-column:1; color:var(--muted); font-size:11px; }
+  .histmenu .hbtns { grid-column:2; grid-row:1 / span 2; display:flex; gap:4px; align-items:center; }
+  .histmenu .hbtns button { border-color:var(--rail); padding:1px 8px; }
+  .histmenu .hbtns button:disabled { opacity:.4; cursor:not-allowed; }
+  .histmenu .hsave { color:var(--muted); font-size:12px; padding:1px 4px; }
+  .histmenu .hsave:hover { color:var(--text); }
   .promptmenu .prow { display:flex; flex-direction:column; gap:2px; padding:6px 9px; border-top:1px solid var(--rail); }
   .promptmenu .pwhen { color:var(--muted); font-size:11px; }
   .promptmenu .ptext { white-space:pre-wrap; overflow-wrap:anywhere; font-size:12.5px; user-select:text; }

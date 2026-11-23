@@ -687,6 +687,10 @@ function catMenu(list, anchor) {
   }
   if (list.length === 1) {
     m.append(Object.assign(document.createElement('div'), { className: 'msep' }));
+    const past = document.createElement('button');
+    past.textContent = 'Past conversations…';
+    past.onclick = (e) => { e.stopPropagation(); historyPanel(m, list[0]); };
+    m.append(past);
     const b = document.createElement('button');
     b.className = 'danger';
     b.textContent = 'Close space…';
@@ -725,6 +729,47 @@ function closeSpaceAsk(m, s) {
   };
   m.appendChild(Object.assign(document.createElement('button'), { textContent: 'Keep it', onclick: closeMenu }));
   yes.focus();
+}
+
+// The space menu turns into the list of the project's past Claude Code conversations, newest first. Each can
+// be resumed in a new window (when the space has none) or saved as Markdown or HTML.
+async function historyPanel(m, s) {
+  m.replaceChildren();
+  m.classList.add('histmenu');
+  const add = (cls, text) => m.appendChild(Object.assign(document.createElement('div'), { className: cls, textContent: text }));
+  add('mhead', `Past conversations in ${s.label}`);
+  const wait = add('murl', 'Loading…');
+  const q = `space=${encodeURIComponent(s.id)}`;
+  const r = await api(`/api/history?${q}`).catch(() => null);
+  wait.remove();
+  if (!r?.conversations) return add('murl', `Could not list them${r?.error ? `: ${r.error}` : ''}.`);
+  if (!r.conversations.length) return add('murl', 'No Claude Code conversations were started in this folder.');
+  const hasWindow = [...open.values()].some((w) => w.info.space === s.id && !w.exited);
+  for (const c of r.conversations) {
+    const row = m.appendChild(Object.assign(document.createElement('div'), { className: 'hrow' }));
+    row.append(Object.assign(document.createElement('div'), { className: 'htitle', textContent: c.title, title: c.first || '' }),
+      Object.assign(document.createElement('div'), { className: 'hwhen', textContent: `${sentAt(c.updated)} · ${Math.max(1, Math.round(c.size / 1024)).toLocaleString()} KB` }));
+    const btns = row.appendChild(Object.assign(document.createElement('div'), { className: 'hbtns' }));
+    const resume = btns.appendChild(Object.assign(document.createElement('button'), { textContent: 'Resume' }));
+    if (hasWindow) { resume.disabled = true; resume.title = 'This space has a window open. Close it first.'; }
+    resume.onclick = async () => {
+      closeMenu();
+      const x = await api('/api/history/resume', { method: 'POST', body: { space: s.id, id: c.id } }).catch(() => ({ error: 'Could not reach Corral.' }));
+      if (!x.id) return toast(`Could not resume it: ${x.error}`);
+      attach(x);
+      toast(`Resumed "${c.title}" in ${s.label}.`);
+    };
+    for (const f of ['md', 'html']) {
+      btns.append(Object.assign(document.createElement('a'), {
+        className: 'hsave', textContent: f === 'md' ? 'Markdown' : 'HTML', title: `Save this conversation as ${f === 'md' ? 'a Markdown file' : 'an HTML page'}`,
+        href: `/api/history/export?${q}&id=${encodeURIComponent(c.id)}&format=${f}`, download: '',
+      }));
+    }
+  }
+  if (r.more) add('murl', 'Only the 200 most recent are listed.');
+  const b = m.getBoundingClientRect();
+  m.style.left = `${Math.max(8, Math.min(b.left, innerWidth - m.offsetWidth - 8))}px`;
+  m.style.top = `${Math.max(8, Math.min(b.top, innerHeight - m.offsetHeight - 8))}px`;
 }
 
 // A link clicked in a terminal: one Claude Code marks as a link (OSC 8, which tmux passes on because of

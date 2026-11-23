@@ -5,6 +5,15 @@ in `package.json`.
 
 ## Development version
 
+- **Past conversations, resumed or saved.** **Past conversations…** in a
+  space's menu lists every Claude Code conversation started in its folder,
+  newest first, by the title Claude Code gave it. **Resume** opens it in a
+  new window (`claude --resume`) when the space has none open, and
+  **Markdown** or **HTML** saves it as a file. The phone's window menu has
+  the same list with the save links. New: `lib/history.js`,
+  `GET /api/history`, `GET /api/history/export`, and
+  `POST /api/history/resume`.
+
 - **Token use for each window.** A Claude window's title bar on the Mac page
   shows how full its context is and an estimated cost ("18% · $2.21"), with
   the token counts on hover. The phone's cards show the same tag, and a tap

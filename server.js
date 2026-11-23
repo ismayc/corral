@@ -18,6 +18,7 @@ const cp = require('child_process');
 const pty = require('node-pty');
 const { WebSocketServer } = require('ws');
 const usage = require('./lib/usage');
+const history = require('./lib/history');
 
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.CORRAL_PORT || process.env.WEBTERM_PORT || 8777);
@@ -855,7 +856,17 @@ function conversation(s) {
   const file = transcriptFile(c);
   if (!file) return { status: 404, error: 'no transcript yet' };
   const MAX = 64 * 1024 * 1024;
-  const lines = tailLines(file, MAX);
+  const items = conversationItems(tailLines(file, MAX));
+  // While a prompt or question is open the input box is gone, and the lines under the last rule are its own.
+  const screen = s.tmux && !c.waitingFor ? screenLines(s.id) : null;
+  return {
+    status: 200, items: items.slice(-300), cut: items.length > 300 || fs.statSync(file).size > MAX,
+    claude: c.status, statusLines: screen ? screenStatus(screen) : [],
+  };
+}
+
+// A transcript's lines as the conversation: { who: 'you' | 'claude' | 'note', text, at } items, oldest first.
+function conversationItems(lines) {
   const items = [];
   const add = (who, text, at) => {
     const last = items[items.length - 1];
@@ -880,12 +891,39 @@ function conversation(s) {
       for (const x of content) if (x?.type === 'text' && x.text.trim()) add('claude', x.text.trim(), d.timestamp);
     }
   }
-  // While a prompt or question is open the input box is gone, and the lines under the last rule are its own.
-  const screen = s.tmux && !c.waitingFor ? screenLines(s.id) : null;
+  return items;
+}
+
+// Past conversations (lib/history.js): the list for a project folder, one written out as Markdown or HTML for
+// a download, and one resumed in a new window. Each names its folder by window or space, as files do, and a
+// conversation only by an id found among that folder's own transcripts.
+const PROJECTS_DIR = () => path.join(CLAUDE_DIR, 'projects');
+function pastConversations(root) {
+  if (!root) return { status: 404, error: 'no such space' };
+  return { status: 200, root, ...history.list(PROJECTS_DIR(), root, typedText) };
+}
+const EXPORT_MAX = 64 * 1024 * 1024;
+function exportConversation(root, id, format) {
+  if (!['md', 'html'].includes(format)) return { status: 400, error: 'format is md or html' };
+  const file = root && history.fileFor(PROJECTS_DIR(), root, id);
+  if (!file) return { status: 404, error: 'no such conversation in this project' };
+  const items = conversationItems(tailLines(file, EXPORT_MAX));
+  const meta = { ...history.summary(file, typedText), dir: root, cut: fs.statSync(file).size > EXPORT_MAX };
   return {
-    status: 200, items: items.slice(-300), cut: items.length > 300 || fs.statSync(file).size > MAX,
-    claude: c.status, statusLines: screen ? screenStatus(screen) : [],
+    status: 200, name: history.fileName(meta.title, format),
+    type: format === 'md' ? 'text/markdown; charset=utf-8' : 'text/html; charset=utf-8',
+    body: format === 'md' ? history.markdown(meta, items) : history.html(meta, items),
   };
+}
+// Resumes a past conversation in a new window for the space. A space has one window, so one that is open
+// already is refused; close it first.
+function resumeConversation(space, root, id) {
+  const file = root && history.fileFor(PROJECTS_DIR(), root, id);
+  if (!file) return { status: 404, error: 'no such conversation in this project' };
+  const existing = [...sessions.values()].find((x) => !x.exited && x.space === space);
+  if (existing) return { status: 409, error: 'this space already has a window; close it first', existing: publicSession(existing) };
+  const s = createSession(root, null, space, null, id, null);
+  return { status: 201, ...publicSession(s) };
 }
 
 // The window's scrollback as plain text, for reading and copying on a phone.
@@ -2073,6 +2111,23 @@ const server = http.createServer(async (req, res) => {
     const found = await locateFile(q.get('name'), Number(q.get('size')), Number(q.get('modified')));
     return found ? send(res, 200, { path: found }) : send(res, 404, { error: 'not found on this Mac' });
   }
+  if (url.pathname === '/api/history' && req.method === 'GET') {
+    const { status, ...r } = pastConversations(await askedRoot(url.searchParams));
+    return send(res, status, r);
+  }
+  if (url.pathname === '/api/history/export' && req.method === 'GET') {
+    const q = url.searchParams;
+    const r = exportConversation(await askedRoot(q), q.get('id'), q.get('format') || 'md');
+    if (r.error) return send(res, r.status, { error: r.error });
+    res.writeHead(200, { 'Content-Type': r.type, 'Content-Disposition': `attachment; filename="${r.name}"`, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+    return res.end(r.body);
+  }
+  if (url.pathname === '/api/history/resume' && req.method === 'POST') {
+    const body = await readJson(req);
+    if (typeof body?.space !== 'string') return send(res, 400, { error: 'bad json' });
+    const { status, ...r } = resumeConversation(body.space, await rootFor(body.space), body.id);
+    return send(res, status, r);
+  }
   if (url.pathname === '/api/version' && req.method === 'GET') return send(res, 200, { version: pageVersion() });
   if (url.pathname === '/api/hub' && req.method === 'GET') return send(res, 200, { url: urlFile(HUB_FILE), watch: urlFile(WATCH_FILE) });
   if (url.pathname === '/api/remote' && req.method === 'GET') {
@@ -2301,7 +2356,7 @@ module.exports = {
   attachPty, register, createSession, adoptSessions, publicSession, skippedRoot, saveLedger, migrateLegacyData,
   loadLedger, seedFromSnapshots, updateLedger, ledgerView, cleanCategories, loadCategories, saveCategories,
   writeJson, readJsonFile, claudeUnder, processChildren, openWindows, overview, withKey, screenLines, screenMode, screenStatus,
-  sendCardKey, renameWindow, transcriptFile, restState, lastPrompt, windowUsage, promptList, tailLines, lastReply, typedText, conversation, windowHistory, rejoin,
+  sendCardKey, renameWindow, transcriptFile, restState, lastPrompt, windowUsage, conversationItems, pastConversations, exportConversation, resumeConversation, promptList, tailLines, lastReply, typedText, conversation, windowHistory, rejoin,
   permissionPrompt, readPlan, promptKey, windowClaude, answerPrompt, questionPrompt, questionKey, answerQuestion, frontMatter, slashCommands, git, windowChanges, saveUpload, loadPush, savePush,
   vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, pruneUploads,
   locateFile, cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows, autoRestore,

@@ -91,6 +91,13 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   group's header or rows. Cmd-click or Shift-click to select several spaces
   and move them together, or search and move every match at once. Each move
   can be undone from the notice that follows it.
+- **Past conversations.** **Past conversations…** in a space's menu lists
+  every Claude Code conversation started in the project folder, newest
+  first, under the title Claude Code gave it, with when it last changed.
+  **Resume** opens one in a new window with `claude --resume` (close the
+  space's open window first). **Markdown** and **HTML** save it as a file:
+  your prompts and Claude's replies with their times, without the tool calls.
+  On the phone, the same list is under a window's ⋯ menu, with the save links.
 - **Close a space** from the same menu: **Close space…** asks first, then
   ends any Corral window opened for the space and closes the space in herdr,
   with everything running in it. The folder stays, under "Inactive projects".

@@ -294,12 +294,28 @@ function windowMenu(w) {
   sheet(w.label, h('div', { class: 'menu' },
     item('Open the window', () => { closeSheet(); openTerm(w); }),
     claude ? item('Last reply', () => showLastReply(w)) : null,
+    w.cwd ? item('Past conversations', () => pastSheet(w)) : null,
     claude && w.claude.status !== 'waiting' ? item(`Next mode${w.claude.mode ? ` (now ${modeName(w.claude.mode)})` : ''}`, () => { closeSheet(); cardKey(w, 'mode'); }) : null,
     w.cwd ? item(isTodoWin(w) ? 'Remove from TO-DO' : 'Add to TO-DO', () => toggleMark(w, 'todo')) : null,
     w.cwd ? item(markOf(w) === 'later' ? 'Remove from Later' : 'Add to Later', () => toggleMark(w, 'later')) : null,
     item(w.muted ? 'Notify me about this window again' : 'Mute notifications for this window', () => setMuted(w, !w.muted)),
     item('Rename', () => renameSheet(w)),
     item('Close the window', () => closeSheetFor(w), 'danger')));
+}
+
+// The past Claude Code conversations in a window's project folder, newest first, each with links that save it
+// as Markdown or as an HTML page. Resuming one is on the Mac page, since this folder's window is open.
+async function pastSheet(w) {
+  const title = `${w.label}: past conversations`;
+  sheet(title, h('p', {}, 'Loading…'));
+  const q = `window=${encodeURIComponent(w.id)}`;
+  let r;
+  try { r = await api(`/api/history?${q}`); } catch { return sheet(title, h('p', {}, 'Could not list them.')); }
+  if (!r.conversations.length) return sheet(title, h('p', {}, 'No Claude Code conversations were started in this folder.'));
+  const save = (c, f) => h('a', { class: 'save', href: `/api/history/export?${q}&id=${encodeURIComponent(c.id)}&format=${f}`, download: '' }, f === 'md' ? 'Markdown' : 'HTML');
+  sheet(title, h('div', { class: 'past' }, ...r.conversations.map((c) => h('div', { class: 'prow' },
+    h('div', { class: 'ptitle' }, c.title),
+    h('div', { class: 'pmeta' }, `${ago(c.updated)}`, ' · ', save(c, 'md'), ' · ', save(c, 'html'))))));
 }
 
 async function setMuted(w, muted) {
