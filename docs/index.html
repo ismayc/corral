@@ -288,6 +288,31 @@
             Corral asks which one until you set a default for that type of file. A markdown file can also open in
             Corral's own viewer, a small window that shows it rendered or raw and follows the file as it changes.</p>
         </div>
+        <div class="case">
+          <p class="q">"I know the next three steps, but I have a meeting."</p>
+          <h3>Queue the next prompts</h3>
+          <p>Add prompts to a window's queue. When Claude finishes and nothing is typed in its prompt box, Corral sends
+            the next one, in order, with no page open. The phone has the same queue.</p>
+        </div>
+        <div class="case">
+          <p class="q">"What did we decide in that session last week?"</p>
+          <h3>Past conversations</h3>
+          <p>A space's menu lists every Claude Code conversation started in its folder, by the title Claude Code gave
+            it. Resume one in a new window, or save it as Markdown or HTML.</p>
+        </div>
+        <div class="case">
+          <p class="q">"Which window was that, and how full is its context?"</p>
+          <h3>Find it fast</h3>
+          <p>Cmd-K finds a window, space, layout, or action by name. Cmd-F searches a window's scrollback, and Cmd-=
+            makes its text larger. Each title bar shows how full the context is and an estimated cost. Saved layouts
+            bring back a named set of windows.</p>
+        </div>
+        <div class="case">
+          <p class="q">"Did last night's digest run?"</p>
+          <h3>Scheduled Claude jobs</h3>
+          <p>Jobs lists the launchd jobs that run <code>claude -p</code> on this Mac and the other Macs you name, with
+            each schedule, how the last run ended, and its log. Run now starts one, after asking.</p>
+        </div>
       </div>
     </div>
   </section>
@@ -561,7 +586,9 @@
           Shift-Tab.</p></div>
         <div class="card"><h3>Stays on your Mac</h3><p>A few small files in <code>~/.local/share/corral</code>, your browser's
           local storage, and a private tmux server. The page loads no outside resources. If you turn on notifications,
-          each one goes through your phone's push service, encrypted so that the service cannot read it.</p></div>
+          each one goes through your phone's push service, encrypted so that the service cannot read it. If you
+          turn on ntfy, a notice goes to a long random topic on ntfy.sh, with only the window's name and why. The
+          Jobs list reaches another Mac only through ssh, and only one you name.</p></div>
       </div>
     </div>
   </section>

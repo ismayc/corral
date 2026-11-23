@@ -3,7 +3,7 @@
 What changed in each version of Corral, newest first. The version is the one
 in `package.json`.
 
-## Development version
+## 0.5.0 (November 23, 2026)
 
 - **Scheduled Claude jobs.** A **Jobs** button on the Mac page and the phone
   (and **Scheduled Claude jobs** in the palette) lists the launchd jobs that
