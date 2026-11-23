@@ -1786,6 +1786,11 @@ async function promptsMenu(w, bar) {
   });
 }
 showPrompts();
+// A pop-out (pop.js) changed one of these settings: show it here too.
+window.addEventListener('storage', (e) => {
+  if (e.key === 'corral.cost') { costOn = load('corral.cost', true); open.forEach(paintUsage); }
+  if (e.key === 'corral.prompts') { promptsOn = load('corral.prompts', true); showPrompts(); }
+});
 
 async function watchStatus() {
   const r = await api('/api/overview').catch(() => null);

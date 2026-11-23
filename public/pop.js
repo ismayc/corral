@@ -339,6 +339,117 @@ function connect() {
 
 corralTheme.button($('#theme')); // Auto, Light, or Dark, shared with the Mac page (theme.js)
 
+// ---- The title bar's status dot, usage tag, Queue button, and last prompt, as on the Mac page (app.js), read
+// from the same /api/overview every 3 seconds. The usage tag's dollar amount and the last-prompt line follow the
+// Mac page's settings on this browser (corral.cost, corral.prompts), and a change here reaches the Mac page.
+let status = null; // this window in /api/overview, once read
+const setting = (k) => load(k, true) !== false;
+// Yellow while Claude works, green when it is your turn, blue after a /wrap-up, red when the shell ended.
+function stateOf(s) {
+  if (s.exited) return ['blocked', 'The shell ended.'];
+  const st = s.claude?.status;
+  if (st === 'busy') return ['working', 'Claude is working.'];
+  if (st === 'waiting') return ['idle', s.claude.waitingFor === 'permission prompt' ? 'Claude is asking for permission.' : 'Claude is waiting on a prompt.'];
+  if (st === 'idle' && /^\/wrap-up\b/.test(s.claude.lastPrompt || '')) return ['wrapped', 'Wrapped up: /wrap-up finished.'];
+  if (st === 'idle') return ['idle', 'Your turn: Claude finished.'];
+  return ['', ''];
+}
+function paintBar() {
+  const s = status;
+  const [state, says] = stateOf(s);
+  $('#dot').className = `dot ${state}`;
+  $('#dot').title = says;
+  const u = s.claude?.usage;
+  const cost = setting('corral.cost');
+  $('#use').hidden = !u;
+  $('#use').textContent = window.CorralUsage.text(u, { cost });
+  $('#use').title = u ? `${window.CorralUsage.title(u, { cost })}\nClick to ${cost ? 'hide' : 'show'} the dollar amount.` : '';
+  const n = s.queued || 0;
+  $('#queue').hidden = !s.claude && !n;
+  $('#queue').textContent = n ? `Queue ${n}` : 'Queue';
+  $('#queue').classList.toggle('has', n > 0);
+  const said = (setting('corral.prompts') && s.claude?.lastPrompt) || '';
+  $('#lastprompt').hidden = !said;
+  $('#lastprompt .pt').textContent = said;
+  if (s.label !== info.label) { info.label = s.label; $('#label').textContent = s.label; drawTabs(); }
+}
+async function watchStatus() {
+  const r = await getJson('/api/overview').catch(() => null);
+  status = r?.sessions?.find((s) => s.id === id) || status;
+  if (status) paintBar();
+}
+// A setting changed on the Mac page or another pop-out.
+window.addEventListener('storage', (e) => { if (status && (e.key === 'corral.cost' || e.key === 'corral.prompts')) paintBar(); });
+$('#use').onclick = () => {
+  const on = !setting('corral.cost');
+  store('corral.cost', on);
+  paintBar();
+  toast(on ? 'Dollar amounts are shown.' : 'Dollar amounts are hidden. Click the usage tag to show them again.');
+};
+$('#lastprompt button').onclick = (e) => {
+  e.stopPropagation();
+  store('corral.prompts', false);
+  paintBar();
+  toast('Last prompts are hidden. Prompts in the Mac page toolbar shows them again.');
+};
+
+// A menu of any content under an element (the Queue button, the last-prompt line).
+function menuUnder(anchor, ...kids) {
+  closeMenu();
+  menu = h('div', { class: 'menu wide' }, ...kids);
+  document.body.append(menu);
+  const b = anchor.getBoundingClientRect();
+  menu.style.left = `${Math.max(8, Math.min(b.right - menu.offsetWidth, innerWidth - menu.offsetWidth - 8))}px`;
+  menu.style.top = `${b.bottom + 4}px`;
+  return menu;
+}
+
+// Prompts waiting their turn: each with an ×, a box to add one, and Clear. The server types the next one in
+// when Claude finishes and nothing is typed in its prompt box.
+const queueUrl = () => `/api/sessions/${encodeURIComponent(id)}/queue`;
+async function queueMenu() {
+  const r = await getJson(queueUrl()).catch(() => null);
+  if (!r?.items) return toast('Could not read the queue.');
+  const post = async (body, fail) => {
+    const x = await getJson(queueUrl(), { method: 'POST', body }).catch(() => null);
+    if (!x?.items) return toast(`${fail}${x?.error ? `: ${x.error}` : ''}.`);
+    draw(x.items);
+  };
+  const draw = (items) => {
+    status = { ...status, queued: items.length };
+    paintBar();
+    const input = h('input', { placeholder: 'A prompt to send when Claude finishes, then Enter', maxlength: '4000' });
+    input.onkeydown = (e) => { if (e.key === 'Enter' && input.value.trim()) post({ text: input.value }, 'Could not queue it'); };
+    menuUnder($('#queue'),
+      h('div', { class: 'mhead' }, items.length ? `Waiting to go to ${info.label}, in order` : `Nothing is waiting for ${info.label}`),
+      ...items.map((it) => h('div', { class: 'qrow' }, h('span', { class: 'qtext' }, it.text),
+        h('button', { type: 'button', title: 'Take it out of the queue', onclick: () => post({ remove: it.id }, 'Could not take it out') }, '×'))),
+      input,
+      items.length ? h('button', { type: 'button', onclick: () => post({ clear: true }, 'Could not clear the queue') }, 'Clear the queue') : null,
+      h('div', { class: 'mnote' }, 'Corral types the next one in when Claude has finished and nothing is typed in its prompt box.'));
+    input.focus();
+  };
+  draw(r.items);
+}
+$('#queue').onclick = queueMenu;
+
+// Every prompt in the conversation, oldest first, opened on the newest.
+function sentAt(at) {
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return '';
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return d.toDateString() === new Date().toDateString() ? time : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`;
+}
+$('#lastprompt').onclick = async () => {
+  const r = await getJson(`/api/sessions/${encodeURIComponent(id)}/prompts`).catch(() => null);
+  if (!r?.prompts) return toast(`Could not list the prompts${r?.error ? `: ${r.error}` : ''}.`);
+  const n = r.prompts.length;
+  const m = menuUnder($('#lastprompt'), h('div', { class: 'mhead' }, `${n} prompt${n === 1 ? '' : 's'} in ${info.label}${r.cut ? ' (the most recent)' : ''}`),
+    ...r.prompts.map((p) => h('div', { class: 'prow' }, h('span', { class: 'pwhen' }, sentAt(p.at)), h('span', { class: 'ptext' }, p.text))));
+  m.style.left = '8px';
+  m.scrollTop = m.scrollHeight;
+};
+
 // Send back: the Mac page puts the window back into a zone (app.js listens on this channel), and this
 // browser window closes. A browser window the page did not open itself may refuse to close; the note says
 // what to do then.
@@ -365,6 +476,8 @@ async function start() {
   showFiles(load(filesKey(), true));
   fillTree($('#tree'), '');
   openTerm();
+  watchStatus();
+  setInterval(watchStatus, 3000);
   const saved = load(TABS_KEY, { open: [], active: null });
   for (const rel of saved.open || []) tabs.push({ rel, kind: kindOf(rel), shown: null, error: null, v: 0 });
   const back = tabs.find((t) => t.rel === saved.active) || tabs.at(-1);

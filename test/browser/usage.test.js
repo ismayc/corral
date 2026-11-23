@@ -84,6 +84,24 @@ test('a click on the Mac usage tag hides the dollar amount in every window, and 
   assert.match(p.$('#toast').textContent, /Dollar amounts are shown/);
 });
 
+test('a pop-out that hides dollar amounts or last prompts changes the Mac page too', async () => {
+  const now = { sessions: [app.status('a', { claude: { status: 'idle', usage: U, lastPrompt: 'hi' } })] };
+  const p = await app.start({ routes: { 'GET /api/sessions': { sessions: [app.session('a')] }, 'GET /api/overview': () => now } });
+  p.tick(3000);
+  await app.flush();
+  const ev = (key) => p.window.dispatchEvent(new p.window.StorageEvent('storage', { key }));
+  assert.equal(p.$('.win .lastprompt .pt').textContent, 'hi');
+  p.window.localStorage.setItem('corral.cost', 'false');
+  p.window.localStorage.setItem('corral.prompts', 'false');
+  ev('other');
+  assert.equal(p.$('.win .use').textContent, '18% · $2.21');
+  ev('corral.cost');
+  assert.equal(p.$('.win .use').textContent, '18%');
+  ev('corral.prompts');
+  assert.equal(p.$('.win .lastprompt'), null);
+  assert.equal(p.$('#prompts').textContent, 'Prompts: off');
+});
+
 test('the palette hides and shows dollar amounts', async () => {
   const now = { sessions: [app.status('a', { claude: { status: 'idle', usage: U } })] };
   const p = await app.start({ routes: { 'GET /api/sessions': { sessions: [app.session('a')] }, 'GET /api/overview': () => now } });

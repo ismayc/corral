@@ -531,6 +531,167 @@ test('the theme button sets light or dark, and the terminal changes colors with 
   assert.equal(p.term.options.theme.background, '#fdfcff');
 });
 
+// The title bar's status, usage, Queue, and last prompt, read from /api/overview as on the Mac page.
+const U = { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, cost: 2.21, model: 'm', context: { used: 180, size: 1000, pct: 18 } };
+async function barPop(first, opts = {}) {
+  let now = first;
+  const p = await pop({ ...opts, routes: { 'GET /api/overview': () => ({ sessions: [{ ...win(), ...now }] }), ...opts.routes } });
+  p.set = async (s) => { now = s; await p.tick(3000); };
+  return p;
+}
+
+test('the bar shows the status dot, usage, Queue, and last prompt, and follows the window', async () => {
+  const p = await barPop({ claude: { status: 'busy', lastPrompt: 'fix it', usage: U }, queued: 2 });
+  assert.equal(p.$('#dot').className, 'dot working');
+  assert.equal(p.$('#dot').title, 'Claude is working.');
+  assert.equal(p.$('#use').hidden, false);
+  assert.equal(p.$('#use').textContent, '18% · $2.21');
+  assert.match(p.$('#use').title, /Click to hide the dollar amount\.$/);
+  assert.equal(p.$('#queue').hidden, false);
+  assert.equal(p.$('#queue').textContent, 'Queue 2');
+  assert.equal(p.$('#queue').classList.contains('has'), true);
+  assert.equal(p.$('#lastprompt').hidden, false);
+  assert.equal(p.$('#lastprompt .pt').textContent, 'fix it');
+  const states = [
+    [{ claude: { status: 'waiting', waitingFor: 'permission prompt' } }, 'idle', 'Claude is asking for permission.'],
+    [{ claude: { status: 'waiting' } }, 'idle', 'Claude is waiting on a prompt.'],
+    [{ claude: { status: 'idle', lastPrompt: '/wrap-up' } }, 'wrapped', 'Wrapped up: /wrap-up finished.'],
+    [{ claude: { status: 'idle' } }, 'idle', 'Your turn: Claude finished.'],
+    [{ exited: true }, 'blocked', 'The shell ended.'],
+    [{}, '', ''],
+  ];
+  for (const [s, cls, says] of states) {
+    await p.set(s);
+    assert.equal(p.$('#dot').className, `dot ${cls}`);
+    assert.equal(p.$('#dot').title, says);
+  }
+  // A plain shell: no usage, Queue, or prompt line.
+  assert.equal(p.$('#use').hidden, true);
+  assert.equal(p.$('#queue').hidden, true);
+  assert.equal(p.$('#lastprompt').hidden, true);
+  await p.set({ queued: 1 }); // prompts still waiting show Queue on any window
+  assert.equal(p.$('#queue').hidden, false);
+  // A rename on another device reaches the bar and the browser tab's title.
+  await p.set({ label: 'beta' });
+  assert.equal(p.$('#label').textContent, 'beta');
+  assert.equal(p.doc.title, 'beta');
+  // A failed read keeps the last state.
+  p.api.routes['GET /api/overview'] = new Error('offline');
+  await p.tick(3000);
+  assert.equal(p.$('#label').textContent, 'beta');
+});
+
+test('the bar stays plain until the overview lists the window', async () => {
+  const p = await pop();
+  await p.tick(3000);
+  assert.equal(p.$('#dot').className, 'dot');
+  assert.equal(p.$('#queue').hidden, true);
+  p.window.dispatchEvent(new p.window.StorageEvent('storage', { key: 'corral.cost' }));
+  assert.equal(p.$('#use').hidden, true);
+});
+
+test('a click on the usage tag hides or shows dollar amounts, and other pages\' changes reach the bar', async () => {
+  const p = await barPop({ claude: { status: 'idle', lastPrompt: 'hi', usage: U } });
+  p.$('#use').click();
+  assert.equal(p.stored('corral.cost'), false);
+  assert.equal(p.$('#use').textContent, '18%');
+  assert.equal(p.toast(), 'Dollar amounts are hidden. Click the usage tag to show them again.');
+  p.$('#use').click();
+  assert.equal(p.$('#use').textContent, '18% · $2.21');
+  assert.equal(p.toast(), 'Dollar amounts are shown.');
+  const ev = (key) => p.window.dispatchEvent(new p.window.StorageEvent('storage', { key }));
+  p.window.localStorage.setItem('corral.cost', 'false');
+  p.window.localStorage.setItem('corral.prompts', 'false');
+  ev('other');
+  assert.equal(p.$('#use').textContent, '18% · $2.21');
+  ev('corral.cost');
+  assert.equal(p.$('#use').textContent, '18%');
+  ev('corral.prompts');
+  assert.equal(p.$('#lastprompt').hidden, true);
+});
+
+test('the × on the last prompt hides it in every window, and a click lists the conversation\'s prompts', async () => {
+  const PROMPTS = { prompts: [{ text: 'one', at: '2026-01-02T10:00:00Z' }, { text: 'two', at: new Date().toISOString() }, { text: 'three', at: 'nope' }] };
+  const p = await barPop({ claude: { status: 'idle', lastPrompt: 'three' } }, { routes: { 'GET /api/sessions/w1/prompts': PROMPTS } });
+  p.$('#lastprompt').click();
+  await settle();
+  assert.equal(p.$('.menu .mhead').textContent, '3 prompts in alpha');
+  assert.deepEqual(p.$$('.menu .ptext').map((e) => e.textContent), ['one', 'two', 'three']);
+  const when = p.$$('.menu .pwhen').map((e) => e.textContent);
+  assert.match(when[0], /^Jan 2, /);
+  assert.doesNotMatch(when[1], /,/);
+  assert.equal(when[2], '');
+  p.api.routes['GET /api/sessions/w1/prompts'] = { prompts: [{ text: 'one', at: null }], cut: true };
+  p.$('#lastprompt').click();
+  await settle();
+  assert.equal(p.$('.menu .mhead').textContent, '1 prompt in alpha (the most recent)');
+  p.api.routes['GET /api/sessions/w1/prompts'] = { error: 'no transcript yet' };
+  p.$('#lastprompt').click();
+  await settle();
+  assert.equal(p.toast(), 'Could not list the prompts: no transcript yet.');
+  p.api.routes['GET /api/sessions/w1/prompts'] = new Error('offline');
+  p.$('#lastprompt').click();
+  await settle();
+  assert.equal(p.toast(), 'Could not list the prompts.');
+  p.$('#lastprompt button').click();
+  await settle();
+  assert.equal(p.stored('corral.prompts'), false);
+  assert.equal(p.$('#lastprompt').hidden, true);
+  assert.equal(p.toast(), 'Last prompts are hidden. Prompts in the Mac page toolbar shows them again.');
+  assert.equal(p.api.called('GET', '/api/sessions/w1/prompts').length, 4); // the × does not open the list
+});
+
+test('the Queue menu lists, adds, removes, and clears prompts, and says when it cannot', async () => {
+  let items = [{ id: 'q1', text: 'first' }];
+  const p = await barPop({ claude: { status: 'busy' }, queued: 1 }, { routes: {
+    'GET /api/sessions/w1/queue': () => ({ items }),
+    'POST /api/sessions/w1/queue': (r) => {
+      if (r.body.text === 'bad') return { error: 'too long' };
+      if (r.body.text) items = [...items, { id: `q${items.length + 1}`, text: r.body.text }];
+      if (r.body.remove) items = items.filter((i) => i.id !== r.body.remove);
+      if (r.body.clear) items = [];
+      return { items };
+    },
+  } });
+  p.$('#queue').click();
+  await settle();
+  assert.equal(p.$('.menu .mhead').textContent, 'Waiting to go to alpha, in order');
+  assert.deepEqual(p.$$('.menu .qtext').map((e) => e.textContent), ['first']);
+  const input = () => p.$('.menu input');
+  assert.equal(p.doc.activeElement, input());
+  const key = (k) => input().dispatchEvent(new p.window.KeyboardEvent('keydown', { key: k }));
+  input().value = '   ';
+  key('Enter'); // blank: nothing sent
+  input().value = 'second';
+  key('a'); // not Enter: nothing sent
+  assert.equal(p.api.called('POST', '/api/sessions/w1/queue').length, 0);
+  key('Enter');
+  await settle();
+  assert.deepEqual(p.$$('.menu .qtext').map((e) => e.textContent), ['first', 'second']);
+  assert.equal(p.$('#queue').textContent, 'Queue 2');
+  input().value = 'bad';
+  key('Enter');
+  await settle();
+  assert.equal(p.toast(), 'Could not queue it: too long.');
+  p.$('.menu .qrow button').click();
+  await settle();
+  assert.deepEqual(p.$$('.menu .qtext').map((e) => e.textContent), ['second']);
+  p.$$('.menu > button').find((b) => b.textContent === 'Clear the queue').click();
+  await settle();
+  assert.equal(p.$('.menu .mhead').textContent, 'Nothing is waiting for alpha');
+  assert.equal(p.$$('.menu > button').length, 0);
+  assert.equal(p.$('#queue').textContent, 'Queue');
+  p.api.routes['POST /api/sessions/w1/queue'] = new Error('offline');
+  input().value = 'x';
+  key('Enter');
+  await settle();
+  assert.equal(p.toast(), 'Could not queue it.');
+  p.api.routes['GET /api/sessions/w1/queue'] = new Error('offline');
+  p.$('#queue').click();
+  await settle();
+  assert.equal(p.toast(), 'Could not read the queue.');
+});
+
 test('Send back tells the Mac page and closes the pop-out', async () => {
   const p = await pop();
   let closed = 0;

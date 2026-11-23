@@ -35,6 +35,25 @@
   #label { font:700 15px var(--brand); white-space:nowrap; }
   #cwd { color:var(--muted); font-size:12px; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #state { color:var(--muted); font-size:12px; white-space:nowrap; }
+  /* The same status dot, usage tag, Queue button, and last prompt as a window's title bar on the Mac page. */
+  .dot { width:8px; height:8px; border-radius:50%; flex:none; background:var(--unknown); margin-right:-4px; }
+  .dot.working { background:var(--working); } .dot.idle { background:var(--idle); } .dot.blocked { background:var(--blocked); } .dot.wrapped { background:var(--wrapped); }
+  #use { color:var(--muted); font-size:12px; white-space:nowrap; font-variant-numeric:tabular-nums; cursor:pointer; }
+  #queue.has { border-color:var(--fence); }
+  #lastprompt { flex:none; display:flex; align-items:flex-start; gap:6px; padding:3px 8px 3px 12px; background:var(--you-bg);
+                border-bottom:1px solid var(--rail); font-size:12px; cursor:pointer; }
+  #lastprompt .pt { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #lastprompt .pt::before { content:'You: '; color:var(--muted); }
+  #lastprompt button { padding:0 6px; line-height:16px; background:transparent; border-color:transparent; color:var(--muted); }
+  #lastprompt button:hover { color:var(--text); border-color:var(--rail); }
+  .menu.wide { width:440px; max-width:calc(100vw - 16px); max-height:70vh; overflow:auto; }
+  .menu .qrow, .menu .prow { display:flex; gap:6px; align-items:flex-start; padding:5px 9px; border-top:1px solid var(--rail); }
+  .menu .prow { flex-direction:column; gap:2px; }
+  .menu .qtext, .menu .ptext { flex:1; overflow-wrap:anywhere; white-space:pre-wrap; user-select:text; }
+  .menu .qrow button { flex:none; padding:0 6px; color:var(--muted); }
+  .menu .pwhen, .menu .mnote { color:var(--muted); font-size:11px; }
+  .menu .mnote { padding:4px 9px; }
+  .menu input { margin:6px 0 4px; }
 
   #main { flex:1; min-height:0; display:flex; }
   #files { flex:none; width:260px; display:flex; flex-direction:column; background:var(--panel); border-right:1px solid var(--rail); min-height:0; }
@@ -131,11 +150,14 @@
 <body>
 <header id="bar">
   <button id="filesbtn" type="button" aria-pressed="true" title="Hide the file panel for this space">Files</button>
-  <span id="label"></span><span id="cwd"></span>
+  <span id="dot" class="dot"></span><span id="label"></span>
+  <span id="use" hidden></span><span id="cwd"></span>
   <span id="state" role="status"></span>
+  <button id="queue" type="button" hidden title="Prompts to send when Claude finishes">Queue</button>
   <button id="theme" type="button"></button>
   <button id="sendback" type="button" title="Close this pop-out and put the window back with the others in Corral">Send back</button>
 </header>
+<div id="lastprompt" hidden title="Your last prompt (click for every prompt in this conversation)"><span class="pt"></span><button type="button" title="Hide the last prompt in every window">&times;</button></div>
 <div id="main">
   <aside id="files">
     <div class="fhead">
@@ -168,6 +190,7 @@
 <script src="/vendor/addon-web-links.js"></script>
 <script src="/clientlog.js"></script>
 <script src="/fresh.js"></script>
+<script src="/usage.js"></script>
 <script src="/markdown.js"></script>
 <script src="/editor.js"></script>
 <script src="/pop.js"></script>
