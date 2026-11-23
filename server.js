@@ -20,6 +20,7 @@ const { WebSocketServer } = require('ws');
 const usage = require('./lib/usage');
 const history = require('./lib/history');
 const queueLib = require('./lib/queue');
+const ntfyLib = require('./lib/ntfy');
 
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.CORRAL_PORT || process.env.WEBTERM_PORT || 8777);
@@ -1447,7 +1448,7 @@ function watchWindows() {
   let mutedChanged = false;
   for (const id of Object.keys(push.muted)) if (!live.some((w) => w.id === id)) { delete push.muted[id]; mutedChanged = true; }
   if (mutedChanged) savePush();
-  if (!push.subs.length) { lastSeen.clear(); watchPrimed = false; return; }
+  if (!push.subs.length && !ntfy.on) { lastSeen.clear(); watchPrimed = false; return; }
   const events = [];
   for (const w of live) {
     const st = !w.claude ? 'shell' : w.claude.waitingFor === 'permission prompt' ? 'permission' : w.claude.status;
@@ -1460,20 +1461,26 @@ function watchWindows() {
       // The tool and what it runs: the first lines of the prompt, without the question itself.
       const what = (p?.text || '').split('\n').map((l) => l.trim()).filter((l) => l && !/^Do you want to/.test(l) && !/requires approval$/.test(l));
       events.push({
+        kind: 'permission', brief: 'Claude is asking for permission.',
         title: `${w.label} needs permission`, body: (what.slice(0, 4).join(' · ') || 'Claude is asking before it goes on').slice(0, 220),
         tag: w.id, url: `/m?w=${w.id}`,
         // Allow and Deny on the notification itself, where the phone shows them (not on an iPhone).
         ...(p ? { answer: { id: w.id, key: w.askKey }, actions: [{ action: 'allow', title: 'Allow' }, { action: 'deny', title: 'Deny' }] } : {}),
       });
     } else if (was === 'busy' && st === 'idle' && push.prefs.turn) {
-      events.push({ title: `${w.label}: your turn`, body: 'Claude finished and is waiting for you.', tag: w.id, url: `/m?w=${w.id}` });
+      events.push({ kind: 'turn', brief: 'Claude finished and is waiting for you.', title: `${w.label}: your turn`, body: 'Claude finished and is waiting for you.', tag: w.id, url: `/m?w=${w.id}` });
     }
   }
   for (const id of lastSeen.keys()) if (!live.some((w) => w.id === id)) lastSeen.delete(id);
   watchPrimed = true;
   if (!events.length || (push.prefs.away && macIdleSeconds() < AWAY_SECONDS)) return;
-  for (const e of events) pushAll(e);
+  // Web Push gets the whole event; ntfy, on a public server, only the window's name and the reason.
+  for (const { kind, brief, ...e } of events) {
+    pushAll(e);
+    ntfy.send({ title: e.title, brief, tag: kind });
+  }
 }
+const ntfy = ntfyLib.createNtfy(path.join(DATA_DIR, 'ntfy.json'));
 
 // Prompts waiting their turn (lib/queue.js): each window whose Claude has finished, with nothing typed in its
 // input box, gets the next one. Queues of windows that are gone are forgotten.
@@ -2239,6 +2246,15 @@ const server = http.createServer(async (req, res) => {
     savePush();
     return send(res, 200, { ok: true, devices: push.subs.length });
   }
+  if (url.pathname === '/api/ntfy' && req.method === 'GET') return send(res, 200, ntfy.view());
+  if (url.pathname === '/api/ntfy' && req.method === 'POST') {
+    const { status, ...r } = ntfy.set(await readJson(req));
+    return send(res, status, r);
+  }
+  if (url.pathname === '/api/ntfy/test' && req.method === 'POST') {
+    const r = await ntfy.send({ title: 'Corral', brief: 'ntfy works. You will hear from Corral here when a window needs you.', tag: 'test' });
+    return r === 'ok' ? send(res, 200, { ok: true }) : send(res, r === 'off' ? 409 : 502, { error: r === 'off' ? 'ntfy is off' : 'ntfy.sh did not take the message' });
+  }
   if (url.pathname === '/api/push/unsubscribe' && req.method === 'POST') {
     const body = await readJson(req);
     if (!body || typeof body.endpoint !== 'string') return send(res, 400, { error: 'bad json' });
@@ -2374,6 +2390,7 @@ module.exports = {
     get tailnetTrouble() { return tailnetTrouble; }, set tailnetTrouble(v) { tailnetTrouble = v; },
     get push() { return push; }, set push(v) { push = v; },
     get queue() { return queue; },
+    get ntfy() { return ntfy; },
     get categories() { return categories; },
     get openRoots() { return openRoots; },
     get caffeinate() { return caffeinate; },

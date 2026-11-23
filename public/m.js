@@ -1332,7 +1332,8 @@ async function renderNotify() {
     return h('label', { class: 'row' }, h('span', {}, label, h('small', {}, help)), box);
   };
   // Not a notification setting, but it decides whether the Mac is there to send one.
-  const mac = [h('div', { class: 'section', style: 'margin:18px -16px 0' }, 'On the Mac'),
+  const mac = [...await ntfySection(),
+    h('div', { class: 'section', style: 'margin:18px -16px 0' }, 'On the Mac'),
     pref('awake', 'Keep the Mac awake while Claude works', 'Stops idle sleep while any window is working or waiting on a prompt. Closing the lid still sleeps.')];
   if (!pushable || !isSecureContext) {
     const iphone = /iPhone|iPad/.test(navigator.userAgent);
@@ -1362,6 +1363,29 @@ async function renderNotify() {
   }
   kids.push(p('A notification names the window and what it is waiting for. It travels encrypted, so the push service cannot read it. To silence one window, use its ⋯ menu.'), ...mac);
   body.replaceChildren(...kids);
+}
+// ntfy: the same notices through the ntfy app, for a phone where these notifications do not arrive. Its topic
+// is a long random name made on the Mac; subscribe to it in the ntfy app. A message names only the window and
+// the reason, since anyone who knows the topic can read it on the public ntfy.sh server.
+async function ntfySection() {
+  const n = await api('/api/ntfy').catch(() => null);
+  const head = h('div', { class: 'section', style: 'margin:18px -16px 0' }, 'ntfy app');
+  if (!n) return [head, h('p', {}, 'Could not read the ntfy setting.')];
+  const set = (body, done) => api('/api/ntfy', { method: 'POST', body }).then(() => { toast(done); renderNotify(); }, () => toast('Could not save that.'));
+  const box = h('input', { type: 'checkbox' });
+  box.checked = n.on;
+  box.onchange = () => set({ on: box.checked }, box.checked ? 'ntfy is on. Subscribe to the topic in the ntfy app.' : 'ntfy is off.');
+  const kids = [head, h('label', { class: 'row' }, h('span', {}, 'Also send to the ntfy app',
+    h('small', {}, 'For a phone where these notifications do not arrive. Sends the window\'s name and why, nothing more, at the same moments as notifications (by default a permission prompt or a finished turn, while you are away from the Mac).')), box)];
+  if (n.on) {
+    kids.push(h('p', {}, 'In the ntfy app, subscribe to this topic on ntfy.sh. Keep it private: anyone with the name can read the messages.'),
+      h('p', { class: 'topic' }, h('a', { href: n.url, target: '_blank', rel: 'noopener' }, n.topic)),
+      h('div', { class: 'btns' },
+        h('button', { onclick: () => navigator.clipboard.writeText(n.topic).then(() => toast('Copied the topic.'), () => toast('Could not copy. Press and hold the topic instead.')) }, 'Copy the topic'),
+        h('button', { onclick: () => api('/api/ntfy/test', { method: 'POST' }).then(() => toast('Sent to ntfy. It should arrive in a few seconds.'), () => toast('ntfy did not take the test.')) }, 'Send a test'),
+        h('button', { onclick: () => set({ newTopic: true }, 'New topic made. Subscribe to it in the ntfy app; the old one hears nothing more.') }, 'New topic')));
+  }
+  return kids;
 }
 async function enablePush() {
   try {

@@ -5,6 +5,13 @@ in `package.json`.
 
 ## Development version
 
+- **ntfy as a second way to be told.** The phone's Alerts sheet can also send
+  each notice to the ntfy app through the public ntfy.sh server, for a phone
+  where Web Push does not arrive. The topic is a long random name made on the
+  Mac, and a message holds only the window's name and why (no prompt text).
+  New: `lib/ntfy.js`, `GET`/`POST /api/ntfy`, and `POST /api/ntfy/test`;
+  the setting is kept in `ntfy.json` in Corral's data folder.
+
 - **A queue of prompts for each window.** The **Queue** button on a Claude
   window (and **Queue a prompt** in the palette and on the phone) holds
   prompts to send later. When Claude finishes and nothing is typed in its

@@ -110,6 +110,13 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   the Mac's Corral page), or restore windows after a restart. Add it to
   your Home Screen and it opens like an app. Another computer on your tailnet
   gets the full desktop page.
+- **The ntfy app, too.** If notifications do not reach your phone, turn on
+  **Also send to the ntfy app** in the phone's Alerts sheet. Corral makes a
+  long random topic on ntfy.sh; subscribe to it in the
+  [ntfy app](https://ntfy.sh). Anyone who knows a topic's name can read it on
+  the public server, so a message says only the window's name and why
+  ("needs permission", "your turn"), never what Claude asked or wrote. **New
+  topic** replaces the topic, and **Send a test** checks the path.
 - **Categories** you define, with collapsible groups. To move a space,
   right-click it (or use its ⋯ button) and pick a group, or drag it onto any
   group's header or rows. Cmd-click or Shift-click to select several spaces
