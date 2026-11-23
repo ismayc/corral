@@ -19,6 +19,7 @@ const pty = require('node-pty');
 const { WebSocketServer } = require('ws');
 const usage = require('./lib/usage');
 const history = require('./lib/history');
+const queueLib = require('./lib/queue');
 
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.CORRAL_PORT || process.env.WEBTERM_PORT || 8777);
@@ -621,6 +622,7 @@ function overview({ screens = true } = {}) {
       prompt: screen && claude.waitingFor === 'permission prompt' ? withKey(permissionPrompt(s.id, screen), claude) : null,
       question,
       muted: Boolean(push.muted[s.id]),
+      queued: queue.count(s.id),
     };
   });
 }
@@ -1440,6 +1442,7 @@ function watchWindows() {
   let rows;
   try { rows = overview({ screens: false }); } catch { return; }
   const live = rows.filter((w) => !w.exited);
+  runQueue(live);
   keepAwake(push.prefs.awake && live.some((w) => w.claude?.status === 'busy' || w.claude?.status === 'waiting'));
   let mutedChanged = false;
   for (const id of Object.keys(push.muted)) if (!live.some((w) => w.id === id)) { delete push.muted[id]; mutedChanged = true; }
@@ -1470,6 +1473,22 @@ function watchWindows() {
   watchPrimed = true;
   if (!events.length || (push.prefs.away && macIdleSeconds() < AWAY_SECONDS)) return;
   for (const e of events) pushAll(e);
+}
+
+// Prompts waiting their turn (lib/queue.js): each window whose Claude has finished, with nothing typed in its
+// input box, gets the next one. Queues of windows that are gone are forgotten.
+const QUEUE_FILE = path.join(DATA_DIR, 'queue.json');
+const queue = queueLib.createQueue(QUEUE_FILE);
+function runQueue(live) {
+  queue.prune(new Set(live.map((w) => w.id)));
+  for (const w of live) {
+    const item = queue.due(w.id, w.claude);
+    if (!item) continue;
+    const s = sessions.get(w.id);
+    if (!s.tmux || queueLib.inputDraft(screenLines(w.id, true)) !== '') continue; // something typed, or no input box
+    const r = typePrompt(s, item.text);
+    if (r.typed) queue.sent(w.id, item.id);
+  }
 }
 
 // Photos from the phone are kept 14 days, then deleted.
@@ -2140,7 +2159,7 @@ const server = http.createServer(async (req, res) => {
     if (!s || !s.tmux || s.exited) return send(res, 404, { error: 'no such window' });
     try { return send(res, 200, windowHistory(s.id), 'text/plain; charset=utf-8'); } catch { return send(res, 500, { error: 'could not read the window' }); }
   }
-  const act = url.pathname.match(/^\/api\/sessions\/([\w-]+)\/(prompt|answer|changes|upload|key|rename|mute|last|conversation|prompts|commands|markdown)$/);
+  const act = url.pathname.match(/^\/api\/sessions\/([\w-]+)\/(prompt|answer|changes|upload|key|rename|mute|last|conversation|prompts|commands|markdown|queue)$/);
   if (act) {
     const s = sessions.get(act[1]);
     if (!s || s.exited) return send(res, 404, { error: 'no such window' });
@@ -2188,6 +2207,14 @@ const server = http.createServer(async (req, res) => {
     }
     if (act[2] === 'commands' && req.method === 'GET') {
       return send(res, 200, { commands: slashCommands(windowClaude(s)?.cwd || s.cwd) });
+    }
+    if (act[2] === 'queue' && req.method === 'GET') return send(res, 200, { items: queue.list(s.id) });
+    // {text} adds a prompt to the end, {remove: id} takes one out, {clear: true} empties the queue.
+    if (act[2] === 'queue' && req.method === 'POST') {
+      const body = await readJson(req);
+      if (!body) return send(res, 400, { error: 'bad json' });
+      const { status, ...r } = body.clear === true ? queue.clear(s.id) : typeof body.remove === 'string' ? queue.remove(s.id, body.remove) : queue.add(s.id, body.text);
+      return send(res, status, r);
     }
     if (act[2] === 'markdown' && req.method === 'GET') {
       return send(res, 200, markdownFiles(await windowRoot(s)));
@@ -2346,6 +2373,7 @@ module.exports = {
     get tailnet() { return tailnet; }, set tailnet(v) { tailnet = v; },
     get tailnetTrouble() { return tailnetTrouble; }, set tailnetTrouble(v) { tailnetTrouble = v; },
     get push() { return push; }, set push(v) { push = v; },
+    get queue() { return queue; },
     get categories() { return categories; },
     get openRoots() { return openRoots; },
     get caffeinate() { return caffeinate; },
@@ -2359,7 +2387,7 @@ module.exports = {
   writeJson, readJsonFile, claudeUnder, processChildren, openWindows, overview, withKey, screenLines, screenMode, screenStatus,
   sendCardKey, renameWindow, transcriptFile, restState, lastPrompt, windowUsage, conversationItems, pastConversations, exportConversation, resumeConversation, promptList, tailLines, lastReply, typedText, conversation, windowHistory, rejoin,
   permissionPrompt, readPlan, promptKey, windowClaude, answerPrompt, questionPrompt, questionKey, answerQuestion, frontMatter, slashCommands, git, windowChanges, saveUpload, loadPush, savePush,
-  vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, pruneUploads,
+  vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, runQueue, pruneUploads,
   locateFile, cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows, autoRestore,
   reopenProject, newRepos, hideRepo, identityRoots, herdrSnapshot, rootFor, listDir, loadOpenWith, saveOpenWith, fileKind, bodyFile,
   appsFor, openChoices, openFile, appName, viewFile, imageFile, textFile, pdfFile, saveFile, pageVersion, markdownFiles, send, serveFile, readJson,

@@ -105,7 +105,7 @@ test('the ⋯ menu of a Claude window lists every action and names its mode', as
   assert.equal(p.sheetTitle(), 'a');
   assert.equal(p.$('#termview').hidden, true);
   assert.deepEqual(p.$$('#genbody .menu button').map((b) => b.textContent),
-    ['Open the window', 'Last reply', 'Past conversations', 'Next mode (now Plan mode)', 'Add to TO-DO', 'Add to Later', 'Mute notifications for this window', 'Rename', 'Close the window']);
+    ['Open the window', 'Last reply', 'Queue a prompt', 'Past conversations', 'Next mode (now Plan mode)', 'Add to TO-DO', 'Add to Later', 'Mute notifications for this window', 'Rename', 'Close the window']);
   assert.equal(p.button('Close the window').className, 'danger');
 });
 

@@ -321,7 +321,7 @@ function attach(info, quiet) {
   if (open.has(info.id)) return minimized.has(info.id) || tray.includes(info.id) ? restore(info.id) : setFocus(info.id);
   const el = document.createElement('div');
   el.className = 'win';
-  el.innerHTML = `<div class="title"><span class="dot"></span><span class="t"></span><span class="use" hidden></span><span class="cwd"></span><button class="pop" title="Pop out into a browser window of its own, with this space's files and tabs">&#10697;</button><button class="min" title="Minimize to the bottom bar (keeps running)">&#8211;</button><button class="close" title="Close and kill shell">&times;</button></div><div class="term"></div>`;
+  el.innerHTML = `<div class="title"><span class="dot"></span><span class="t"></span><span class="use" hidden></span><span class="cwd"></span><button class="queue" hidden title="Prompts to send when Claude finishes">Queue</button><button class="pop" title="Pop out into a browser window of its own, with this space's files and tabs">&#10697;</button><button class="min" title="Minimize to the bottom bar (keeps running)">&#8211;</button><button class="close" title="Close and kill shell">&times;</button></div><div class="term"></div>`;
   el.querySelector('.t').textContent = info.label;
   el.querySelector('.cwd').textContent = info.cwd.replace(/^\/Users\/[^/]+/, '~');
   const slot = document.createElement('div');
@@ -416,6 +416,7 @@ function attach(info, quiet) {
   el.addEventListener('mousedown', () => setFocus(info.id));
   el.querySelector('.min').onclick = (e) => { e.stopPropagation(); minimize(info.id); };
   el.querySelector('.pop').onclick = (e) => { e.stopPropagation(); popOut(info.id); };
+  el.querySelector('.queue').onclick = (e) => { e.stopPropagation(); queueMenu(w, e.currentTarget); };
   el.querySelector('.close').onclick = async () => {
     open.delete(info.id);
     forgetFont(info.id);
@@ -1446,6 +1447,7 @@ function commands(w) {
   for (const s of spaces) if (!windowForSpace(s.id)) add(`Open ${s.label}`, 'space', () => spawn(s.cwd, s.label, s.id, $('#agent').value));
   if (w) {
     add(`Find in ${w.info.label}`, 'Cmd-F', () => openFind(w));
+    add(`Queue a prompt for ${w.info.label}`, w.queued ? `${w.queued} waiting` : 'queue', () => queueMenu(w, w.el.querySelector('.title .queue')));
     add(`Larger text in ${w.info.label}`, 'Cmd-=', () => setFont(w.info.id, fontOf(w.info.id) + 1));
     add(`Smaller text in ${w.info.label}`, 'Cmd--', () => setFont(w.info.id, fontOf(w.info.id) - 1));
     if (fontOne[w.info.id]) add(`Usual text size in ${w.info.label}`, 'Cmd-0', () => setFont(w.info.id, fontAll));
@@ -1663,6 +1665,66 @@ function paintUsage(w) {
   el.title = window.CorralUsage.title(u);
 }
 
+// The Queue button: on a Claude window, or any window with prompts waiting, with how many are waiting.
+function paintQueue(w, n) {
+  const b = w.el.querySelector('.title .queue');
+  w.queued = n;
+  b.hidden = !w.claude && !n;
+  b.textContent = n ? `Queue ${n}` : 'Queue';
+  b.classList.toggle('has', n > 0);
+}
+// Prompts waiting their turn in a window, in a menu under its Queue button: each with an ×, a box to add one,
+// and Clear. The server types the next one in when Claude finishes and nothing is typed in its input box.
+async function queueMenu(w, anchor) {
+  const base = `/api/sessions/${encodeURIComponent(w.info.id)}/queue`;
+  const r = await api(base).catch(() => null);
+  if (!r?.items) return toast('Could not read the queue.');
+  closeMenu();
+  const m = document.createElement('div');
+  m.className = 'catmenu queuemenu';
+  const draw = (items) => {
+    m.replaceChildren();
+    paintQueue(w, items.length);
+    m.append(Object.assign(document.createElement('div'), { className: 'mhead', textContent: items.length ? `Waiting to go to ${w.info.label}, in order` : `Nothing is waiting for ${w.info.label}` }));
+    for (const it of items) {
+      const row = m.appendChild(Object.assign(document.createElement('div'), { className: 'qrow' }));
+      const del = Object.assign(document.createElement('button'), { className: 'qdel', textContent: '×', title: 'Take it out of the queue' });
+      del.onclick = async (e) => {
+        e.stopPropagation();
+        const x = await api(base, { method: 'POST', body: { remove: it.id } }).catch(() => null);
+        if (x?.items) draw(x.items); else toast(`Could not take it out${x?.error ? `: ${x.error}` : ''}.`);
+      };
+      row.append(Object.assign(document.createElement('span'), { className: 'qtext', textContent: it.text }), del);
+    }
+    const input = Object.assign(document.createElement('input'), { placeholder: 'A prompt to send when Claude finishes, then Enter', maxLength: 4000 });
+    input.onkeydown = async (e) => {
+      if (e.key === 'Escape') return closeMenu();
+      if (e.key !== 'Enter' || !input.value.trim()) return;
+      const x = await api(base, { method: 'POST', body: { text: input.value } }).catch(() => null);
+      if (!x?.items) return toast(`Could not queue it${x?.error ? `: ${x.error}` : ''}.`);
+      draw(x.items);
+      m.querySelector('input').focus();
+    };
+    m.append(input);
+    if (items.length) {
+      const clear = Object.assign(document.createElement('button'), { className: 'danger', textContent: 'Clear the queue' });
+      clear.onclick = async () => {
+        const x = await api(base, { method: 'POST', body: { clear: true } }).catch(() => null);
+        if (x?.items) draw(x.items); else toast('Could not clear the queue.');
+      };
+      m.append(clear);
+    }
+    m.append(Object.assign(document.createElement('div'), { className: 'murl', textContent: 'Corral types the next one in when Claude has finished and nothing is typed in its prompt box.' }));
+  };
+  draw(r.items);
+  document.body.append(m);
+  const b = anchor.getBoundingClientRect();
+  m.style.left = `${Math.max(8, Math.min(b.right - m.offsetWidth, innerWidth - m.offsetWidth - 8))}px`;
+  m.style.top = `${b.bottom + 4}px`;
+  openMenu = m;
+  m.querySelector('input').focus();
+}
+
 // When a prompt was sent: the time today, else the date and time.
 function sentAt(at) {
   const d = new Date(at);
@@ -1712,6 +1774,7 @@ async function watchStatus() {
     paint(w);
     paintPrompt(w);
     paintUsage(w);
+    paintQueue(w, s.queued || 0);
     if (s.exited) continue;
     if (s.label !== w.info.label) { w.info.label = s.label; w.el.querySelector('.t').textContent = s.label; relayout = true; }
     const key = s.prompt?.key || null;

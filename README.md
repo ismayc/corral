@@ -46,6 +46,14 @@ Project site, with screenshots and use cases: <https://ismayc.github.io/corral/>
   published API prices for the conversation's models, so it is an estimate:
   a Claude plan does not bill each token. The phone's cards show the same
   tag; tap it for the details.
+- **A queue of prompts.** The **Queue** button in a Claude window's title
+  bar holds prompts to send later, in order. When Claude finishes and has
+  been idle for 5 seconds, and nothing is typed in its prompt box, Corral
+  types in the next one; the one after waits until Claude has taken that one
+  up. Claude Code's dim suggested prompt does not count as typed text. A
+  queued prompt is one line. The queue is kept on the Mac, so it keeps
+  going with no page open and after a restart. The phone has the same
+  queue under a window's ⋯ menu, and its card shows how many are waiting.
 - **Command palette.** **Cmd-K** opens a box that finds what you type: a
   window to go to, a space to open, a layout, a saved layout, or a page
   action (new shell, theme, text size, past conversations). The arrow keys

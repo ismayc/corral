@@ -294,6 +294,7 @@ function windowMenu(w) {
   sheet(w.label, h('div', { class: 'menu' },
     item('Open the window', () => { closeSheet(); openTerm(w); }),
     claude ? item('Last reply', () => showLastReply(w)) : null,
+    claude || w.queued ? item(w.queued ? `Queued prompts (${w.queued})` : 'Queue a prompt', () => queueSheet(w)) : null,
     w.cwd ? item('Past conversations', () => pastSheet(w)) : null,
     claude && w.claude.status !== 'waiting' ? item(`Next mode${w.claude.mode ? ` (now ${modeName(w.claude.mode)})` : ''}`, () => { closeSheet(); cardKey(w, 'mode'); }) : null,
     w.cwd ? item(isTodoWin(w) ? 'Remove from TO-DO' : 'Add to TO-DO', () => toggleMark(w, 'todo')) : null,
@@ -316,6 +317,32 @@ async function pastSheet(w) {
   sheet(title, h('div', { class: 'past' }, ...r.conversations.map((c) => h('div', { class: 'prow' },
     h('div', { class: 'ptitle' }, c.title),
     h('div', { class: 'pmeta' }, `${ago(c.updated)}`, ' · ', save(c, 'md'), ' · ', save(c, 'html'))))));
+}
+
+// Prompts waiting their turn in a window: the Mac types the next one in when Claude has finished and nothing is
+// typed in its prompt box. Add one, take one out, or clear them all.
+async function queueSheet(w) {
+  const title = `${w.label}: queued prompts`;
+  const base = `/api/sessions/${encodeURIComponent(w.id)}/queue`;
+  const draw = (items) => {
+    const input = h('textarea', { rows: '2', placeholder: 'A prompt to send when Claude finishes', maxlength: '4000' });
+    const send = async (body, fail) => {
+      let r;
+      try { r = await api(base, { method: 'POST', body }); } catch (e) { return toast(`${fail}: ${e.message}.`); }
+      draw(r.items);
+      refresh();
+    };
+    sheet(title,
+      ...(items.length ? items.map((it, i) => h('div', { class: 'qrow' }, h('span', { class: 'qn' }, `${i + 1}.`), h('span', { class: 'qtext' }, it.text),
+        h('button', { 'aria-label': `Remove prompt ${i + 1}`, onclick: () => send({ remove: it.id }, 'Could not take it out') }, 'Remove'))) : [h('p', {}, 'Nothing is waiting.')]),
+      input,
+      h('div', { class: 'btns' },
+        h('button', { class: 'primary', onclick: () => { if (input.value.trim()) send({ text: input.value }, 'Could not queue it'); } }, 'Add to the queue'),
+        ...(items.length ? [h('button', { onclick: () => send({ clear: true }, 'Could not clear it') }, 'Clear')] : [])),
+      h('p', { class: 'hint' }, 'The Mac types the next one in when Claude has finished and nothing is typed in its prompt box.'));
+  };
+  sheet(title, h('p', {}, 'Loading…'));
+  try { draw((await api(base)).items); } catch { sheet(title, h('p', {}, 'Could not read the queue.')); }
 }
 
 async function setMuted(w, muted) {
@@ -459,6 +486,7 @@ function renderList() {
       busy ? h('button', { class: 'stop', onclick: (e) => { stop(e); cardKey(w, 'stop'); } }, 'Stop') : null,
       w.claude?.mode ? h('span', { class: 'tag' }, modeName(w.claude.mode)) : null,
       w.muted ? h('span', { class: 'tag' }, 'Muted') : null,
+      w.queued ? h('button', { class: 'tag use', 'aria-label': `Queued prompts for ${w.label}`, onclick: (e) => { stop(e); queueSheet(w); } }, `${w.queued} queued`) : null,
       w.claude?.usage ? h('button', { class: 'tag use', 'aria-label': `Token use for ${w.label}`, onclick: (e) => { stop(e); usageSheet(w); } }, window.CorralUsage.text(w.claude.usage)) : null,
     ].filter(Boolean);
     kids.push(h('div', { class: `card ${st.cls === 'need' ? 'need' : ''}`, role: 'button', tabindex: '0', 'data-id': w.id, 'data-state': colorOf(st),

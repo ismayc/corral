@@ -134,6 +134,13 @@
   #laymenu .saveduse { flex:1; text-align:left; }
   #laymenu .saveddel { color:var(--muted); }
   #laymenu .savedname { grid-column:1 / -1; margin-top:4px; }
+  .title button.queue { font-size:11px; }
+  .title button.queue.has { color:var(--text); border-color:var(--rail); }
+  .win.focus .title button.queue.has { border-color:#e6e1ff; }
+  .catmenu.queuemenu { width:380px; max-width:calc(100vw - 16px); }
+  .queuemenu .qrow { display:flex; gap:6px; align-items:flex-start; padding:5px 9px; border-top:1px solid var(--rail); }
+  .queuemenu .qtext { flex:1; overflow-wrap:anywhere; white-space:pre-wrap; }
+  .queuemenu .qdel { padding:0 6px; color:var(--muted); }
   .catmenu.histmenu { width:440px; max-width:calc(100vw - 16px); max-height:80vh; gap:0; }
   .histmenu .hrow { padding:7px 9px; border-top:1px solid var(--rail); display:grid; grid-template-columns:1fr auto; gap:2px 8px; align-items:center; }
   .histmenu .htitle { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

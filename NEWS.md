@@ -5,6 +5,15 @@ in `package.json`.
 
 ## Development version
 
+- **A queue of prompts for each window.** The **Queue** button on a Claude
+  window (and **Queue a prompt** in the palette and on the phone) holds
+  prompts to send later. When Claude finishes and nothing is typed in its
+  prompt box, Corral types in the next one, one at a time. The queue lives
+  on the server (`queue.json` in Corral's data folder), so it runs with no
+  page open and survives a restart. New: `lib/queue.js` and
+  `GET`/`POST /api/sessions/<id>/queue`; `GET /api/overview` gives each
+  window's `queued` count.
+
 - **Command palette, find, text size, and saved layouts on the Mac page.**
   **Cmd-K** opens a palette that finds a window, a space, a layout, or a
   page action by name. **Cmd-F** in a window searches its scrollback
