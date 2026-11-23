@@ -947,6 +947,8 @@ function groupHeader(c, count, forceOpen) {
   return h;
 }
 
+// The sidebar lists folded by a click on their heading, on this browser (category groups are kept on the server).
+const folded = new Set(load('corral.folded', []));
 function arrange() {
   const box = $('#spaces');
   const q = $('#filter').value.trim().toLowerCase();
@@ -965,30 +967,41 @@ function arrange() {
   const rest = shown.filter((s) => !openSpaces.includes(s) && !todo.includes(s) && !later.includes(s));
   rows.forEach((wrap) => wrap.remove());
   box.querySelectorAll('.sec, .note').forEach((n) => n.remove());
-  const sec = (t) => { const h = document.createElement('div'); h.className = 'sec'; h.textContent = t; box.append(h); };
+  // A heading over a list folds it: a click hides or shows the spaces under it. A search shows every list.
+  const sec = (key, t, list) => {
+    const h = document.createElement('div');
+    const shut = !q && folded.has(key);
+    h.className = `sec fold${shut ? ' shut' : ''}`;
+    h.textContent = t;
+    h.title = shut ? 'Show these spaces' : 'Hide these spaces';
+    h.onclick = () => { if (!folded.delete(key)) folded.add(key); store('corral.folded', [...folded]); arrange(); };
+    box.append(h);
+    if (!shut) put(list);
+  };
   const put = (list) => { for (const s of list) box.append(rows.get(s.id)); };
 
   if (todo.length) {
-    sec(`TO-DO (${todo.length})`);
-    box.lastChild.classList.add('todo');
-    wireCatDrop(box.lastChild, null, (l) => setTodo(l, true));
-    put(todo);
+    sec('todo', `TO-DO (${todo.length})`, []);
+    const h = box.lastChild;
+    h.classList.add('todo');
+    wireCatDrop(h, null, (l) => setTodo(l, true));
+    if (!h.classList.contains('shut')) put(todo);
   }
   const marked = (s) => todo.includes(s) || later.includes(s);
   const working = openSpaces.filter((s) => !marked(s) && !isCleared(s) && !isCompacted(s));
   const compacted = openSpaces.filter((s) => !marked(s) && isCompacted(s)), cleared = openSpaces.filter(isCleared);
-  if (working.length) { sec(`Open windows (${working.length})`); put(working); }
-  if (compacted.length) { sec(`Auto-compacted windows (${compacted.length})`); put(compacted); }
-  if (cleared.length) { sec(`Parked windows (${cleared.length})`); put(cleared); }
+  if (working.length) sec('open', `Open windows (${working.length})`, working);
+  if (compacted.length) sec('compacted', `Auto-compacted windows (${compacted.length})`, compacted);
+  if (cleared.length) sec('parked', `Parked windows (${cleared.length})`, cleared);
   if (later.length) {
-    sec(`Later (${later.length})`);
-    box.lastChild.classList.add('later');
-    wireCatDrop(box.lastChild, null, (l) => setMark(l, 'later', true));
-    put(later);
+    sec('later', `Later (${later.length})`, []);
+    const h = box.lastChild;
+    h.classList.add('later');
+    wireCatDrop(h, null, (l) => setMark(l, 'later', true));
+    if (!h.classList.contains('shut')) put(later);
   }
   if (!cats.categories.length) {
-    if (openSpaces.length && rest.length) sec(`All spaces (${rest.length})`);
-    put(rest);
+    if (openSpaces.length && rest.length) sec('all', `All spaces (${rest.length})`, rest); else put(rest);
   } else {
     // A search opens every group that has a match, so a name is easy to find.
     const buckets = new Map(cats.categories.map((c) => [c.name, []]));

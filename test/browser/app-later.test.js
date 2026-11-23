@@ -66,6 +66,39 @@ test('a Later window cleared with /clear leaves Later and sits under Parked wind
   assert.deepEqual(await p.save().then((d) => [d.todo, d.later]), [[], [R('d')]]);
 });
 
+test('a click on a list heading hides the spaces under it, kept on this browser; a search shows them all', async () => {
+  const p = await page({ todo: [R('b')], later: [R('d')], overview: [status('a'), status('c', { claude: { status: 'idle', since: 1, cleared: true } })] });
+  assert.deepEqual(p.secs(), ['TO-DO (1)', 'Open windows (1)', 'Parked windows (1)', 'Later (1)']);
+  assert.deepEqual(p.rowNames(), ['b', 'a', 'c', 'd']);
+  const head = (t) => p.$$('#spaces .sec').find((n) => n.textContent.startsWith(t));
+  assert.equal(head('TO-DO').title, 'Hide these spaces');
+  for (const t of ['TO-DO', 'Open windows', 'Parked windows', 'Later']) head(t).click();
+  assert.deepEqual(p.rowNames(), []);
+  assert.equal(head('Later').classList.contains('shut'), true);
+  assert.equal(head('Later').title, 'Show these spaces');
+  assert.deepEqual(p.store('corral.folded'), ['todo', 'open', 'parked', 'later']);
+  // A search shows every list, and clearing it folds them again.
+  p.$('#filter').value = 'b';
+  p.$('#filter').oninput();
+  assert.deepEqual(p.rowNames(), ['b']);
+  assert.equal(head('TO-DO').classList.contains('shut'), false);
+  p.$('#filter').value = '';
+  p.$('#filter').oninput();
+  assert.deepEqual(p.rowNames(), []);
+  head('Open windows').click();
+  assert.deepEqual(p.rowNames(), ['a']);
+  assert.deepEqual(p.store('corral.folded'), ['todo', 'parked', 'later']);
+  // The choice comes back after a reload.
+  stop();
+  const q = await start({ storage: { 'corral.folded': '["all"]' }, routes: {
+    'GET /api/herdr': { available: true, spaces: ['a', 'b'].map((id) => space(id)) },
+    'GET /api/sessions': { sessions: [session('a')] },
+    'GET /api/overview': { sessions: [status('a')] },
+  } });
+  assert.deepEqual(q.secs(), ['Open windows (1)', 'All spaces (1)']);
+  assert.deepEqual(q.rowNames(), ['a']);
+});
+
 test('a file without a Later list shows no Later section', async () => {
   const p = await page({ later: null });
   assert.deepEqual(p.secs(), ['Open windows (2)', 'All spaces (2)']);
