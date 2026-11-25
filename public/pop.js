@@ -318,6 +318,44 @@ function openTerm() {
   term.focus();
 }
 
+// ---- Files and folders dropped on the terminal, as on the Mac page (app.js addFiles): the server finds the file
+// from its name, size, and modified time and its path is pasted, escaped as Terminal.app pastes it. An image it
+// cannot find is uploaded to Corral's data folder and that copy's path pasted.
+const filesIn = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/heic', 'image/webp', 'image/gif'];
+const dropPath = (p) => p.replace(/[^\w@%+=:,./-]/g, '\\$&');
+const base64 = (blob) => new Promise((resolve, reject) => {
+  const r = new FileReader();
+  r.onload = () => resolve(String(r.result).split(',')[1]);
+  r.onerror = reject;
+  r.readAsDataURL(blob);
+});
+async function addFiles(files) {
+  term.focus();
+  for (const f of files) {
+    let found = null;
+    try { found = (await getJson(`/api/locate?${new URLSearchParams({ name: f.name, size: f.size, modified: f.lastModified })}`)).path; } catch {}
+    if (found) { term.paste(`${dropPath(found)} `); continue; }
+    if (!IMAGE_TYPES.includes(f.type)) { toast(`Could not find ${f.name} on this Mac. Paste its path instead.`); continue; }
+    try {
+      const j = await getJson(`/api/sessions/${encodeURIComponent(id)}/upload`, { method: 'POST', body: { type: f.type, data: await base64(f) } });
+      if (!j.path) { toast(j.error || `Could not add ${f.name}.`); continue; }
+      term.paste(`${j.path} `);
+    } catch { toast(`Could not add ${f.name}.`); }
+  }
+}
+// A file dropped anywhere else (the file panel, a tab) would make the browser open it in place of the pop-out.
+document.addEventListener('dragover', (e) => { if (filesIn(e)) e.preventDefault(); });
+document.addEventListener('drop', (e) => { if (filesIn(e)) e.preventDefault(); });
+$('#termpane').addEventListener('dragover', (e) => { if (filesIn(e)) { e.preventDefault(); $('#termpane').classList.add('filedrop'); } });
+$('#termpane').addEventListener('dragleave', () => $('#termpane').classList.remove('filedrop'));
+$('#termpane').addEventListener('drop', (e) => {
+  $('#termpane').classList.remove('filedrop');
+  if (!filesIn(e)) return;
+  e.preventDefault();
+  addFiles([...e.dataTransfer.files]);
+});
+
 function connect() {
   ws = new WebSocket(`${location.origin.replace(/^http/, 'ws')}/ws?id=${encodeURIComponent(id)}`); // https gives wss
   let first = true;

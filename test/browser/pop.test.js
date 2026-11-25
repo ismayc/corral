@@ -789,3 +789,70 @@ test('the page works when the browser refuses storage', async () => {
   p.$('#filesbtn').click();
   assert.equal(p.$('#files').hidden, true);
 });
+
+// ---- Files dropped on the terminal, as on the Mac page (test/browser/app-drop.test.js).
+const { dt } = require('../helpers/app');
+const dropped = (list) => Object.assign(dt({ Files: '' }), { files: list });
+const pngFile = (p, name, type = 'image/png') => new p.window.File(['png bytes'], name, { type });
+const until = async (p, fn) => { for (let i = 0; i < 50 && !fn(); i++) await p.tick(10); };
+
+test('a file dragged over the terminal marks it; one found on the Mac has its path pasted, escaped', async () => {
+  const where = { 'notes.txt': '/Users/me/Downloads/my notes (1).txt', docs: '/Users/me/repos/alpha/docs' };
+  const p = await pop({ routes: { 'GET /api/locate': (req) => (where[req.query.name] ? { path: where[req.query.name] } : { __reply: true, status: 404, body: { error: 'not found on this Mac' } }) } });
+  const pane = p.$('#termpane');
+  assert.ok(fire(pane, 'dragover', { dataTransfer: dropped([]) }).defaultPrevented);
+  assert.ok(pane.classList.contains('filedrop'));
+  fire(pane, 'dragleave');
+  assert.ok(!pane.classList.contains('filedrop'));
+  assert.ok(!fire(pane, 'dragover', { dataTransfer: dt({ 'text/plain': 'x' }) }).defaultPrevented);
+  const f = pngFile(p, 'notes.txt', 'text/plain');
+  p.term.focused = false;
+  const ev = fire(pane, 'drop', { dataTransfer: dropped([f, pngFile(p, 'docs', '')]) });
+  assert.ok(ev.defaultPrevented);
+  await until(p, () => p.term.pasted.length === 2);
+  assert.deepEqual(p.term.pasted, ['/Users/me/Downloads/my\\ notes\\ \\(1\\).txt ', '/Users/me/repos/alpha/docs ']);
+  assert.deepEqual(p.api.called('GET', '/api/locate')[0].query, { name: 'notes.txt', size: String(f.size), modified: String(f.lastModified) });
+  assert.equal(p.term.focused, true);
+  assert.equal(p.toast(), null);
+  // A drop that holds no files (text dragged from the page) is left alone.
+  pane.classList.add('filedrop');
+  assert.ok(!fire(pane, 'drop', { dataTransfer: dt({ 'text/plain': 'x' }) }).defaultPrevented);
+  assert.ok(!pane.classList.contains('filedrop'));
+});
+
+test('an image the Mac cannot find is uploaded and its copy pasted; other misses and failures say so', async () => {
+  let answer;
+  const p = await pop({ routes: { 'POST /api/sessions/w1/upload': () => answer } });
+  const pane = p.$('#termpane');
+  answer = { path: '/data/uploads/1.png' };
+  fire(pane, 'drop', { dataTransfer: dropped([pngFile(p, 'notes.txt', 'text/plain'), pngFile(p, 'Screenshot.png')]) });
+  await until(p, () => p.term.pasted.length);
+  assert.equal(p.toast(), 'Could not find notes.txt on this Mac. Paste its path instead.');
+  assert.deepEqual(p.term.pasted, ['/data/uploads/1.png ']);
+  assert.deepEqual(p.api.called('POST', '/api/sessions/w1/upload')[0].body, { type: 'image/png', data: Buffer.from('png bytes').toString('base64') });
+  answer = { __reply: true, status: 413, body: { error: 'the photo is empty or too large' } };
+  fire(pane, 'drop', { dataTransfer: dropped([pngFile(p, 'big.png')]) });
+  await until(p, () => p.toast() === 'the photo is empty or too large');
+  assert.equal(p.toast(), 'the photo is empty or too large');
+  answer = { __reply: true, status: 500, body: {} };
+  fire(pane, 'drop', { dataTransfer: dropped([pngFile(p, 'odd.png')]) });
+  await until(p, () => p.toast() === 'Could not add odd.png.');
+  assert.equal(p.toast(), 'Could not add odd.png.');
+  answer = new Error('offline');
+  p.api.routes['GET /api/locate'] = new Error('offline');
+  fire(pane, 'drop', { dataTransfer: dropped([pngFile(p, 'far.png')]) });
+  await until(p, () => p.toast() === 'Could not add far.png.');
+  assert.equal(p.toast(), 'Could not add far.png.');
+  assert.deepEqual(p.term.pasted, ['/data/uploads/1.png ']);
+});
+
+test('a file dropped outside the terminal is caught, so the browser does not open it in place of the pop-out', async () => {
+  const p = await pop();
+  const tree = p.$('#tree');
+  assert.ok(fire(tree, 'dragover', { dataTransfer: dropped([]) }).defaultPrevented);
+  assert.ok(fire(tree, 'drop', { dataTransfer: dropped([pngFile(p, 'x.png')]) }).defaultPrevented);
+  assert.ok(!fire(tree, 'dragover').defaultPrevented);
+  assert.ok(!fire(tree, 'drop').defaultPrevented);
+  await p.tick(10);
+  assert.equal(p.api.called('GET', '/api/locate').length, 0);
+});
