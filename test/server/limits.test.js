@@ -55,7 +55,8 @@ test('parse gives null for an old, undated, or empty cache', () => {
   assert.equal(limits.parse({ ...CACHE, fetched_at: 'x' }, NOW), null);
   assert.equal(limits.parse(null, NOW), null);
   assert.equal(limits.parse({ fetched_at: AT, windows: null, limits: {} }, NOW), null);
-  assert.ok(limits.parse(CACHE));
+  // The default clock: a cache fetched a minute ago by the real time (CACHE's own date goes stale 2 hours after NOW).
+  assert.ok(limits.parse({ ...CACHE, fetched_at: Date.now() / 1000 - 60 }));
 });
 
 test('read gives null for a missing or broken file', () => {

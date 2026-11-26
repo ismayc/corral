@@ -318,8 +318,17 @@
 
   #toast { position:fixed; left:12px; right:12px; top:calc(10px + env(safe-area-inset-top)); z-index:30; background:var(--raise);
            border:1px solid var(--fence); border-radius:12px; padding:12px 14px; box-shadow:0 8px 24px #0009; }
-  #limits { padding:6px 14px; border-bottom:1px solid var(--rail); background:var(--panel); flex:none; } #limits[hidden] { display:none; } .limits { display:flex; flex-wrap:wrap; gap:4px 10px; font-size:11.5px; font-variant-numeric:tabular-nums; }
-  .limits .lim.ok { color:var(--idle); } .limits .lim.warn { color:var(--working); } .limits .lim.alert { color:var(--blocked); } .limits .lim.age { color:var(--muted); }
+  #limits { padding:6px 14px; border-bottom:1px solid var(--rail); background:var(--panel); flex:none; } #limits[hidden] { display:none; }
+  .limits { display:grid; grid-template-columns:auto 1fr auto auto; align-items:center; gap:6px 8px; font-size:11.5px; font-variant-numeric:tabular-nums; }
+  .limits .lim { display:contents; } .limits .lab { color:var(--muted); font-weight:600; } .limits .pct { font-weight:700; text-align:right; min-width:3.2em; } .limits .rst { color:var(--muted); text-align:right; min-width:4.6em; }
+  .limits .bar { position:relative; height:6px; border-radius:3px; background:var(--rail); overflow:hidden; } .limits .fill { position:absolute; inset:0 auto 0 0; border-radius:3px; background:currentColor; min-width:2px; }
+  .limits .tick { position:absolute; top:0; bottom:0; width:2px; margin-left:-1px; background:var(--lavender); opacity:.75; }
+  .limits .lim.ok .bar, .limits .lim.ok .pct { color:var(--idle); } .limits .lim.warn .bar, .limits .lim.warn .pct { color:var(--working); } .limits .lim.alert .bar, .limits .lim.alert .pct { color:var(--blocked); }
+  .limits .lim.age { display:block; grid-column:1 / -1; color:var(--muted); font-size:10.5px; }
+  /* Phone: three side-by-side cells (label and percent, bar, reset) to keep the header short. */
+  #limits.limits { grid-template-columns:repeat(3, minmax(0, 1fr)); gap:4px 14px; }
+  #limits .lim:not(.age) { display:grid; grid-template-columns:1fr auto; align-items:center; gap:3px 6px; min-width:0; }
+  #limits .lim .bar { grid-column:1 / -1; grid-row:2; } #limits .lim .rst { grid-column:1 / -1; grid-row:3; text-align:left; min-width:0; font-size:10.5px; } #limits .lim .pct { min-width:0; }
   #toast.tap { border-color:var(--lavender); cursor:pointer; }
 </style>
 </head>

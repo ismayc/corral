@@ -12,7 +12,10 @@ in `package.json`.
   Claude Code status line helper's cache
   (`~/.claude/cache/statusline-usage/official.json`), so it needs no token.
   The numbers refresh while a Claude session is open; older than 10 minutes,
-  the strip says how old, and after 2 hours it hides.
+  the strip says how old, and after 2 hours it hides. Each limit is a meter:
+  a bar filled to the percent used, with a tick that marks how much of the
+  window has passed, so usage ahead of the tick runs ahead of time. The Mac
+  sidebar stacks the three meters; the phone puts them side by side.
 - **Hide dollar amounts.** A click on a window's usage tag on the Mac page,
   **Hide dollar amounts** in the palette, or the button in the phone's token
   use details hides the estimated cost and leaves the context percentage.
