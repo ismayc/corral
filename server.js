@@ -18,6 +18,7 @@ const cp = require('child_process');
 const pty = require('node-pty');
 const { WebSocketServer } = require('ws');
 const usage = require('./lib/usage');
+const limits = require('./lib/limits');
 const history = require('./lib/history');
 const queueLib = require('./lib/queue');
 const ntfyLib = require('./lib/ntfy');
@@ -331,6 +332,8 @@ function publicSession(s) {
 // does not erase the project. Kept outside the repo because it holds local paths.
 // "Open" is computed from the latest snapshot; the file stores only what was seen and when.
 const DATA_DIR = path.join(os.homedir(), '.local/share/corral');
+// The status line helper's cache of the plan's usage limits (lib/limits.js reads it).
+const LIMITS_FILE = path.join(os.homedir(), '.claude/cache/statusline-usage/official.json');
 const LEGACY_DATA_DIR = path.join(os.homedir(), '.local/share/webterm'); // the data directory before the rename
 const LEDGER_FILE = path.join(DATA_DIR, 'projects.json');
 const SORT_BIN = process.env.CORRAL_SORT_BIN || path.join(__dirname, 'scripts', 'herdr-sort-spaces');
@@ -2135,7 +2138,7 @@ const server = http.createServer(async (req, res) => {
     }
   }
   if (url.pathname === '/api/overview' && req.method === 'GET') {
-    return send(res, 200, { machine: thisMacName(), sessions: overview() });
+    return send(res, 200, { machine: thisMacName(), sessions: overview(), limits: limits.read(LIMITS_FILE) });
   }
   if (url.pathname === '/api/locate' && req.method === 'GET') {
     // Says where files are on the Mac, so only the Mac's own page may ask.

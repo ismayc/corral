@@ -1,4 +1,7 @@
 const $ = (s) => document.querySelector(s);
+// The plan's usage limits strip (limits.js), looked up once: a poll that ends after the page is gone still paints.
+const limitsStrip = window.CorralLimits;
+const limitsEl = $('#limits');
 const api = (url, opts = {}) => fetch(url, {
   ...opts, headers: { 'Content-Type': 'application/json' },
   body: opts.body ? JSON.stringify(opts.body) : undefined,
@@ -442,6 +445,7 @@ async function refresh() {
   }
   $('#home').classList.remove('offline');
   $('#machine').textContent = `on ${o.machine}`;
+  limitsStrip.paint(limitsEl, o.limits);
   windows = o.sessions.filter((s) => !s.exited);
   await loadTodo();
   // A window whose Claude finishes while you look elsewhere gets a notice.

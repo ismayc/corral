@@ -5,6 +5,14 @@ in `package.json`.
 
 ## Unreleased
 
+- **Plan usage limits outside the windows.** The Mac page's sidebar (under
+  the logo) and the phone's home header show the 5-hour limit, the weekly
+  limit, and the weekly Fable limit, each with the time to its reset, in
+  green, yellow from 50%, and red from 80%. Corral reads them from the
+  Claude Code status line helper's cache
+  (`~/.claude/cache/statusline-usage/official.json`), so it needs no token.
+  The numbers refresh while a Claude session is open; older than 10 minutes,
+  the strip says how old, and after 2 hours it hides.
 - **Hide dollar amounts.** A click on a window's usage tag on the Mac page,
   **Hide dollar amounts** in the palette, or the button in the phone's token
   use details hides the estimated cost and leaves the context percentage.

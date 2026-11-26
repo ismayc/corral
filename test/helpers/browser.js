@@ -235,7 +235,7 @@ function loadPage(page, opts = {}) {
   // markdown renderer and edit mode (the viewer and the pop-out; the phone page has the renderer only), and the
   // usage tag's text (the Mac page, the phone, and the pop-out).
   const first = {
-    app: ['theme.js', 'clientlog.js', 'fresh.js', 'usage.js', 'jobs.js'], m: ['clientlog.js', 'markdown.js', 'usage.js', 'jobs.js'],
+    app: ['theme.js', 'clientlog.js', 'fresh.js', 'usage.js', 'limits.js', 'jobs.js'], m: ['clientlog.js', 'markdown.js', 'usage.js', 'limits.js', 'jobs.js'],
     pop: ['theme.js', 'clientlog.js', 'fresh.js', 'usage.js', 'markdown.js', 'editor.js'],
   }[page] || ['theme.js', 'clientlog.js', 'fresh.js', 'markdown.js', 'editor.js'];
   for (const name of first) {

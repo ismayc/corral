@@ -1,6 +1,9 @@
 // A phone gets the phone page; ?desktop keeps this one.
 if (matchMedia('(pointer: coarse) and (max-width: 760px)').matches && !new URLSearchParams(location.search).has('desktop')) location.replace('/m');
 const $ = (s) => document.querySelector(s);
+// The plan's usage limits strip (limits.js), looked up once: a poll that ends after the page is gone still paints.
+const limitsStrip = window.CorralLimits;
+const limitsEl = $('#limits');
 const open = new Map(); // session id -> {term, fit, ws, el, info}
 let focusedId = null;
 
@@ -1823,6 +1826,7 @@ window.addEventListener('storage', (e) => {
 async function watchStatus() {
   const r = await api('/api/overview').catch(() => null);
   if (!r?.sessions) return;
+  limitsStrip.paint(limitsEl, r.limits);
   const byId = new Map(r.sessions.map((s) => [s.id, s]));
   let relayout = false;
   for (const [id, w] of [...open]) {

@@ -318,6 +318,8 @@
 
   #toast { position:fixed; left:12px; right:12px; top:calc(10px + env(safe-area-inset-top)); z-index:30; background:var(--raise);
            border:1px solid var(--fence); border-radius:12px; padding:12px 14px; box-shadow:0 8px 24px #0009; }
+  #limits { padding:6px 14px; border-bottom:1px solid var(--rail); background:var(--panel); flex:none; } #limits[hidden] { display:none; } .limits { display:flex; flex-wrap:wrap; gap:4px 10px; font-size:11.5px; font-variant-numeric:tabular-nums; }
+  .limits .lim.ok { color:var(--idle); } .limits .lim.warn { color:var(--working); } .limits .lim.alert { color:var(--blocked); } .limits .lim.age { color:var(--muted); }
   #toast.tap { border-color:var(--lavender); cursor:pointer; }
 </style>
 </head>
@@ -331,6 +333,7 @@
     <button class="iconbtn" id="bell" aria-label="Notifications">Alerts</button>
     <button class="iconbtn" id="todesk" title="Open the full desktop page">Desktop</button>
   </header>
+  <div id="limits" class="limits" hidden></div>
   <nav id="jump" aria-label="Jump to a group" hidden></nav>
   <div id="list"></div>
   <button id="fab" class="primary">+ Start something</button>
@@ -424,6 +427,7 @@
 <script src="/clientlog.js"></script>
 <script src="/markdown.js"></script>
 <script src="/usage.js"></script>
+<script src="/limits.js"></script>
 <script src="/jobs.js"></script>
 <script src="/m.js"></script>
 </body>
