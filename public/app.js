@@ -1197,7 +1197,26 @@ async function loadProjects() {
   renderInactive();
 }
 
-// Add makes the space, which then arrives in the sidebar like any new space (announced, marked new).
+// A row for a repo with no space. Add makes the space, which then arrives in the sidebar like any new
+// space (announced, marked new).
+function repoRow(p, name, cls) {
+  const r = document.createElement('div');
+  r.className = `proj ${cls}`;
+  r.title = p.root;
+  const nm = document.createElement('span'); nm.className = 'name'; nm.textContent = name;
+  const add = document.createElement('button'); add.textContent = 'Add to herdr';
+  add.title = 'Create a herdr space for this folder';
+  add.onclick = async () => {
+    add.disabled = true; add.textContent = '...';
+    const res = await api('/api/projects/reopen', { method: 'POST', body: { root: p.root } });
+    if (res.error) { add.textContent = 'Failed'; add.title = res.error; return; }
+    otherRepos = null; otherLoad = null; // the folder now has a space
+    loadSpaces();
+  };
+  r.append(nm, add);
+  return r;
+}
+
 function renderNewRepos(box) {
   if (!newRepos.length) return;
   const h = document.createElement('div');
@@ -1205,24 +1224,35 @@ function renderNewRepos(box) {
   h.textContent = `New in ${reposDir} (${newRepos.length})`;
   box.append(h);
   for (const p of newRepos) {
-    const r = document.createElement('div');
-    r.className = 'proj newrepo';
-    r.title = p.root;
-    const nm = document.createElement('span'); nm.className = 'name'; nm.textContent = p.label;
+    const r = repoRow(p, p.label, 'newrepo');
     const when = document.createElement('span'); when.className = 'ago'; when.textContent = ago(p.born);
-    const add = document.createElement('button'); add.textContent = 'Add to herdr';
-    add.title = 'Create a herdr space for this folder';
-    add.onclick = async () => {
-      add.disabled = true; add.textContent = '...';
-      const res = await api('/api/projects/reopen', { method: 'POST', body: { root: p.root } });
-      if (res.error) { add.textContent = 'Failed'; add.title = res.error; return; }
-      loadSpaces();
-    };
+    r.querySelector('.name').after(when);
     const hide = document.createElement('button'); hide.textContent = '×'; hide.title = 'Do not list this folder here again';
     hide.onclick = async () => { await api('/api/projects/hide', { method: 'POST', body: { root: p.root } }); loadProjects(); };
-    r.append(nm, when, add, hide);
+    r.append(hide);
     box.append(r);
   }
+}
+
+// Other repos: every git repo in the repos folder (two folders deep) with no space that is not listed
+// above, such as a project that was closed and then forgotten. Only a search shows them, so they are
+// fetched on the first search and dropped when the search box is emptied.
+let otherRepos = null;
+let otherLoad = null; // the timer that starts the fetch; it stays set until the search is emptied
+async function loadOtherRepos() {
+  try { ({ repos: otherRepos } = await api('/api/projects/other')); } catch { otherRepos = []; }
+  renderInactive();
+}
+const OTHER_MAX = 30;
+const OTHER_WAIT = 250;
+function renderOtherRepos(box, list) {
+  if (!list.length) return;
+  const h = document.createElement('div');
+  h.className = 'sec';
+  h.textContent = `Other repos in ${reposDir} (${list.length})`;
+  box.append(h);
+  for (const p of list.slice(0, OTHER_MAX)) box.append(repoRow(p, p.rel, 'otherrepo'));
+  if (list.length > OTHER_MAX) { const n = document.createElement('div'); n.className = 'note'; n.textContent = `${list.length - OTHER_MAX} more. Type more of the name.`; box.append(n); }
 }
 
 function ago(ms) {
@@ -1239,6 +1269,12 @@ function renderInactive() {
   box.textContent = '';
   renderNewRepos(box);
   const q = $('#filter').value.toLowerCase();
+  const others = q && otherRepos ? otherRepos.filter((p) => p.rel.toLowerCase().includes(q)) : [];
+  renderInactiveList(box, q, others);
+  renderOtherRepos(box, others);
+}
+
+function renderInactiveList(box, q, others) {
   const list = projects.filter((p) => !p.open && (p.label.toLowerCase().includes(q) || p.root.toLowerCase().includes(q)));
   const all = projects.filter((p) => !p.open).length;
   if (!all) return;
@@ -1267,10 +1303,16 @@ function renderInactive() {
     r.append(nm, when, re, fg);
     box.append(r);
   }
-  if (!list.length) { const n = document.createElement('div'); n.className = 'note'; n.textContent = 'No match.'; box.append(n); }
+  if (!list.length && !others.length) { const n = document.createElement('div'); n.className = 'note'; n.textContent = 'No match.'; box.append(n); }
 }
 
-$('#filter').oninput = () => { $('#clearfilter').hidden = !$('#filter').value; arrange(); renderInactive(); };
+$('#filter').oninput = () => {
+  const q = $('#filter').value;
+  $('#clearfilter').hidden = !q;
+  // The fetch waits a moment, so a quick search that is emptied again asks for nothing.
+  if (!q) { clearTimeout(otherLoad); otherRepos = null; otherLoad = null; } else if (!otherLoad) otherLoad = setTimeout(loadOtherRepos, OTHER_WAIT);
+  arrange(); renderInactive();
+};
 // The x in the search box, or Escape while typing in it, empties the search and stays in the box. Opening
 // a space from the results empties it too, but leaves the keyboard with the window that opens.
 const clearFilter = (refocus = true) => { $('#filter').value = ''; $('#filter').oninput(); if (refocus) $('#filter').focus(); };

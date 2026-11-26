@@ -162,3 +162,34 @@ test('a git that fails leaves no folder behind', async (t) => {
   assert.deepEqual([r.status, r.json], [500, { error: 'Could not start a git repo in ~/repos/nogit.' }]);
   assert.equal(fs.existsSync(path.join(h.home, 'repos', 'nogit')), false);
 });
+
+test('otherRepos lists git repos two folders deep that no other list has, sorted by path', (t) => {
+  const { srv, home } = loadServer();
+  assert.deepEqual(srv.otherRepos(), [], 'no repos folder yet');
+  const old = folder(home, 'tally');
+  const nested = folder(home, 'sports/the-nba-schedule');
+  folder(home, 'sports/deep/too-deep'); // three folders in
+  folder(home, '.hidden-dir');
+  folder(home, 'plain', false);
+  folder(home, 'fresh'); // a new repo
+  const known = folder(home, 'known');
+  fs.writeFileSync(path.join(home, 'repos', 'notes.txt'), '');
+  srv.ledger.set(known, { root: known, label: 'known', firstSeen: 1, lastSeen: 1 });
+  ages(t, { tally: 300, sports: 300, 'the-nba-schedule': 300, deep: 300, plain: 300, known: 300 });
+  assert.deepEqual(srv.otherRepos(), [
+    { root: nested, label: 'the-nba-schedule', rel: 'sports/the-nba-schedule' },
+    { root: old, label: 'tally', rel: 'tally' },
+  ]);
+});
+
+test('GET /api/projects/other lists them, and reopen makes a space for one', async (t) => {
+  const { req, herdr, home } = await world(t);
+  const d = folder(home, 'tally');
+  ages(t, { tally: 300 });
+  herdr.other = () => '';
+  const r = await req('GET', '/api/projects/other');
+  assert.deepEqual(r.json.repos.map((x) => x.root), [d]);
+  const ok = await req('POST', '/api/projects/reopen', { body: { root: d } });
+  assert.deepEqual([ok.status, ok.json.label], [200, 'tally']);
+  assert.deepEqual(herdr.calls.find((c) => c[0] === 'workspace'), ['workspace', 'create', '--cwd', d, '--label', 'tally', '--no-focus']);
+});

@@ -455,6 +455,25 @@ function newRepos() {
   }
   return out.sort((a, b) => b.born - a.born);
 }
+// Other repos: every git repo up to two folders into the repos folder that is not in the ledger and not a
+// new repo, hidden ones too. A search on the Mac page lists the matches, so a project that was closed and
+// then forgotten (out of the ledger, older than two weeks) can still be found and given a space again.
+function otherRepos() {
+  const skip = new Set([...ledger.keys(), ...newRepos().map((r) => r.root)]);
+  const out = [];
+  const look = (dir, depth) => {
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const d of entries) {
+      if (!d.isDirectory() || d.name.startsWith('.')) continue;
+      const root = path.join(dir, d.name);
+      if (!skip.has(root) && fs.existsSync(path.join(root, '.git'))) out.push({ root, label: d.name, rel: path.relative(REPOS_DIR, root) });
+      if (depth < 2) look(root, depth + 1);
+    }
+  };
+  look(REPOS_DIR, 1);
+  return out.sort((a, b) => a.rel.localeCompare(b.rel));
+}
 function hideRepo(root) {
   writeJson(HIDDEN_REPOS_FILE, { roots: [...hiddenRepos().add(root)] });
 }
@@ -1624,6 +1643,7 @@ async function closeSpace(id) {
     cp.execFile(HERDR, ['workspace', 'close', id], { timeout: 10000 }, (err) => resolve(!err));
   });
   if (!closed) return { status: 502, error: 'herdr could not close the space' };
+  console.log(`closed space ${sp.label} (${id}, ${sp.root}) and ${mine.length} window(s)`);
   await herdrSnapshot(); // refreshes the ledger's open set
   return { status: 200, ok: true, label: sp.label, windows: mine.length };
 }
@@ -1632,7 +1652,7 @@ async function closeSpace(id) {
 // existing herdr-sort-spaces script (best effort; the new space is kept either way).
 // Makes a herdr space for a project in the ledger, or for one of the new repos.
 async function reopenProject(root) {
-  const e = ledger.get(root) || newRepos().find((r) => r.root === root);
+  const e = ledger.get(root) || newRepos().find((r) => r.root === root) || otherRepos().find((r) => r.root === root);
   if (!e) return { status: 404, error: 'unknown project' };
   const snap = await herdrSnapshot();
   if (!snap.available) return { status: 502, error: 'herdr not reachable' };
@@ -1999,6 +2019,10 @@ const server = http.createServer(async (req, res) => {
     await herdrSnapshot(); // keeps the open/inactive split current
     return send(res, 200, { projects: ledgerView(), newRepos: newRepos(), reposDir: REPOS_DIR.replace(os.homedir(), '~') });
   }
+  if (url.pathname === '/api/projects/other' && req.method === 'GET') {
+    await herdrSnapshot(); // a space made a moment ago is in the ledger, so it is left out
+    return send(res, 200, { repos: otherRepos() });
+  }
   if (url.pathname === '/api/projects/hide' && req.method === 'POST') {
     const body = await readJson(req);
     if (!body || typeof body.root !== 'string') return send(res, 400, { error: 'bad json' });
@@ -2031,6 +2055,7 @@ const server = http.createServer(async (req, res) => {
     if (openRoots.has(body.root)) return send(res, 409, { error: 'a space is open for this project' });
     if (!ledger.delete(body.root)) return send(res, 404, { error: 'unknown project' });
     saveLedger();
+    console.log(`forgot project ${body.root}`);
     return send(res, 200, { ok: true });
   }
   if (url.pathname === '/api/files' && req.method === 'GET') {
@@ -2426,7 +2451,7 @@ module.exports = {
   permissionPrompt, readPlan, promptKey, windowClaude, answerPrompt, questionPrompt, questionKey, answerQuestion, frontMatter, slashCommands, git, windowChanges, saveUpload, loadPush, savePush,
   vapidHeader, encryptPush, sendPush, pushAll, macIdleSeconds, keepAwake, watchWindows, runQueue, pruneUploads,
   locateFile, cleanSubscription, saveBackup, saveBackupSoon, prepareRestore, resumableId, restoreList, restoreWindows, autoRestore,
-  reopenProject, newRepos, hideRepo, identityRoots, herdrSnapshot, rootFor, listDir, loadOpenWith, saveOpenWith, fileKind, bodyFile,
+  reopenProject, newRepos, otherRepos, hideRepo, identityRoots, herdrSnapshot, rootFor, listDir, loadOpenWith, saveOpenWith, fileKind, bodyFile,
   appsFor, openChoices, openFile, appName, viewFile, imageFile, textFile, pdfFile, saveFile, pageVersion, markdownFiles, send, serveFile, readJson,
 };
 

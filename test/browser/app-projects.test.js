@@ -161,3 +161,72 @@ test('the automatic check also picks up a repo made since the page loaded', asyn
   await flush();
   assert.deepEqual(repoRows(p), ['dance | 3 min ago']);
 });
+
+// ---- Other repos: git repos with no space that no other list shows; a search finds them ----
+const other = (rel) => ({ root: `/Users/me/repos/${rel}`, label: rel.split('/').at(-1), rel });
+const otherRows = (p) => p.$$('#inactive .otherrepo .name').map((n) => n.textContent);
+const search = async (p, q) => { p.$('#filter').value = q; fire(p.$('#filter'), 'input'); p.tick(250); await flush(); };
+
+test('a search lists the matching other repos below the inactive projects, fetched once per search', async () => {
+  const p = await start({ routes: {
+    'GET /api/projects': { projects: [proj('one')], newRepos: [], reposDir: '~/repos' },
+    'GET /api/projects/other': { repos: [other('tally'), other('sports-trackers/the-nba-schedule'), other('hugo-insights')] },
+  } });
+  assert.equal(p.api.called('GET', '/api/projects/other').length, 0, 'no search, no fetch');
+  await search(p, 'TAL');
+  assert.deepEqual(p.$$('#inactive .sec').map((h) => h.textContent), ['▾ Inactive projects (1)', 'Other repos in ~/repos (1)']);
+  assert.deepEqual(otherRows(p), ['tally']);
+  assert.equal(p.$('#inactive .note'), null, 'a match below means no "No match." note');
+  const row = p.$('#inactive .otherrepo');
+  assert.equal(row.title, '/Users/me/repos/tally');
+  assert.deepEqual([...row.querySelectorAll('button')].map((b) => b.textContent), ['Add to herdr']);
+  await search(p, 'sports');
+  assert.deepEqual(otherRows(p), ['sports-trackers/the-nba-schedule']);
+  assert.equal(p.api.called('GET', '/api/projects/other').length, 1);
+  await search(p, '');
+  assert.deepEqual(otherRows(p), []);
+  await search(p, 'hugo');
+  assert.deepEqual(otherRows(p), ['hugo-insights']);
+  assert.equal(p.api.called('GET', '/api/projects/other').length, 2, 'an emptied search fetches again next time');
+});
+
+test('other repos show even with no inactive projects, and no match shows no section', async () => {
+  const p = await start({ routes: { 'GET /api/projects': { projects: [], reposDir: '~/repos' }, 'GET /api/projects/other': { repos: [other('tally')] } } });
+  await search(p, 'tally');
+  assert.deepEqual(p.$$('#inactive .sec').map((h) => h.textContent), ['Other repos in ~/repos (1)']);
+  await search(p, 'zzz');
+  assert.equal(p.$('#inactive').textContent, '');
+});
+
+test('a long list of other repos stops at 30 and says how many more', async () => {
+  const many = Array.from({ length: 33 }, (_, i) => other(`study-${String(i).padStart(2, '0')}`));
+  const p = await start({ routes: { 'GET /api/projects': { projects: [], reposDir: '~/repos' }, 'GET /api/projects/other': { repos: many } } });
+  await search(p, 'study');
+  assert.equal(p.$('#inactive .sec').textContent, 'Other repos in ~/repos (33)');
+  assert.equal(otherRows(p).length, 30);
+  assert.equal(p.$('#inactive .note').textContent, '3 more. Type more of the name.');
+});
+
+test('Add to herdr on an other repo makes the space and fetches the list again on the next search', async () => {
+  const p = await start({ routes: {
+    'GET /api/projects': { projects: [], reposDir: '~/repos' },
+    'GET /api/projects/other': { repos: [other('tally')] },
+    'POST /api/projects/reopen': { ok: true },
+  } });
+  await search(p, 'tal');
+  p.api.routes['GET /api/herdr'] = { available: true, spaces: [space('tally')] };
+  p.api.routes['GET /api/projects/other'] = { repos: [] };
+  p.$('#inactive .otherrepo button').click();
+  await flush();
+  assert.deepEqual(p.api.called('POST', '/api/projects/reopen')[0].body, { root: '/Users/me/repos/tally' });
+  assert.deepEqual(otherRows(p), []);
+  await search(p, 'tall');
+  assert.equal(p.api.called('GET', '/api/projects/other').length, 2);
+});
+
+test('other repos that fail to load show nothing', async () => {
+  const p = await start({ routes: { 'GET /api/projects': { projects: [proj('one')] }, 'GET /api/projects/other': new Error('offline') } });
+  await search(p, 'tally');
+  assert.deepEqual(otherRows(p), []);
+  assert.equal(p.$('#inactive .note').textContent, 'No match.');
+});
