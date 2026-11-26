@@ -51,6 +51,18 @@ test('questionPrompt joins a question the terminal wrapped, and drops the box bo
   assert.equal(top.text, 'Asked at the top?');
 });
 
+// Captured from Claude Code 2.1.332 on November 26, 2026 in a named session held at 65x27: the session's
+// name sits on a rule under the footer, and "↑ 5 more lines" under the last answer. The phone's Chat got
+// no question at all before the fix.
+test('questionPrompt reads a question with a named rule under its footer and a more-lines marker', () => {
+  const { srv } = setup();
+  const q = srv.questionPrompt('x', lines('titled'));
+  assert.match(q.text, /^For the connected town \(step 4\), which experience do you want\? Today/);
+  assert.deepEqual(q.options.map((o) => o.label), ['Walk straight in (Recommended)', 'Smooth doorways', 'Town from above', 'Type something.', 'Chat about this']);
+  assert.equal(q.options[4].detail, '');
+  assert.equal(srv.questionPrompt('x', ['Pick?', '❯ 1. Yes', 'Enter to select · Esc to cancel', '─'.repeat(30), '']).options.length, 1);
+});
+
 // A 39-column window (a phone) wraps the footer onto two or three lines. Before the fix the question
 // came back null, so the phone showed its answers for a moment and then lost them (October 31, 2026).
 test('questionPrompt reads a question whose footer a narrow window wrapped', () => {

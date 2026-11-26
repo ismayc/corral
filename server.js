@@ -1067,8 +1067,11 @@ function questionPrompt(id, screen, styled) {
   // In a narrow window (a phone is about 39 columns) the footer wraps onto two or three lines, at any
   // word ("Esc" can end one line and "to cancel" start the next), so the last lines are joined and read
   // as one, up to "Enter to select".
+  // A named session (Claude Code 2.1.332) draws a rule with the name under the footer
+  // ("──── viele-lenguas-game-mode ─"); on November 26, 2026 that hid every question from the phone's Chat.
   let end = -1;
-  const last = lines.findLastIndex((l) => l.trim());
+  let last = lines.findLastIndex((l) => l.trim());
+  while (last > 0 && /^\s*─{3,}[^─]*─*\s*$/.test(lines[last]) && /─{20,}/.test(lines[last])) last = lines.findLastIndex((l, i) => i < last && l.trim());
   for (let j = last; j >= 0 && last - j < 4 && lines[j].trim(); j--) {
     const joined = lines.slice(j, last + 1).map((l) => l.trim()).join(' ');
     if (/^Enter to select\b.*\bEsc to cancel$/.test(joined)) { end = j; break; }
@@ -1087,7 +1090,8 @@ function questionPrompt(id, screen, styled) {
     const m = opt(lines[j]);
     const t = lines[j].trim();
     if (m && Number(m[1]) === options.length + 1) options.push({ n: m[1], label: m[2].trim(), detail: '', sgr: sty && labelSgr(sty[j]) });
-    else if (t && !/^─{20,}$/.test(t) && t !== 'Submit') {
+    // "↑ 5 more lines" marks a dialog taller than its window: its top is cut, and it is no description.
+    else if (t && !/^─{20,}$/.test(t) && t !== 'Submit' && !/^[↑↓] \d+ more lines?$/.test(t)) {
       const o = options[options.length - 1];
       if (sty && !o.detail && leadSgr(sty[j]) === o.sgr) o.label = rejoin(o.label, t);
       else o.detail = o.detail ? rejoin(o.detail, t) : t;
@@ -2152,6 +2156,9 @@ const server = http.createServer(async (req, res) => {
     try {
       const s = createSession(body.cwd, body.label, space, typeof body.agent === 'string' ? body.agent : null, null, prompt);
       if (prompt) s.summoned = Date.now();
+      // Which program a new window got, and from where: on November 26, 2026 three windows opened as plain
+      // shells, and nothing showed whether the page had asked for one.
+      console.log(`opened ${s.label} from ${access.remote ? 'another device' : 'this Mac'}: ${AGENTS[body.agent] || 'a plain shell'}`);
       // Started from another device: the Mac's page puts it in the bottom bar rather than in a zone.
       if (access.remote) {
         s.remote = true;

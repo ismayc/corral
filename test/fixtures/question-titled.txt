@@ -1,0 +1,27 @@
+│ For the connected town (step 4), which experience do you want?
+│ Today each room is a separate page: the square fades out and
+│ the room loads. Rooms are 10x10 tiles; houses on the square are
+│ 3 tiles wide.
+
+❯ 1. Walk straight in (Recommended)
+     One 3D world. Sam walks from the square through a door into
+     the room with no page load; the camera follows, and the
+     house's roof and front fade away while he is inside. Rooms
+     keep their size, so they sit as wide buildings around a
+     larger square, and you walk further between places. The
+     largest build: several sessions.
+  2. Smooth doorways
+     Keep separate rooms, but the camera glides into the door and
+     out again, and the real square shows outside each room's
+     door, so it feels like one place. Much smaller: about one
+     session.
+  3. Town from above
+     A zoomed-out view of the whole town with every building's
+     inside visible from above (no roofs). Tap a building to zoom
+     into it, and the room plays there. Medium build.
+  4. Type something.
+─────────────────────────────────────────────────────────────────
+  5. Chat about this
+ ↑ 5 more lines
+Enter to select · ↑/↓ to navigate · Esc to cancel
+─────────────────────────────────────── viele-lenguas-game-mode ─

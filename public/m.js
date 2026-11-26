@@ -601,16 +601,19 @@ api('/api/hub').then((r) => {
 }).catch(() => {});
 
 // ---- Start something: pick a project and what to run there ----
-let agent = load('corral.m.agent', 'claude');
+// The choice is for one start: the sheet opens on Claude Code every time. A saved choice of Shell made
+// later spaces open as plain shells, with nothing on the sheet's first view to say so (November 26, 2026).
+let agent = 'claude';
 let projects = [];
 function setAgent(a) {
-  agent = a; store('corral.m.agent', a);
+  agent = a;
   for (const b of $('#agentseg').children) b.classList.toggle('on', b.dataset.a === a);
 }
 for (const b of $('#agentseg').children) b.onclick = () => setAgent(b.dataset.a);
 setAgent(agent);
 
 async function openSheet() {
+  setAgent('claude');
   $('#sheet').hidden = false;
   $('#q').value = '';
   $('#projects').replaceChildren(h('div', { class: 'empty' }, 'Loading projects…'));
@@ -696,6 +699,7 @@ async function start(p) {
     // The Mac allows one window per space; if one opened meanwhile, go to it.
     if (r.status === 409 && j.existing) { toast(`${p.label} is already open. Here it is.`); openTerm(j.existing); refresh(); return; }
     if (!r.ok) throw new Error(j.error);
+    if (!p.home && !agent) toast('Opened a plain shell: Shell was picked.');
     openTerm(j);
     refresh();
   } catch { toast('Could not start it on the Mac.'); }

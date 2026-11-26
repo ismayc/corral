@@ -200,16 +200,33 @@ test('the sheet closes with its × or a tap outside it', async () => {
   assert.equal(p.$('#sheet').hidden, true);
 });
 
-test('the kind of start is chosen once and remembered', async () => {
-  const p = await phone([]);
+// A remembered Shell made later spaces open as plain shells (November 26, 2026), so each start begins on
+// Claude Code, and an old saved choice is ignored.
+test('the kind of start is chosen for one start, and the sheet opens on Claude Code', async () => {
+  const p = await phone([], { storage: { 'corral.m.agent': '""' } });
   const seg = (a) => p.$(`#agentseg [data-a="${a}"]`);
   assert.ok(seg('claude').classList.contains('on'));
   seg('claude-continue').click();
   assert.ok(seg('claude-continue').classList.contains('on'));
   assert.ok(!seg('claude').classList.contains('on'));
-  assert.equal(p.window.localStorage.getItem('corral.m.agent'), '"claude-continue"');
-  const q = await phone([], { storage: { 'corral.m.agent': '""' } });
-  assert.ok(q.$('#agentseg [data-a=""]').classList.contains('on'));
+  p.$('#fab').click();
+  await settle();
+  assert.ok(seg('claude').classList.contains('on'));
+  assert.ok(!seg('claude-continue').classList.contains('on'));
+});
+
+test('a space started as Shell says it opened a plain shell', async () => {
+  const p = await phone([], { routes: {
+    'GET /api/herdr': HERDR, 'GET /api/projects': PROJECTS,
+    'POST /api/sessions': (r) => ({ __reply: true, status: 201, body: win('new1', { label: r.body.label, cwd: r.body.cwd }) }),
+  } });
+  p.$('#fab').click();
+  await settle();
+  p.$('#agentseg [data-a=""]').click();
+  p.$$('#projects .proj')[0].click();
+  await settle();
+  assert.equal(p.api.called('POST', '/api/sessions')[0].body.agent, '');
+  assert.match(p.text('#toast'), /plain shell/);
 });
 
 test('tapping a project starts the chosen kind there and opens its terminal', async () => {
@@ -217,9 +234,9 @@ test('tapping a project starts the chosen kind there and opens its terminal', as
     'GET /api/herdr': HERDR, 'GET /api/projects': PROJECTS,
     'POST /api/sessions': (r) => ({ __reply: true, status: 201, body: win('new1', { label: r.body.label, cwd: r.body.cwd }) }),
   } });
-  p.$('#agentseg [data-a="claude-continue"]').click();
   p.$('#fab').click();
   await settle();
+  p.$('#agentseg [data-a="claude-continue"]').click();
   p.$$('#projects .proj')[0].click();
   assert.equal(p.$('#sheet').hidden, true);
   await settle();
