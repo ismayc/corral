@@ -42,6 +42,17 @@ test('questionPrompt reads the review screen, which has no footer, keeping its l
   assert.deepEqual(q.options.map((o) => o.label), ['Submit answers', 'Cancel']);
 });
 
+// Captured from Claude Code 2.1.332 on November 26, 2026: the review step has no "Ready to submit your
+// answers?" line, and a named rule sits under it. Before the fix the phone's Chat showed nothing.
+test('questionPrompt reads a review screen with no "Ready to submit" line and a named rule under it', () => {
+  const { srv } = setup();
+  const q = srv.questionPrompt('x', lines('review-titled'));
+  assert.equal(q.review, true);
+  assert.equal(q.text, 'Review your answers\n\n● At the market, what did you try when you could not leave?\n→ Tapped the street, Pressed a button');
+  assert.deepEqual(q.options.map((o) => o.label), ['Submit answers', 'Cancel']);
+  assert.equal(srv.questionPrompt('x', ['Some text', '❯ 1. Submit answers', '  2. Cancel']), null);
+});
+
 test('questionPrompt joins a question the terminal wrapped, and drops the box border before it', () => {
   const { srv } = setup();
   const q = srv.questionPrompt('x', [RULE, ' ☐ Plan', '', '│ On a joint return, how should the plan treat', '│ it?', '', '❯ 1. One', '  2. Two',

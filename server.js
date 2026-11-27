@@ -1078,7 +1078,9 @@ function questionPrompt(id, screen, styled) {
   }
   const review = end < 0;
   if (review) {
-    const ready = lines.findLastIndex((l) => /^\s*Ready to submit your answers\?/.test(l));
+    // Claude Code 2.1.332 no longer draws "Ready to submit your answers?", so "Review your answers" over
+    // it counts too (on November 26, 2026 the phone's Chat showed no review step without it).
+    const ready = lines.findLastIndex((l) => /^\s*(?:Ready to submit your answers\?|Review your answers)\s*$/.test(l));
     end = lines.findLastIndex((l) => opt(l)) + 1;
     if (ready < 0 || end <= ready) return null;
   }
